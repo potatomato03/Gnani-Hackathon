@@ -22,8 +22,9 @@ supabase/.branches/
 supabase/.temp/
 
 # Audio and large data stay out of git
+data/external/*
+!data/external/README.md
 data/eval/audio/
-data/noise/
 *.wav
 *.mp3
 *.pcm
