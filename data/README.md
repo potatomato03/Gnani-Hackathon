@@ -12,7 +12,7 @@ The challenge bans real phone numbers, account numbers, Aadhaar, PAN and recorde
 - Nothing copied from a real hospital document, not even as a template.
 - Phone numbers use `+91-00000-NNNNN`. Indian mobile numbers don't start with 0, so these can't belong to anyone.
 - Every record carries `synthetic: true`, and the app labels synthetic data on screen.
-- Audio and provider caches stay out of git.
+- Audio, provider caches and downloaded third-party data stay out of git. Downloads live in a `DATA` folder next to the repo. See [DOWNLOADS.md](DOWNLOADS.md).
 - Prisma accuracy results stay private until Gnani gives written consent. See [DECISIONS.md](../docs/DECISIONS.md).
 
 ## Five kinds of data
@@ -203,13 +203,15 @@ Timbre audio tends to be cleaner and more consistent than real doctors, so these
 
 | Source | Licence | Use |
 |---|---|---|
-| [Indian Medicine Dataset](https://github.com/junioralive/Indian-Medicine-Dataset) | MIT on the repo, data origin not stated | Lookup for brand, composition and strength. Every row we keep is hand-checked. |
+| [Indian Medicine Dataset](https://github.com/junioralive/Indian-Medicine-Dataset) | MIT on the repo, data origin not stated | Lookup for brand, composition and strength. Every row we keep is hand-checked. Its side-effect and interaction text is not used. |
 | [IndianDrugMCQA](https://huggingface.co/datasets/ekacare/indian_drug_mcqa) | MIT | Cross-check of brand to generic. It has typos and no strengths. |
+| [Jan Aushadhi product list](https://janaushadhi.gov.in/product-portfolio/product-mrp-list) | Reproduction needs emailed permission and credit | Local cross-check of generic names. Not copied into this repo. |
+| [NLEM 2022](https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2018/UploadConsumer/nlem2022.pdf) | No licence stated | Choosing common generics |
 | Manufacturer product pages | Varies | Confirm a brand's identity, recorded per row |
-| [MUSAN](https://www.openslr.org/17/) | CC BY 4.0 | Noise files only, not the speech or music folders |
-| [RIRS_NOISES](https://www.openslr.org/28/) | Apache 2.0 | Room reverb |
+| [RIRS_NOISES](https://www.openslr.org/28/) | Apache 2.0 | Room reverb and noise |
+| [MUSAN](https://www.openslr.org/17/) | CC BY 4.0 | Its 843 noise files, which come inside RIRS_NOISES. Credit MUSAN when we use them. |
 | [Faker](https://github.com/joke2k/faker) | MIT | Fictional names with the `en_IN` locale. Its phone numbers are not used. |
-| [ABDM FHIR guide](https://www.nrces.in/ndhm/fhir/r4/StructureDefinition-DocumentBundle.html) | Not confirmed | Official examples for validating our bundles |
+| [ABDM FHIR guide](https://www.nrces.in/ndhm/fhir/r4/StructureDefinition-DocumentBundle.html) | CC0-1.0 | Official examples for validating our bundles |
 
 ### Reference or optional
 
