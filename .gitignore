@@ -1,0 +1,46 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Audio and large data stay out of git
+data/eval/audio/
+data/noise/
+*.wav
+*.mp3
+*.pcm
+*.flac
+*.ogg
+
+# Provider response caches
+data/eval/fixtures/
+
+# Local model files
+*.gguf
+
+# Anything that must never be pushed
+private/
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
