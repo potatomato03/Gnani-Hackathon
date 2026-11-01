@@ -8,7 +8,7 @@ Built for the Gnani AI Great Indian AI Internship Challenge. Speech runs on Gnan
 
 ## Status
 
-Project tree only. There is no application code yet.
+There is no application code yet. The first synthetic cases and their checker are on the `aditya/data-setup` branch. See the [runbook](runbook.md).
 
 ## Layout
 
@@ -35,6 +35,7 @@ Copy `.env.example` to `.env` and fill in your keys. Keys stay on the backend an
 
 ## Docs
 
+- [Runbook](runbook.md): status, decisions and everything done so far
 - [Decisions](docs/DECISIONS.md)
 - [Evals](docs/EVALS.md)
 - [Contributions](docs/CONTRIBUTIONS.md)
