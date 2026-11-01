@@ -1,0 +1,5 @@
+[doctor] सूजन ठीक हो गई है।
+[doctor] BP एक सौ अड़तालीस बटा बानवे है।
+[doctor] Telma forty चालू रखें।
+[doctor] Amlong two point five, एक tablet रात को, तीस दिन।
+[doctor] Review एक महीने बाद।

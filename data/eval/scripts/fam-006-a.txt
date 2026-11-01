@@ -1,0 +1,7 @@
+[doctor] நோயாளிக்கு ஐந்து நாட்களாக வயிற்றில் எரிச்சல் இருக்கிறது.
+[doctor] வாந்தி இல்லை.
+[doctor] Examination-ல் epigastric tenderness இருக்கிறது.
+[doctor] Impression gastritis.
+[doctor] Pan forty, ஒரு tablet, காலையில் சாப்பாட்டுக்கு முன், பத்து நாட்கள்.
+[doctor] காரமான உணவை தவிர்க்க சொல்லியிருக்கிறேன்.
+[doctor] இரண்டு வாரம் கழித்து review.

@@ -1,0 +1,7 @@
+[doctor] मरीज़ को तीन दिन से गले में दर्द और सूखी खाँसी है।
+[doctor] कल रात से fever है, एक सौ एक तक गया था।
+[doctor] On examination throat congested है, tonsils normal हैं।
+[doctor] Impression viral pharyngitis लग रहा है।
+[doctor] Dolo six fifty, एक tablet, ज़रूरत पड़ने पर, खाने के बाद, तीन दिन तक।
+[doctor] गुनगुने पानी से गरारे करने को कहा है।
+[doctor] तीन दिन में ठीक न हो तो दोबारा दिखाना है।

@@ -95,8 +95,8 @@ Derive histories from reviewed cases, so the records agree. A good test: visit 1
 
 1. **Write the case spec.** Record the facts, assertions and medicines as structured data. Mark what gets spoken, what is already in the chart, and what stays unavailable to the app.
 2. **Assign the family to a split.** Do this before making any variants.
-3. **Generate the script.** The LLM writes natural language only: pauses, code-mixing, corrections. It gets the facts that must appear and the facts that must stay unstated, and it may not add clinical claims.
-4. **Check the script.** Code compares it with the spec, then a person reads it. A native speaker checks Telugu and Tamil.
+3. **Generate the script.** The LLM writes natural language only: pauses, code-mixing, corrections. It gets the facts that must appear and the facts that must stay unstated, and it may not add clinical claims. Scripts follow Prisma's `codemix` style: Hindi in Devanagari, English in Latin, numbers as words.
+4. **Check the script.** Code compares it with the spec, then a person reads it. A native speaker checks Telugu and Tamil. Run the code checks with `python tools/corpus/check_cases.py`, and add `--write` to refresh `eval/manifest.csv` and the plain scripts in `eval/scripts/`.
 5. **Render clean audio once.** Use Timbre and cache the result. Test credit use on 5 clips first, because the cost of a credit isn't published.
 6. **Listen.** Write what was actually spoken, and mark mispronounced, dropped or unclear words.
 7. **Make noisy variants from the clean audio.** Use MUSAN noise files and room impulse responses. Cross-talk is a second Timbre voice, never real speech.

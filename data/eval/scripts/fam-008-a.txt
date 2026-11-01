@@ -1,0 +1,6 @@
+[doctor] एक महीने से खाने के बाद acidity और सीने में जलन है।
+[doctor] वज़न कम नहीं हुआ है।
+[doctor] Abdomen soft है। Acid reflux लग रहा है।
+[doctor] Pan एक गोली सुबह खाली पेट, दो हफ़्ते।
+[doctor] Mucaine gel दो चम्मच ज़रूरत पड़ने पर खाने के बाद।
+[doctor] रात का खाना जल्दी खाना है। Review दो हफ़्ते बाद।

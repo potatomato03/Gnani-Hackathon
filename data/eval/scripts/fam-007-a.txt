@@ -1,0 +1,6 @@
+[doctor] तीन दिन से तेज़ बुखार, बदन दर्द और आँखों के पीछे दर्द है।
+[doctor] Rash नहीं है, bleeding नहीं है।
+[doctor] Dengue का शक है, NS1 और CBC भेज रहे हैं।
+[doctor] Dolo six fifty, एक tablet दिन में तीन बार, खाने के बाद, तीन दिन।
+[doctor] खूब पानी और ORS पीना है, कोई और painkiller नहीं लेना।
+[doctor] पेट दर्द, उल्टी या bleeding हो तो तुरंत आना है।

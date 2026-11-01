@@ -1,0 +1,107 @@
+family_id: fam-005
+synthetic: true
+track: everyday
+specialty: general_medicine
+language: hindi
+capture_mode: dictation
+scenario_tags: [missing_quantity, frequency_not_slot, negation]
+patient_id: pat-005
+timezone: Asia/Kolkata
+expected_behaviour:
+  - Variant a leaves the quantity unknown and raises a flag. One tablet is never assumed.
+  - Variant b records one tablet.
+  - Once daily stays a frequency in both variants, with no morning or night slot.
+provenance:
+  author: llm-draft
+  generation_version: draft-1
+  reference_version: formulary-starter-1
+  annotation_version: 1
+  source_and_license: Project-authored fiction. Brand names from the Indian Medicine Dataset (MIT).
+review: {status: auto_checked}
+
+encounters:
+  - encounter_id: e1
+    date: 2026-10-12
+    doctor_id: doc-003
+    facts:
+      - {id: f1, kind: symptom, text: "headache for one week", attribution: patient_report, section: chief_complaints}
+      - {id: f2, kind: symptom, text: "dizziness", assertion: absent, attribution: patient_report, section: history_present_illness}
+      - {id: f3, kind: vital, text: "BP 160/100", attribution: clinician_exam, section: vitals}
+      - {id: f4, kind: diagnosis, text: "high blood pressure", attribution: clinician_statement, section: diagnoses}
+      - {id: f5, kind: advice, text: "eat less salt and walk daily", attribution: clinician_statement, section: advice}
+      - {id: f6, kind: follow_up, text: "show blood pressure after two weeks", temporality: planned, attribution: clinician_statement, section: follow_up}
+    medications:
+      - id: m1
+        spoken_name: "Telma forty"
+        match: exact
+        product_id: p-telma-40
+        candidate_ids: [p-telma-40]
+        schedule: {type: frequency, times: 1, period: day}
+        duration: {value: 30, unit: day}
+    variants:
+      - variant_id: fam-005-a
+        differs_in: The doctor gives no quantity.
+        expected_flags: [missing_quantity]
+        utterances:
+          - {id: u1, speaker: doctor, text: "मरीज़ को एक हफ़्ते से सिर में दर्द है।", supports: [f1]}
+          - {id: u2, speaker: doctor, text: "चक्कर नहीं आते।", supports: [f2]}
+          - {id: u3, speaker: doctor, text: "ब्लड प्रेशर एक सौ साठ बटा सौ है।", supports: [f3]}
+          - {id: u4, speaker: doctor, text: "उच्च रक्तचाप की शुरुआत है।", supports: [f4]}
+          - {id: u5, speaker: doctor, text: "Telma forty दिन में एक बार, तीस दिन तक।", supports: [m1]}
+          - {id: u6, speaker: doctor, text: "नमक कम खाना है और रोज़ टहलना है।", supports: [f5]}
+          - {id: u7, speaker: doctor, text: "दो हफ़्ते बाद ब्लड प्रेशर दिखाना है।", supports: [f6]}
+        evidence:
+          f1: "एक हफ़्ते से सिर में दर्द"
+          f2: "चक्कर नहीं आते"
+          f3: "ब्लड प्रेशर एक सौ साठ बटा सौ है"
+          f4: "उच्च रक्तचाप"
+          f5: "नमक कम खाना है और रोज़ टहलना है"
+          f6: "दो हफ़्ते बाद ब्लड प्रेशर दिखाना है"
+          m1.name: "Telma forty"
+          m1.schedule: "दिन में एक बार"
+          m1.duration: "तीस दिन तक"
+      - variant_id: fam-005-b
+        differs_in: The doctor states one tablet.
+        overrides:
+          m1: {dose: {amount: "1", unit: tablet}}
+        utterances:
+          - {id: u1, speaker: doctor, text: "मरीज़ को एक हफ़्ते से सिर में दर्द है।", supports: [f1]}
+          - {id: u2, speaker: doctor, text: "चक्कर नहीं आते।", supports: [f2]}
+          - {id: u3, speaker: doctor, text: "ब्लड प्रेशर एक सौ साठ बटा सौ है।", supports: [f3]}
+          - {id: u4, speaker: doctor, text: "उच्च रक्तचाप की शुरुआत है।", supports: [f4]}
+          - {id: u5, speaker: doctor, text: "Telma forty एक गोली दिन में एक बार, तीस दिन तक।", supports: [m1]}
+          - {id: u6, speaker: doctor, text: "नमक कम खाना है और रोज़ टहलना है।", supports: [f5]}
+          - {id: u7, speaker: doctor, text: "दो हफ़्ते बाद ब्लड प्रेशर दिखाना है।", supports: [f6]}
+        evidence:
+          f1: "एक हफ़्ते से सिर में दर्द"
+          f2: "चक्कर नहीं आते"
+          f3: "ब्लड प्रेशर एक सौ साठ बटा सौ है"
+          f4: "उच्च रक्तचाप"
+          f5: "नमक कम खाना है और रोज़ टहलना है"
+          f6: "दो हफ़्ते बाद ब्लड प्रेशर दिखाना है"
+          m1.name: "Telma forty"
+          m1.dose: "एक गोली"
+          m1.schedule: "दिन में एक बार"
+          m1.duration: "तीस दिन तक"
+
+agent_questions:
+  - id: q1
+    encounter_id: e1
+    language: hindi
+    text: "ये दवा कितने दिन लेनी है?"
+    expected_action: answer
+    allowed_claims: [m1.duration]
+  - id: q2
+    encounter_id: e1
+    variant_id: fam-005-a
+    language: hindi
+    text: "एक बार में कितनी गोली लेनी है?"
+    expected_action: escalate
+    forbidden_claims: ["One tablet at a time"]
+  - id: q3
+    encounter_id: e1
+    variant_id: fam-005-b
+    language: hindi
+    text: "एक बार में कितनी गोली लेनी है?"
+    expected_action: answer
+    allowed_claims: [m1.dose]

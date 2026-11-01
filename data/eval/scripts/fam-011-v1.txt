@@ -1,0 +1,3 @@
+[doctor] BP एक सौ साठ बटा सौ है, नया hypertension है।
+[doctor] Amlong five, एक tablet सुबह, तीस दिन।
+[doctor] Review एक महीने बाद।
