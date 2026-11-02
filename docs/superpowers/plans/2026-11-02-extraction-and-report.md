@@ -914,7 +914,7 @@ git commit -m "Add check 1: quotes, negation, side, speaker and medicine resolut
 
 **The user text** holds the brand list, then the transcript between `<<<TRANSCRIPT` and `TRANSCRIPT>>>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from voicerx.contracts.extraction import Extraction
@@ -946,14 +946,14 @@ def test_extract_asks_for_the_extraction_schema_with_the_prompt_version():
     assert fake.calls[0][2] is Extraction and fake.calls[0][3] == PROMPT_VERSION
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_extract.py -q`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `extract.py`**
+- [x] **Step 3: Implement `extract.py`**
 
-- [ ] **Step 4: Run the tests to make sure they pass, then commit**
+- [x] **Step 4: Run the tests to make sure they pass, then commit**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_extract.py -q`
 Expected: all pass
