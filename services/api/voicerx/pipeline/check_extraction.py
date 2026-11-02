@@ -68,6 +68,10 @@ def medicine_issues(medications, reference, allergies):
     return issues
 
 
+def _trim(phrase):
+    return phrase.rstrip(' ।.?!,;') if phrase is not None else None
+
+
 def _sentence(text, position):
     starts = [m.end() for m in ENDS.finditer(text[:position])]
     start = starts[-1] if starts else 0
@@ -109,7 +113,8 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         if not positions:
             issues.append(issue('quote_not_found', rx.id, 'warn'))
             continue
-        values = {field: getattr(rx, field) for field in PHRASES}
+        # A phrase copied with its closing mark ("…नहीं।") must still fit a mention that ends before the mark.
+        values = {field: _trim(getattr(rx, field)) for field in PHRASES}
         corrected = set()
         invalid_corrections = []
         for correction in extraction.corrections:

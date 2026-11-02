@@ -129,6 +129,16 @@ def test_correction_replaces_the_duration_before_parsing():
     assert checked.medications[0].duration == Duration(value=3, unit="day")
 
 
+def test_phrase_ending_in_the_sentence_mark_still_binds():
+    # fam-010-a: the model copied "…नहीं।" with its full stop, and the mention ends before the mark.
+    transcript = "Asthalin inhaler दो puff ज़रूरत पड़ने पर, दिन में चार बार से ज़्यादा नहीं।"
+    rx = med(spoken_name="Asthalin", name_quote="Asthalin inhaler", dose_phrase="दो puff",
+             timing_phrase="ज़रूरत पड़ने पर, दिन में चार बार से ज़्यादा नहीं।", food_phrase=None, duration_phrase=None)
+    checked = run(meds=[rx], transcript=transcript)
+    assert "phrase_not_bound" not in codes(checked)
+    assert checked.medications[0].schedule is not None
+
+
 def test_dose_from_another_sentence_is_not_borrowed():
     transcript = "Dolo six fifty after food for three days. Pan forty, one tablet in the morning."
     checked = run(meds=[med(timing_phrase=None)], transcript=transcript)

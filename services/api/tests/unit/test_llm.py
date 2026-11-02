@@ -70,6 +70,12 @@ def test_ollama_request_enforces_the_schema_and_sends_no_key():
     assert body["stream"] is False and body["think"] is False and body["options"]["temperature"] == 0
 
 
+def test_ollama_reply_length_is_capped_below_the_context():
+    # qwen3:8b looped on fam-009-b, generating until the 8,192-token context filled (runbook C-38).
+    _, _, body = OllamaAdapter().build("s", "u", json_schema_for(Outer), "local")
+    assert body["options"]["num_predict"] == 4096 < body["options"]["num_ctx"]
+
+
 def test_second_identical_call_is_served_from_the_cache(tmp_path):
     client, transport = gemini(tmp_path, [gemini_reply({"items": [{"word": "a"}]})])
     client.generate("s", "u", Outer, "v1")

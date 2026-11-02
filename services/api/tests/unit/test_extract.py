@@ -21,7 +21,7 @@ def test_prompt_keeps_laterality_empty_unless_a_side_is_spoken():
     # Both models filled a side for a plural like "tonsils"; qwen3:8b filled one on every item (runbook C-35).
     from voicerx.pipeline.extract import SYSTEM
 
-    assert PROMPT_VERSION == "extract-v2"
+    assert PROMPT_VERSION == "extract-v3"
     assert "laterality is null unless the quote itself names a side" in SYSTEM
     assert "A plural body part" in SYSTEM
 
@@ -34,3 +34,14 @@ def test_extract_asks_for_the_extraction_schema_with_the_prompt_version():
     result, _ = extract(fake, "No fever.", load_reference(REPO_ROOT))
     assert result.items == []
     assert fake.calls[0][2] is Extraction and fake.calls[0][3] == PROMPT_VERSION
+
+
+def test_prompt_separates_strength_dose_timing_and_food_and_never_translates():
+    # typed-groq-1: strengths ("forty") used as doses, timing and food joined, Telugu phrases translated,
+    # and a whole sentence given as a medicine name (runbook C-37).
+    from voicerx.pipeline.extract import SYSTEM
+
+    for rule in ("never the strength in the medicine's name", "Never join two fields in one phrase",
+                 "name_quote is only the spoken medicine name", "Never translate",
+                 "A negative test or sign"):
+        assert rule in SYSTEM

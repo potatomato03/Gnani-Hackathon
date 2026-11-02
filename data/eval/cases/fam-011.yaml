@@ -117,6 +117,7 @@ encounters:
     variants:
       - variant_id: fam-011-v3
         differs_in: Third visit. Amlong restarts at a lower strength alongside Telma 40.
+        expected_flags: [missing_quantity]
         utterances:
           - {id: u1, speaker: doctor, text: "सूजन ठीक हो गई है।", supports: [f1]}
           - {id: u2, speaker: doctor, text: "BP एक सौ अड़तालीस बटा बानवे है।", supports: [f2]}

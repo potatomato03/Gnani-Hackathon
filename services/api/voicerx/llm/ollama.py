@@ -8,7 +8,8 @@ class OllamaAdapter:
     def build(self, system, user, schema, key):
         return self.host + '/api/chat', {'Content-Type': 'application/json'}, {
             'model': self.model, 'stream': False, 'think': False, 'format': schema,
-            'options': {'temperature': 0, 'num_ctx': self.num_ctx},
+            # A looping reply stops at 4,096 tokens, is rejected as cut off, and gets one repair attempt.
+            'options': {'temperature': 0, 'num_ctx': self.num_ctx, 'num_predict': 4096},
             'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}]}
 
     def reply_text(self, body):
