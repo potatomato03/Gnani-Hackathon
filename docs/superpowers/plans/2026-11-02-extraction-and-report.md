@@ -1443,7 +1443,7 @@ Add two helpers to `conftest.py`:
 - `resolved_medicine(**changes)` returns the clean Dolo medicine from the `draft_report` fixture, with those changes.
 - `make_draft(medications, patient_id="pat-001")` builds a draft with `assemble_draft`, from the fixture's report fields and kept items, with these medicines and the issues that `medicine_issues` gives them.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from datetime import datetime
@@ -1509,12 +1509,12 @@ def test_correction_without_a_reason_is_refused():
         resolve(draft, [fix("set_dose", "rx1", {"amount": "1", "unit": "tablet"}, reason=" ")], REF)
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
+- [x] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_resolve.py -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add services/api/voicerx/resolve.py services/api/tests
