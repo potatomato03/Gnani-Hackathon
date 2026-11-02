@@ -1,0 +1,62 @@
+{
+  "chief_complaints": [
+    {
+      "text": "Sore throat for 3 days",
+      "cites": [
+        "x1"
+      ]
+    },
+    {
+      "text": "Dry cough",
+      "cites": [
+        "x2"
+      ]
+    }
+  ],
+  "history_present_illness": [
+    {
+      "text": "No fever",
+      "cites": [
+        "x3"
+      ]
+    }
+  ],
+  "examination": [
+    {
+      "text": "Throat congested",
+      "cites": [
+        "x4"
+      ]
+    },
+    {
+      "text": "Tonsils normal",
+      "cites": [
+        "x5"
+      ]
+    }
+  ],
+  "diagnoses": [
+    {
+      "text": "Provisional: viral pharyngitis",
+      "cites": [
+        "x6"
+      ]
+    }
+  ],
+  "advice": [
+    {
+      "text": "Warm water gargles",
+      "cites": [
+        "x7"
+      ]
+    }
+  ],
+  "follow_up": [
+    {
+      "text": "Review if not better in 3 days",
+      "cites": [
+        "x8"
+      ]
+    }
+  ]
+}

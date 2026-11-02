@@ -1935,7 +1935,7 @@ git commit -m "Add pipeline runner and approval command"
 | `x8` | planned follow-up "come back if not better in three days", quote "तीन दिन में ठीक न हो तो दोबारा दिखाना है" | follow-up: "Review if not better in 3 days" |
 | `rx1` | start "Dolo six fifty", with the phrases "एक tablet", "ज़रूरत पड़ने पर", "खाने के बाद" and "तीन दिन तक" | the medicine table |
 
-- [ ] **Step 1: Write the fixtures and the failing tests**
+- [x] **Step 1: Write the fixtures and the failing tests**
 
 ```python
 import pytest
@@ -2012,12 +2012,12 @@ def test_sabotage_is_caught(tmp_path, name, mutate, code):
     assert code in blocking(run(tmp_path, mutate)), name
 ```
 
-- [ ] **Step 2: Run the tests, and fix whichever check misses a sabotage**
+- [x] **Step 2: Run the tests, and fix whichever check misses a sabotage**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_end_to_end.py -q`
 Expected: all pass. The clean run has no blocking issue, and each sabotage is caught.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add services/api/tests

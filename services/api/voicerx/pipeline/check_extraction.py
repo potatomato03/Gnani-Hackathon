@@ -26,7 +26,16 @@ def normalise(text):
 
 def has_word(text, words):
     text = normalise(text)
-    return any(re.search(r'(?<!\w)' + re.escape(normalise(w)) + r'(?!\w)', text) for w in words)
+    # Python's \w excludes combining vowel marks in Indian scripts.
+    # A cue must be bounded by punctuation/space, never by a vowel mark.
+    def word_char(char):
+        return unicodedata.category(char)[0] in 'LMN' or char == '_'
+    for word in words:
+        for match in re.finditer(re.escape(normalise(word)), text):
+            if (match.start() == 0 or not word_char(text[match.start() - 1])) and (
+                    match.end() == len(text) or not word_char(text[match.end()])):
+                return True
+    return False
 
 
 def issue(code, target, severity='block', message=None):
