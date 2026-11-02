@@ -440,3 +440,5 @@ The app ignores the `OLLAMA_MODELS` variable (C-31). Check with `ollama list`, a
 `n- Task 4 live verification: Gemini gemini-3.8-flash and Ollama qwen3:8b each returned a valid tiny-schema object on one attempt. No adapter changes were needed.
 
 - Build task 6: completed; task tests and full suite passed.
+
+- Build task 7: completed; task tests and full suite passed.

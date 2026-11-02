@@ -1010,7 +1010,7 @@ git commit -m "Add stage 1 extraction prompt"
 | `duplication` | warn | A kept item is cited by more than one line |
 | `nothing_extracted` | block | There are no kept items and no medicines |
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from conftest import REPO_ROOT
@@ -1131,14 +1131,14 @@ def test_conditional_follow_up_keeps_its_negation():
     assert "negation_mismatch" not in codes(fields(follow_up=[line]), checked)
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_check_report.py -q`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `check_report` as specified above**
+- [x] **Step 3: Implement `check_report` as specified above**
 
-- [ ] **Step 4: Run the tests to make sure they pass, then commit**
+- [x] **Step 4: Run the tests to make sure they pass, then commit**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_check_report.py -q`
 Expected: all pass
