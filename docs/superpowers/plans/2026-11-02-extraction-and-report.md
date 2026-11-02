@@ -1634,7 +1634,7 @@ git commit -m "Add patient-language instruction box from fixed templates"
 - CSS fonts are `"Noto Sans", "Noto Sans Devanagari", "Noto Sans Telugu", "Noto Sans Tamil", "Nirmala UI", sans-serif`, at A4 size.
 - The layout follows the spec's PDF section, in its order.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 import pytest
@@ -1685,17 +1685,17 @@ def test_pdf_prints_with_the_local_browser(draft_report, tmp_path):
 
 Add an `approved_report` fixture to `conftest.py`: `approve(draft_report, "Dr Test", datetime(2026, 10, 5, 12, 0))`.
 
-- [ ] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
+- [x] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_render.py -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Read the rendered PDF and check the layout by eye**
+- [x] **Step 3: Read the rendered PDF and check the layout by eye**
 
 Render one draft to `runs/sample/report.pdf`, then open it with the Read tool, page 1.
 Expected: the banner, header, sections, a medicine table with four slot columns, the watermark and the footer are visible, and the Hindi text is shaped correctly
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add services/api/voicerx/exports/pdf services/api/tests

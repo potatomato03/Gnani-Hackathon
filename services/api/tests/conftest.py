@@ -36,3 +36,10 @@ def make_draft(medications, patient_id='pat-001'):
 @pytest.fixture
 def draft_report():
     return make_draft([resolved_medicine()])
+
+
+@pytest.fixture
+def approved_report(draft_report):
+    from datetime import datetime
+    from voicerx.approve import approve
+    return approve(draft_report, 'Dr Test', datetime(2026, 10, 5, 12, 0))

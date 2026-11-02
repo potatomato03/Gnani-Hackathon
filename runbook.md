@@ -454,3 +454,5 @@ The app ignores the `OLLAMA_MODELS` variable (C-31). Check with `ollama list`, a
 - Build task 10b: completed; task tests and full suite passed.
 
 - Build task 11: completed; task tests and full suite passed.
+
+- Build task 12: completed; task tests and full suite passed.
