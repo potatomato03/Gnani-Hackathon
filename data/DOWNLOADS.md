@@ -14,6 +14,8 @@ These are raw inputs. Anything we check or build from them goes in `data/`.
 | `formulary/nlem_2022/` | National List of Essential Medicines 2022 | [CDSCO PDF](https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2018/UploadConsumer/nlem2022.pdf) | No licence stated | Choosing common generics |
 | `noise/rirs_noises/` | 843 noise recordings from MUSAN (806 foreground, 37 background), plus real and simulated room responses, 16 kHz | [OpenSLR SLR28](https://www.openslr.org/28/) | Apache 2.0; MUSAN is CC BY 4.0 | Noise and reverb for noisy audio variants |
 | `fhir/abdm_ig/` | ABDM FHIR guide package, OPConsult and Prescription examples | [v6.5.0, FHIR 4.0.1](https://www.nrces.in/ndhm/fhir/r4/StructureDefinition-DocumentBundle.html) | CC0-1.0 | Validating our bundles |
+| `knowledge/openfda_label/` | openFDA drug labels: 262,903 US labels in 14 zipped JSON files, 1.77 GB | [Export of 2026-10-30](https://api.fda.gov/download.json); `manifest.json` beside the files holds each file's size and SHA-256 | CC0 1.0 ([openFDA terms](https://open.fda.gov/terms/)) | Medicine knowledge chunks. Download with `tools/knowledge/download_openfda_labels.py`. |
+| `knowledge/chunks/` | Built, not downloaded: medicine knowledge chunks from openFDA, NLEM and Jan Aushadhi | `tools/knowledge/build_chunks.py` | Each chunk carries its source's licence | Retrieval. Kept here because the Jan Aushadhi and NLEM text can't go public. |
 | `optional/aci_bench/` | 207 English doctor-patient conversations with notes | [Commit b909b2b](https://github.com/wyim/aci-bench/tree/b909b2bb9cf1d19de08df15cddde7bd0179665e4) | CC BY 4.0 | Optional outside check, after the core |
 
 ## Models
@@ -23,8 +25,11 @@ Models live in `../models`, next to `DATA` and the repo.
 | Folder | What it is | Version | Licence | Use |
 |---|---|---|---|---|
 | `models/faster-whisper-large-v3/` | Whisper large-v3 for faster-whisper, 3.09 GB | [Commit edaa852](https://huggingface.co/Systran/faster-whisper-large-v3/tree/edaa852ec7e145841d8ffdb056a99866b5f0a478) | MIT | Free local transcription while building the pipeline. Never report its results as Prisma's. |
+| `models/fastembed/` | `BAAI/bge-base-en-v1.5` as Qdrant's ONNX build (`Qdrant/bge-base-en-v1.5-onnx-Q`), 208 MB, fetched by fastembed 0.9.1 | Snapshot `199291fdd1aa89faf9c20b722dc72ad5e17aa0d0` | MIT | Embedding the medicine knowledge chunks (runbook D-101) |
 
-`model.bin` SHA-256: `69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1`
+Whisper `model.bin` SHA-256: `69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1`
+
+bge-base `model_optimized.onnx` SHA-256: `4e556722bc4f65716c544c8a931f1e90fb3f866e5741fd93a96f051d673339c7`
 
 ## Limits
 
@@ -33,6 +38,7 @@ Models live in `../models`, next to `DATA` and the repo.
 - **Zero MRP:** 345 Jan Aushadhi rows have zero MRP, which the site says means under process.
 - **Jan Aushadhi:** email PMBI for permission before reproducing this list anywhere public, and credit the source.
 - **ACI-Bench:** it's US English with no Indian brands, and some speaker tags are swapped.
+- **openFDA labels:** US labels state US-approved uses and doses. Medicines sold only in India (domperidone, methylcobalamin, ornidazole, aceclofenac on its own) have no US label. 182,206 of the 262,903 labels carry no active-ingredient data (mostly unapproved and homeopathic products) and are skipped. Copyrighted text supplied by companies can sit inside labels; the openFDA terms say it may not be public domain.
 
 ## Not downloaded
 
@@ -43,13 +49,12 @@ Models live in `../models`, next to `DATA` and the repo.
 | Synthetic Medical Dictation | Method reference only |
 | DISPLACE-M, IndicVoices, Eka Medical ASR | Real people's speech, see `data/README.md` |
 | National Formulary of India | Paid edition, and no reuse terms found |
-| openFDA labels | Wait until the demo drugs are chosen |
 
 Case specs, scripts, gold notes, drug cards, rules and agent questions can't be downloaded. We build them in `data/`.
 
 ## Checksums
 
-SHA-256, relative to `DATA/`.
+SHA-256, relative to `DATA/`. The openFDA files are listed in `knowledge/openfda_label/manifest.json`.
 
 ```
 c9de0182474f652b7790a85bf534d0df9bd814575fcbda7109696d0fb3bec042  formulary/indian_medicine_dataset/indian_medicine_data.csv
