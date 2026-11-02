@@ -1,0 +1,9 @@
+# Local transcription on Windows with an NVIDIA GPU. Install into ../.venv.
+# Keep these pins: PyAV 19 breaks faster-whisper 1.2.1, and the newest
+# nvidia-cublas-cu12 release has no Windows build.
+faster-whisper==1.2.1
+ctranslate2==4.8.4
+av==15.1.0
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.27.0.42
+pyyaml

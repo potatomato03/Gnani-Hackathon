@@ -16,6 +16,16 @@ These are raw inputs. Anything we check or build from them goes in `data/`.
 | `fhir/abdm_ig/` | ABDM FHIR guide package, OPConsult and Prescription examples | [v6.5.0, FHIR 4.0.1](https://www.nrces.in/ndhm/fhir/r4/StructureDefinition-DocumentBundle.html) | CC0-1.0 | Validating our bundles |
 | `optional/aci_bench/` | 207 English doctor-patient conversations with notes | [Commit b909b2b](https://github.com/wyim/aci-bench/tree/b909b2bb9cf1d19de08df15cddde7bd0179665e4) | CC BY 4.0 | Optional outside check, after the core |
 
+## Models
+
+Models live in `../models`, next to `DATA` and the repo.
+
+| Folder | What it is | Version | Licence | Use |
+|---|---|---|---|---|
+| `models/faster-whisper-large-v3/` | Whisper large-v3 for faster-whisper, 3.09 GB | [Commit edaa852](https://huggingface.co/Systran/faster-whisper-large-v3/tree/edaa852ec7e145841d8ffdb056a99866b5f0a478) | MIT | Free local transcription while building the pipeline. Never report its results as Prisma's. |
+
+`model.bin` SHA-256: `69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1`
+
 ## Limits
 
 - **Side-effect and interaction text:** `updated_indian_medicine_data.csv` has these columns, with no stated source. Never use them for drug cards.

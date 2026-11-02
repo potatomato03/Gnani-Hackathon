@@ -31,6 +31,7 @@ data/eval/audio/
 
 # Provider response caches
 data/eval/fixtures/
+runs/
 
 # Local model files
 *.gguf

@@ -756,6 +756,22 @@ def test_manifest_has_one_row_per_variant_with_blank_audio_fields():
     assert len(rows[0]["transcript_hash"]) == 64
 
 
+def test_manifest_carries_details_of_rendered_audio():
+    audio = {
+        "fam-900-a": {
+            "source": "gemini",
+            "voice": "Charon",
+            "audio_format": "wav_pcm16_16000_mono",
+            "audio_hash": "abc123",
+        }
+    }
+    rows = manifest_rows([copy.deepcopy(BASE)], {"families": {"fam-900": "dev"}}, audio)
+    assert rows[0]["voice"] == "gemini:Charon"
+    assert rows[0]["audio_format"] == "wav_pcm16_16000_mono"
+    assert rows[0]["audio_hash"] == "abc123"
+    assert rows[1]["audio_hash"] == ""
+
+
 def test_manifest_expected_hash_changes_when_the_expected_answer_changes():
     original = copy.deepcopy(BASE)
     changed = copy.deepcopy(BASE)

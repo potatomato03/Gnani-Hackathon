@@ -476,7 +476,8 @@ def sha256(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def manifest_rows(families, splits):
+def manifest_rows(families, splits, audio=None):
+    audio = audio or {}
     rows = []
     for raw in families:
         family = Family.model_validate(raw)
@@ -513,6 +514,13 @@ def manifest_rows(families, splits):
                     transcript_hash=sha256("\n".join(script_lines(variant))),
                     expected_output_hash=sha256(expected),
                 )
+                clip = audio.get(variant.variant_id)
+                if clip:
+                    row.update(
+                        voice=f"{clip['source']}:{clip['voice']}",
+                        audio_format=clip["audio_format"],
+                        audio_hash=clip["audio_hash"],
+                    )
                 rows.append(row)
     return rows
 
@@ -552,12 +560,20 @@ def check_repo(root=REPO_ROOT):
     return issues
 
 
+def load_audio_index(path):
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        return {row["case_id"]: row for row in csv.DictReader(handle)}
+
+
 def write_outputs(root, families, splits):
     data = root / "data" / "eval"
+    audio = load_audio_index(data / "audio_index.csv")
     with (data / "manifest.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=MANIFEST_FIELDS, lineterminator="\n")
         writer.writeheader()
-        writer.writerows(manifest_rows(families, splits))
+        writer.writerows(manifest_rows(families, splits, audio))
     for raw in families:
         for encounter in Family.model_validate(raw).encounters:
             for variant in encounter.variants:
