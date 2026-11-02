@@ -1,16 +1,17 @@
+{% set footer %}Version {{ report.version }} · {{ report.content_hash[:12] }}{% if report.status == 'approved' %} · Approved by {{ report.approved_by }} · {{ report.approved_at.strftime('%d-%b-%Y %H:%M %Z') }}{% else %} · DRAFT, NOT APPROVED{% endif %}{% endset %}
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>VoiceRx - {{ report.case_id }}</title>
 <style>
-@page { size: A4; margin: 15mm 13mm 22mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt sans-serif; color: #5d6873; } }
+@page { size: A4; margin: 15mm 13mm 22mm; @bottom-left { content: {{ footer|striptags|css_string }}; font: 7.5pt sans-serif; color: #596970; width: 80%; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt sans-serif; color: #5d6873; } }
 * { box-sizing: border-box; }
-body { font-family: "Noto Sans", "Noto Sans Devanagari", "Noto Sans Telugu", "Noto Sans Tamil", "Nirmala UI", sans-serif; font-size: 10pt; line-height: 1.45; color: #172b35; margin: 0; }
+body { font-family: "Noto Sans", "Noto Sans Devanagari", "Noto Sans Telugu", "Noto Sans Tamil", "Nirmala UI", sans-serif; font-size: 10pt; line-height: 1.35; color: #172b35; margin: 0; }
 .banner { font-size: 9pt; font-weight: 700; letter-spacing: 0; color: #805300; border-bottom: 2px solid #d3a94a; padding-bottom: 7px; }
 h1 { font-size: 21pt; font-weight: 650; margin: 12px 0 3px; color: #134d53; }
-.subtitle { color: #5d6873; margin-bottom: 14px; }
+.subtitle { color: #5d6873; margin-bottom: 10px; }
 .identity { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
 .identity td { padding: 2px 12px 2px 0; vertical-align: top; width: 50%; }
 .allergies { background: #f2f5f5; border-left: 3px solid #537b7e; padding: 7px 10px; margin: 8px 0 15px; }
-h2 { font-size: 11pt; color: #134d53; margin: 13px 0 4px; break-after: avoid; }
+h2 { font-size: 11pt; color: #134d53; margin: 10px 0 4px; break-after: avoid; }
 p { margin: 3px 0; }
 section { break-inside: avoid; }
 .not-discussed { font-size: 9pt; color: #596970; margin-top: 12px; }
@@ -25,13 +26,13 @@ section { break-inside: avoid; }
 .box { background: #f1f6f4; border: 1px solid #b7cfca; padding: 10px 12px; break-inside: avoid; margin-top: 14px; }
 .box h2 { margin-top: 0; }
 .note { font-size: 8.5pt; color: #596970; margin-top: 8px; }
-.issues { margin-top: 15px; border-top: 1px solid #ddd; padding-top: 5px; }
+.issues { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 5px; break-inside: avoid; }
 .issues p { font-size: 8.5pt; }
-.footer { position: fixed; bottom: 0; left: 0; width: 86%; border-top: 1px solid #bbb; padding-top: 4px; font-size: 7.5pt; color: #596970; }
+.footer { display: none; }
 .watermark { position: fixed; top: 42%; left: 0; width: 100%; text-align: center; font-size: 35pt; font-weight: 700; color: rgba(145,65,30,.13); transform: rotate(-25deg); pointer-events: none; z-index: -1; }
 </style></head><body>
 {% if report.status == 'draft' %}<div class="watermark">DRAFT, NOT APPROVED</div>{% endif %}
-<div class="footer">Version {{ report.version }} · {{ report.content_hash[:12] }}{% if report.status == 'approved' %} · Approved by {{ report.approved_by }} · {{ report.approved_at.strftime('%d-%b-%Y %H:%M %Z') }}{% else %} · DRAFT, NOT APPROVED{% endif %}</div>
+<div class="footer">{{ footer }}</div>
 <div class="banner">SYNTHETIC DATA</div>
 <h1>Outpatient consultation</h1><div class="subtitle">{{ report.header.clinic_name }}</div>
 <table class="identity"><tr><td><b>{{ report.header.patient_name }}</b><br>{{ report.header.age }} years (approx.) · {{ report.header.sex }}<br>{{ report.header.patient_id }} · {{ report.header.mrn }}</td><td><b>{{ report.header.doctor_name }}</b><br>Registration: {{ report.header.doctor_reg_no }}<br>Visit: {{ report.header.visit_date.strftime('%d-%b-%Y') }}</td></tr></table>

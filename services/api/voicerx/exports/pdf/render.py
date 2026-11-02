@@ -8,6 +8,9 @@ from ...pipeline.assemble import DISPLAY_NAMES
 
 def render_html(report, box):
     env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
+    # Hex escapes keep arbitrary approver names safe inside a CSS string.
+    from markupsafe import Markup
+    env.filters['css_string'] = lambda value: Markup('"' + ''.join('\\' + format(ord(c), 'x') + ' ' for c in str(value)) + '"')
     return env.get_template('report.html.j2').render(report=report, box=box, names=DISPLAY_NAMES)
 
 
