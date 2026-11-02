@@ -66,3 +66,18 @@ def test_incomplete_earlier_visit_gives_a_warning_and_no_history():
     ids, issues = current_ids_for(second, done, cases)
     assert ids == frozenset()
     assert [(i.code, i.severity) for i in issues] == [("previous_encounter_incomplete", "warn")]
+def test_parallel_families_preserve_visit_order_and_isolate_history(tmp_path, monkeypatch):
+    from voicerx.pipeline import run as runner
+    cases = [c for c in load_case_inputs(REPO_ROOT, 'typed') if c.family_id in ('fam-010', 'fam-011')]
+    seen = {}
+    def fake(case, client, reference, out_dir, current_ids, history_issues=()):
+        seen[case.case_id] = current_ids
+        return RunResult('draft', None, None, None, frozenset({case.case_id}))
+    monkeypatch.setattr(runner, 'run_case', fake)
+    results = runner.run_cases(cases, None, None, tmp_path, workers=2)
+    assert len(results) == 5
+    assert seen['fam-010-a'] == seen['fam-010-b'] == seen['fam-011-v1'] == frozenset()
+    assert seen['fam-011-v2'] == frozenset({'fam-011-v1'})
+    assert seen['fam-011-v3'] == frozenset({'fam-011-v2'})
+
+

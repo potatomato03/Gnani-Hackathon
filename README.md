@@ -44,7 +44,7 @@ $env:PYTHONPATH = 'services/api'
 ../.venv/Scripts/python tools/eval/score_report.py runs/typed-1 --source typed
 ```
 
-Use `--source whisper` for recorded transcripts, `--provider ollama` for local-only evaluation, or `--cases fam-001-a` for one case. Artifacts and model caches are under ignored `runs/`; scoring summaries are under `data/eval/results/scores/`. Rerunning a case replaces its outputs, including any previous approvals, so use a new run id to preserve reviewed work.
+Use `--source whisper` for recorded transcripts, `--provider ollama` for local-only evaluation, or `--cases fam-001-a` for one case. Optional `--workers 3` runs independent families concurrently; visits within each family and calls to the local GPU remain sequential. Artifacts and model caches are under ignored `runs/`; scoring summaries are under `data/eval/results/scores/`. Rerunning a case replaces its outputs, including any previous approvals, so use a new run id to preserve reviewed work.
 
 Review `draft_report.json` and `report.pdf`. `python -m voicerx.resolve --help` lists explicit corrections; each correction records its author and reason and creates a new draft version. `python -m voicerx.approve runs/<run>/<case> --by "Reviewer name"` refuses blocking issues or altered content, then writes the approved PDF and FHIR bundles. FHIR exports are not officially validated; patient-language templates and allergy classes await clinical/language review.
 

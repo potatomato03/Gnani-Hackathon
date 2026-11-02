@@ -161,12 +161,41 @@ def run_case(case, client, reference, out_dir, current_ids, history_issues=()):
         return RunResult('incomplete', stage, message, None)
 
 
+def run_cases(cases, client, reference, run_dir, workers=1, selected=None):
+    from concurrent.futures import ThreadPoolExecutor
+    if not 1 <= workers <= 4:
+        raise ValueError('workers must be between 1 and 4')
+    families = {}
+    for case in cases:
+        if selected and case.case_id not in selected:
+            continue
+        families.setdefault(case.family_id, []).append(case)
+
+    def run_family(family_cases):
+        finished = {}
+        for case in sorted(family_cases, key=lambda c: (c.encounter_index, c.case_id)):
+            ids, history = current_ids_for(case, finished, cases)
+            print(case.case_id + ': running', flush=True)
+            result = run_case(case, client, reference, Path(run_dir) / case.case_id, ids, tuple(history))
+            finished[case.case_id] = result
+            blocks = sum(i.severity == 'block' for i in result.draft.issues) if result.draft else 0
+            print(f'{case.case_id}: {result.status}; {blocks} blocks' + (f'; {result.stage}: {result.error}' if result.error else ''), flush=True)
+        return finished
+
+    if workers == 1:
+        return {key: value for family in families.values() for key, value in run_family(family).items()}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return {key: value for finished in pool.map(run_family, families.values()) for key, value in finished.items()}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, choices=['typed', 'whisper'])
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--cases', nargs='+')
     parser.add_argument('--provider', choices=['gemini', 'ollama'])
+    parser.add_argument('--workers', type=int, default=1, choices=range(1, 5),
+                        help='independent families in flight; local GPU calls remain serialized')
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', args.run_id):
         parser.error('run-id must be a simple directory name')
@@ -176,16 +205,7 @@ def main():
         parser.error('unknown case id')
     reference = load_reference(REPO_ROOT)
     client = build_client(REPO_ROOT / '.env', REPO_ROOT / 'runs/cache', only=args.provider)
-    finished = {}
-    for case in cases:
-        if args.cases and case.case_id not in args.cases:
-            continue
-        ids, history = current_ids_for(case, finished, cases)
-        print(case.case_id + ': running', flush=True)
-        result = run_case(case, client, reference, REPO_ROOT / 'runs' / args.run_id / case.case_id, ids, tuple(history))
-        finished[case.case_id] = result
-        blocks = sum(i.severity == 'block' for i in result.draft.issues) if result.draft else 0
-        print(f'{case.case_id}: {result.status}; {blocks} blocks' + (f'; {result.stage}: {result.error}' if result.error else ''), flush=True)
+    run_cases(cases, client, reference, REPO_ROOT / 'runs' / args.run_id, args.workers, args.cases)
     return 0
 
 

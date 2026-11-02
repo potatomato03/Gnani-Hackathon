@@ -140,3 +140,18 @@ def test_build_client_orders_gemini_before_ollama_and_can_keep_one(tmp_path):
     env.write_text("GEMINI_API_KEY=g1\nGEMINI_API_KEY_2=\nOLLAMA_MODEL=qwen3:8b\n", encoding="utf-8")
     assert [c.adapter.name for c in build_client(env, tmp_path).clients] == ["gemini", "ollama"]
     assert [c.adapter.name for c in build_client(env, tmp_path, only="ollama").clients] == ["ollama"]
+def test_concurrent_identical_cloud_replies_leave_a_valid_cache(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    barrier = Barrier(2)
+    def transport(*args):
+        barrier.wait(timeout=5)
+        return gemini_reply({'items': [{'word': 'cached'}]})
+    client = ModelClient(GeminiAdapter(), ['g1'], tmp_path, transport=transport)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: client.generate('s', 'u', Outer, 'v1'), range(2)))
+    assert all(result.items[0].word == 'cached' for result, _ in results)
+    result, meta = client.generate('s', 'u', Outer, 'v1')
+    assert meta.cached and result.items[0].word == 'cached'
+
+

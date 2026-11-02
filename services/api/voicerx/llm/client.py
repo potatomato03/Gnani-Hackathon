@@ -8,7 +8,12 @@ from pathlib import Path
 import time
 import urllib.request
 import urllib.error
+from threading import Lock
+from uuid import uuid4
 from pydantic import BaseModel, ValidationError
+
+_LOCAL_LOCK = Lock()
+_CACHE_LOCK = Lock()
 
 
 @dataclass
@@ -81,12 +86,19 @@ class ModelClient:
         self.exhausted = set()
 
     def generate(self, system, user, schema, prompt_version):
+        if self.adapter.name == 'ollama':
+            with _LOCAL_LOCK:
+                return self._generate(system, user, schema, prompt_version)
+        return self._generate(system, user, schema, prompt_version)
+
+    def _generate(self, system, user, schema, prompt_version):
         fingerprint = json.dumps([self.adapter.name, self.adapter.model, prompt_version, system, user], ensure_ascii=False)
         cache_key = sha256(fingerprint.encode('utf-8')).hexdigest()
         path = self.cache_dir / (cache_key + '.json')
         if path.exists():
             try:
-                cached = json.loads(path.read_text(encoding='utf-8'))
+                with _CACHE_LOCK:
+                    cached = json.loads(path.read_text(encoding='utf-8'))
                 parsed = schema.model_validate_json(cached['reply'])
                 return parsed, replace(CallMeta(**cached['meta']), cached=True)
             except (ValueError, KeyError, TypeError):
@@ -132,9 +144,13 @@ class ModelClient:
                     continue
                 meta = CallMeta(self.adapter.name, self.adapter.model, prompt_version, cache_key, False, index, attempts)
                 path.parent.mkdir(parents=True, exist_ok=True)
-                temporary = path.with_suffix('.tmp')
-                temporary.write_text(json.dumps({'reply': reply, 'meta': asdict(meta)}, ensure_ascii=False), encoding='utf-8')
-                temporary.replace(path)
+                temporary = path.with_name(path.stem + '.' + uuid4().hex + '.tmp')
+                try:
+                    temporary.write_text(json.dumps({'reply': reply, 'meta': asdict(meta)}, ensure_ascii=False), encoding='utf-8')
+                    with _CACHE_LOCK:
+                        temporary.replace(path)
+                finally:
+                    temporary.unlink(missing_ok=True)
                 return parsed, meta
         raise QuotaExhausted(f'{self.adapter.name}: no available key or server')
 
