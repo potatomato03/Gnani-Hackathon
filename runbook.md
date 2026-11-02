@@ -465,3 +465,4 @@ The app ignores the `OLLAMA_MODELS` variable (C-31). Check with `ollama list`, a
 - D-73: Cached clean end-to-end fixture exposed a false negation on Hindi combining marks. Word-cue boundaries now include Unicode marks; all ten sabotage cases still block. Full suite: 317 passed.
 
 - Build task 15: completed; task tests and full suite passed.
+- D-74: Inspection found whitespace normalization erased newline medicine boundaries. Preserve a same-length boundary copy; a regression now blocks doses borrowed across lines. Full suite including scorer accuracy checks: 325 passed. The in-flight first run will be rechecked from cached replies after this fix.

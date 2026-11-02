@@ -60,6 +60,19 @@ def test_unicode_form_of_a_quote_does_not_drop_it():
     assert [i.id for i in checked.kept] == ["x2"]
 
 
+def test_medicine_dose_cannot_cross_an_unpunctuated_line_boundary():
+    checked = run(meds=[med(timing_phrase=None, food_phrase=None, duration_phrase=None)],
+                  transcript='Dolo six fifty\none tablet is what the patient suggested')
+    assert 'phrase_not_bound' in codes(checked)
+    assert checked.medications[0].dose is None
+
+
+def test_combining_marks_do_not_create_a_hindi_negation_cue():
+    from voicerx.pipeline.check_extraction import has_word, NEGATION_WORDS
+    assert not has_word('तीन दिन से गले में दर्द', NEGATION_WORDS)
+    assert has_word('बुखार नहीं है।', NEGATION_WORDS)
+
+
 def test_absent_item_quoted_without_negation_blocks():
     assert "negation_mismatch" in codes(run([item(quote="fever", assertion="absent")],
                                             transcript="Mild fever since morning."))

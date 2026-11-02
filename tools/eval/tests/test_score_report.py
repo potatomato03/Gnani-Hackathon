@@ -23,3 +23,39 @@ def test_missing_and_incomplete_cases_are_listed_not_dropped(tmp_path):
         (tmp_path / case / "status.json").write_text(json.dumps({"status": status}), encoding="utf-8")
     scores = score_run(tmp_path, "typed")
     assert (scores["missing_input"], scores["incomplete"], scores["scored"]) == (["fam-001-a"], ["fam-001-b"], 0)
+
+
+def fixture_score(changed_dose=False):
+    import yaml
+    from score_report import REPO_ROOT, Family, score_variant
+    from voicerx.contracts.extraction import Extraction
+    from voicerx.contracts.report import ReportFields
+    from voicerx.pipeline.check_extraction import check_extraction
+    from voicerx.pipeline.assemble import assemble_draft
+    from voicerx.reference import load_reference
+    family = Family.model_validate(yaml.safe_load((REPO_ROOT / 'data/eval/cases/fam-001.yaml').read_text(encoding='utf-8')))
+    encounter = family.encounters[0]
+    variant = encounter.variants[0]
+    directory = REPO_ROOT / 'services/api/tests/fixtures/fam-001-a'
+    extraction = Extraction.model_validate_json((directory / 'extraction.json').read_text(encoding='utf-8'))
+    fields = ReportFields.model_validate_json((directory / 'report_fields.json').read_text(encoding='utf-8'))
+    reference = load_reference(REPO_ROOT)
+    checked = check_extraction(extraction, '\n'.join(u.text for u in variant.utterances), reference,
+                               family.patient_id, encounter.date)
+    if changed_dose:
+        checked.medications[0].dose.amount = '2'
+    draft = assemble_draft(variant.variant_id, family.patient_id, encounter.doctor_id, encounter.date,
+                           fields, checked, [], reference)
+    return score_variant(encounter, variant, draft, 'typed')
+
+
+def test_clean_fixture_scores_all_facts_and_medicine():
+    scores = fixture_score()
+    assert scores['facts_found'] == {'count': 8, 'total': 8}
+    assert scores['false_facts'] == {'count': 0, 'total': 8}
+    assert scores['medicines_exact'] == {'count': 1, 'total': 1}
+    assert scores['section_accuracy'] == {'count': 8, 'total': 8}
+
+
+def test_wrong_dose_never_gets_exact_medicine_credit():
+    assert fixture_score(changed_dose=True)['medicines_exact'] == {'count': 0, 'total': 1}

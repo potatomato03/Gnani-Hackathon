@@ -77,6 +77,9 @@ def _sentence(text, position):
 
 def check_extraction(extraction, transcript, reference, patient_id, visit_date, current_ids=frozenset()):
     text = normalise(transcript)
+    # Keep a same-length copy with utterance boundaries for mention binding.
+    bounded_text = re.sub(r'\s+', lambda m: '\n' if '\n' in m[0] or '\r' in m[0] else ' ',
+                          unicodedata.normalize('NFC', transcript).casefold()).strip()
     kept, dropped, medications, issues = [], [], [], []
     for item in extraction.items:
         quote = normalise(item.quote)
@@ -88,7 +91,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
             dropped.append(DroppedItem(item=item, reason='patient_speech'))
             issues.append(issue('patient_speech', item.id, 'warn'))
             continue
-        if item.kind == 'exam' and (item.said_by == 'unclear' or has_word(_sentence(text, text.index(quote)), FIRST_PERSON)):
+        if item.kind == 'exam' and (item.said_by == 'unclear' or has_word(_sentence(bounded_text, text.index(quote)), FIRST_PERSON)):
             issues.append(issue('speaker_unclear', item.id, 'warn'))
         negated = has_word(quote, NEGATION_WORDS)
         if (item.assertion == 'absent' and not negated) or (item.assertion == 'present' and negated and item.kind not in ('advice', 'plan', 'follow_up', 'order', 'referral') and not re.search(r'\bsorry\b', quote)):
@@ -121,7 +124,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         for pos in positions:
             following = [p for p, rid in name_positions if p > pos and rid != rx.id]
             next_name = min(following, default=len(text))
-            end = ENDS.search(text, pos)
+            end = ENDS.search(bounded_text, pos)
             stop = min(pos + 200, end.start() if end else len(text), next_name)
             bound = {field: (value is None or (bool(normalise(value)) and normalise(value) in text[pos:next_name if field in corrected else stop]))
                      for field, value in values.items()}
@@ -139,7 +142,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         medications.append(ResolvedMedication(id=rx.id, action=rx.action, spoken_name=rx.spoken_name,
             **match.model_dump(), **parsed, unresolved=unresolved,
             quotes={'name_quote': rx.name_quote, **{field: value for field, value in values.items() if value is not None}},
-            speaker_unclear=rx.said_by == 'unclear' or has_word(_sentence(text, pos), FIRST_PERSON), unbound=unbound))
+            speaker_unclear=rx.said_by == 'unclear' or has_word(_sentence(bounded_text, pos), FIRST_PERSON), unbound=unbound))
     record = reference.patients[patient_id]
     allergies = record['allergies'] if record['allergy_status'] != 'unknown' else None
     issues += medicine_issues(medications, reference, allergies)
