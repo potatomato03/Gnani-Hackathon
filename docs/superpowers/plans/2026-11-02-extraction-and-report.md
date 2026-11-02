@@ -521,7 +521,7 @@ git commit -m "Add medicine matcher"
   - On another 429, a 503 or another 5xx, wait for `Retry-After`, otherwise `20 × attempt` seconds, and retry, up to 6 attempts. If all 6 fail, raise `QuotaExhausted` so that `FallbackClient` moves on.
   - If the reply fails Pydantic validation, send one repair request. If that also fails, raise `ModelOutputInvalid`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 import json
@@ -668,24 +668,24 @@ def test_build_client_orders_gemini_before_ollama_and_can_keep_one(tmp_path):
     assert [c.adapter.name for c in build_client(env, tmp_path, only="ollama").clients] == ["ollama"]
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_llm.py -q`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `client.py`, `gemini.py` and `ollama.py` as specified above**
+- [x] **Step 3: Implement `client.py`, `gemini.py` and `ollama.py` as specified above**
 
-- [ ] **Step 4: Run the tests to make sure they pass**
+- [x] **Step 4: Run the tests to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_llm.py -q`
 Expected: all pass
 
-- [ ] **Step 5: Check each provider's request shape with one live call**
+- [x] **Step 5: Check each provider's request shape with one live call**
 
 Run one `generate` call per provider with a tiny schema, through `build_client(Path(".env"), Path("runs/cache"), only="gemini")` and then `only="ollama"`. The Ollama app must be running; `ollama list` shows `qwen3:8b`.
 Expected: a valid parsed object from each, with no key in the output. If a field is rejected, fix the adapter and record the change in the runbook.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services/api/voicerx/llm services/api/tests/unit/test_llm.py
@@ -728,7 +728,7 @@ git commit -m "Add model client: Gemini first, local Ollama fallback, cache and 
 - **A medicine's mention** runs from its name quote to the earliest of three points: the sentence end (`।`, `?`, `!`, a newline, or a `.` followed by a space or the end), the next medicine's name quote, or 200 characters. When the name occurs more than once, use the first occurrence whose mention holds all the phrases. A correction's `new_quote` may run past the sentence end, but must come before the next medicine's name.
 - Also export `medicine_issues(medications: list[ResolvedMedication], reference: Reference, allergies: list[str] | None) -> list[Issue]`. It raises the medicine codes from the resolved values and stored flags alone, without the transcript, so Task 10b can re-run it. Those codes are `missing_quantity`, the three product codes, `allergy_conflict`, `unparsed_*` from `unresolved`, and `speaker_unclear` and `phrase_not_bound` from the stored flags.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from datetime import date
@@ -872,19 +872,19 @@ def test_misspelt_brand_is_never_exact():
     assert "fuzzy_product_match" in codes(checked) and checked.medications[0].product_id is None
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_check_extraction.py -q`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `check_extraction`**
+- [x] **Step 3: Implement `check_extraction`**
 
-- [ ] **Step 4: Run the tests to make sure they pass**
+- [x] **Step 4: Run the tests to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_check_extraction.py -q`
 Expected: all pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/api/voicerx/pipeline/check_extraction.py services/api/tests/unit/test_check_extraction.py

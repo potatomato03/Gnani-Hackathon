@@ -433,3 +433,8 @@ The app ignores the `OLLAMA_MODELS` variable (C-31). Check with `ollama list`, a
 - Build task 3: completed; task tests and full suite passed.
 
 - Task 4: 225 tests pass. Live provider probe is running with bounded network retries; deterministic implementation continues while it finishes. Live outcome will be recorded before Task 16. This overlaps the live verification only; no implementation tasks are delegated.
+
+- Build task 4: completed; task tests and full suite passed.
+
+- Build task 5: completed; task tests and full suite passed.
+`n- Task 4 live verification: Gemini gemini-3.8-flash and Ollama qwen3:8b each returned a valid tiny-schema object on one attempt. No adapter changes were needed.
