@@ -154,6 +154,8 @@ Full design: [the spec](docs/superpowers/specs/2026-11-02-extraction-and-report-
 | D-70 | Use `gemini-3.8-flash` first and `qwen3:8b` through Ollama on the local GPU as fallback, behind one model client. Drop Mistral. Run the local model with an 8,192-token context, and never accept a reply that is cut off or overflows it. | Mistral's key was rejected (C-29). Gemini is free and the strongest option on these languages. The local model costs nothing, has no quota, works offline, and keeps transcripts on the clinic's machine, which answers Gemini's ban on clinical use (Q-15). It fits the 8 GB GPU; 12B models don't. | Aditya, on recommendation | Confirmed |
 | D-71 | ASTRA builds the plan Native, one agent doing every task in order. Claude reviews the whole branch afterwards against the plan and spec. | Claude's usage limit was about to run out. One builder suits a plan whose tasks lean on each other's interfaces, and the review still comes from someone who didn't write the code. | Aditya | Confirmed |
 
+| D-72 | PatientBox also carries official_note, defaulting to an empty string for callers that omit it. | The PDF must display the template's English-record-is-official notice separately from the unreviewed-translation note. | Builder | Assistant call |
+
 ## Judgement calls
 
 Places where a request or a source could be read more than one way.
@@ -450,3 +452,5 @@ The app ignores the `OLLAMA_MODELS` variable (C-31). Check with `ollama list`, a
 - Build task 10: completed; task tests and full suite passed.
 
 - Build task 10b: completed; task tests and full suite passed.
+
+- Build task 11: completed; task tests and full suite passed.

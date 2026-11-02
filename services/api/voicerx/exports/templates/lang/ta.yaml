@@ -1,0 +1,31 @@
+title: மருந்துகளை எவ்வாறு எடுத்துக்கொள்வது
+official_note: ஆங்கில அறிக்கையே அதிகாரப்பூர்வ பதிவு.
+unreviewed_note: இந்த மொழிபெயர்ப்பு இன்னும் சரிபார்க்கப்படவில்லை.
+ask_doctor: மருத்துவரிடம் கேளுங்கள்
+slots:
+  m: காலை
+  a: மதியம்
+  e: மாலை
+  n: இரவு
+food:
+  after_food: உணவுக்குப் பிறகு
+  before_food: உணவுக்கு முன்
+  with_food: உணவுடன்
+  empty_stomach: வெறும் வயிற்றில்
+units:
+  tablet: மாத்திரை
+  capsule: காப்ஸ்யூல்
+  puff: பஃப்
+  teaspoon: தேக்கரண்டி
+frequency: ஒரு நாளில் {n} முறை
+as_needed: தேவைப்படும்போது
+as_needed_max: தேவைப்படும்போது, ஒரு நாளில் {n} முறைக்கு மேல் வேண்டாம்
+duration:
+  day: '{n} நாட்கள்'
+  week: '{n} வாரங்கள்'
+  month: '{n} மாதங்கள்'
+row: '{name}: {dose}, {when}, {food}, {duration}'
+taper_row: '{name}: {steps}, {food}'
+taper_step: '{dose} {when} {duration}'
+then: ', பின்னர் '
+reviewed_by: null

@@ -1561,7 +1561,7 @@ Write the Telugu and Tamil files with the same keys. They stay `reviewed_by: nul
 - Any unknown value prints `ask_doctor`.
 - A non-exact medicine prints `ask_doctor` in place of the whole row.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from conftest import REPO_ROOT
@@ -1605,12 +1605,12 @@ def test_every_language_file_fills_every_placeholder(draft_report):
         assert box.rows and all("{" not in row for row in box.rows)
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
+- [x] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_patient_box.py -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add services/api/voicerx/exports services/api/tests/unit/test_patient_box.py
