@@ -17,6 +17,7 @@ Turn a consultation transcript into a report a doctor can approve, in two forms 
 | Empty sections are left out and listed on one "Not discussed" line. | Aditya, on recommendation |
 | Code checks both model stages before anything reaches the report. | Aditya, on recommendation |
 | Gemini is the first model provider, and a local model run by Ollama the fallback, behind one client. Mistral is dropped because its key never worked. | Aditya, on recommendation |
+| Groq (`openai/gpt-oss-120b`) sits between Gemini and the local model. | Aditya, by supplying a Groq key |
 
 ## Constraints
 
@@ -50,7 +51,7 @@ Each unit has one job and is tested on its own.
 | `services/api/voicerx/contracts/extraction.py` | Stage 1 and Check 1 models |
 | `services/api/voicerx/contracts/report.py` | Stage 2, draft and approved report models |
 | `services/api/voicerx/llm/client.py` | One interface for both providers: the response cache, retries, one repair attempt, and falling back to the next provider or key |
-| `services/api/voicerx/llm/gemini.py` and `services/api/voicerx/llm/ollama.py` | Build each provider's request with an enforced JSON schema, and read its reply |
+| `services/api/voicerx/llm/gemini.py`, `services/api/voicerx/llm/openai_compat.py` (Groq) and `services/api/voicerx/llm/ollama.py` | Build each provider's request with an enforced JSON schema, and read its reply |
 | `services/api/voicerx/pipeline/extract.py` | Stage 1 prompt and call |
 | `services/api/voicerx/pipeline/check_extraction.py` | Check 1 |
 | `services/api/voicerx/pipeline/match_medicine.py` | Spoken name to formulary product |

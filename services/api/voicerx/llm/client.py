@@ -130,9 +130,12 @@ class ModelClient:
                     else:
                         self.exhausted.add(index)
                     continue
-                if status != 200:
+                rejected = status != 200 and getattr(self.adapter, 'is_invalid_output', lambda s, t: False)(status, text)
+                if status != 200 and not rejected:
                     raise ModelOutputInvalid(f'{self.adapter.name} HTTP {status}')
                 try:
+                    if rejected:
+                        raise ValueError('provider rejected the generated JSON against the schema')
                     reply = self.adapter.reply_text(json.loads(text))
                     if any(len(k) > 8 and k in reply for k in self.keys):
                         raise ValueError('credential appeared in response')
@@ -177,6 +180,7 @@ class FallbackClient:
 def build_client(env_path: Path, cache_dir: Path, only=None):
     from .gemini import GeminiAdapter
     from .ollama import OllamaAdapter
+    from .openai_compat import OpenAICompatAdapter
     settings = {}
     for line in env_path.read_text(encoding='utf-8-sig').splitlines():
         if line.strip() and not line.lstrip().startswith('#') and '=' in line:
@@ -186,6 +190,9 @@ def build_client(env_path: Path, cache_dir: Path, only=None):
     keys = [settings[k] for k in ('GEMINI_API_KEY', 'GEMINI_API_KEY_2') if settings.get(k)]
     if keys and only in (None, 'gemini'):
         clients.append(ModelClient(GeminiAdapter(), keys, cache_dir))
+    if settings.get('GROQ_API_KEY') and only in (None, 'groq'):
+        model = settings.get('GROQ_MODEL') or 'openai/gpt-oss-120b'
+        clients.append(ModelClient(OpenAICompatAdapter(model=model), [settings['GROQ_API_KEY']], cache_dir))
     if settings.get('OLLAMA_MODEL') and only in (None, 'ollama'):
         clients.append(ModelClient(OllamaAdapter(settings['OLLAMA_MODEL'], settings.get('OLLAMA_HOST', 'http://localhost:11434')), ['local'], cache_dir))
     if not clients:

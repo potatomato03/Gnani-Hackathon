@@ -181,3 +181,60 @@ def test_concurrent_identical_cloud_replies_leave_a_valid_cache(tmp_path):
     assert meta.cached and result.items[0].word == 'cached'
 
 
+
+
+def groq_reply(obj, finish_reason="stop"):
+    return 200, {}, json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(obj)},
+                                             "finish_reason": finish_reason}]})
+
+
+def groq(tmp_path, responses):
+    from voicerx.llm.openai_compat import OpenAICompatAdapter
+
+    transport = FakeTransport(responses)
+    return ModelClient(OpenAICompatAdapter(), ["q1"], tmp_path, transport=transport, sleep=lambda s: None), transport
+
+
+def test_groq_request_enforces_a_strict_schema():
+    from voicerx.llm.openai_compat import OpenAICompatAdapter
+
+    url, headers, body = OpenAICompatAdapter().build("s", "u", json_schema_for(Outer), "q1")
+    assert url == "https://api.groq.com/openai/v1/chat/completions"
+    assert headers["Authorization"] == "Bearer q1" and body["model"] == "openai/gpt-oss-120b"
+    assert body["temperature"] == 0
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert body["response_format"]["json_schema"]["schema"] == json_schema_for(Outer)
+
+
+def test_groq_rejected_json_gets_the_repair_attempt(tmp_path):
+    rejected = (400, {}, '{"error":{"code":"json_validate_failed","message":"Failed to generate JSON."}}')
+    client, transport = groq(tmp_path, [rejected, groq_reply({"items": []})])
+    result, meta = client.generate("s", "u", Outer, "v1")
+    assert result.items == [] and meta.attempts == 2 and meta.provider == "groq"
+
+
+def test_groq_other_client_errors_are_not_repaired(tmp_path):
+    client, _ = groq(tmp_path, [(400, {}, '{"error":{"code":"model_not_found"}}')])
+    with pytest.raises(ModelOutputInvalid):
+        client.generate("s", "u", Outer, "v1")
+
+
+def test_groq_cut_off_reply_is_never_accepted(tmp_path):
+    client, _ = groq(tmp_path, [groq_reply({"items": []}, "length"), groq_reply({"items": []}, "length")])
+    with pytest.raises(ModelOutputInvalid):
+        client.generate("s", "u", Outer, "v1")
+
+
+def test_groq_daily_limit_is_exhausted_without_retrying(tmp_path):
+    daily = (429, {"retry-after": "600"}, '{"error":{"message":"Rate limit reached on tokens per day (TPD)"}}')
+    client, transport = groq(tmp_path, [daily])
+    with pytest.raises(QuotaExhausted):
+        client.generate("s", "u", Outer, "v1")
+    assert len(transport.calls) == 1
+
+
+def test_build_client_puts_groq_between_gemini_and_ollama(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("GEMINI_API_KEY=g1\nGROQ_API_KEY=q1\nOLLAMA_MODEL=qwen3:8b\n", encoding="utf-8")
+    assert [c.adapter.name for c in build_client(env, tmp_path).clients] == ["gemini", "groq", "ollama"]
+    assert [c.adapter.name for c in build_client(env, tmp_path, only="groq").clients] == ["groq"]
