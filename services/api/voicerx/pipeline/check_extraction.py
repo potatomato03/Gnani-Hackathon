@@ -10,6 +10,9 @@ from .schedule import parse_dose, parse_timing, parse_food, parse_duration, pars
 
 NEGATION_WORDS = {'no', 'not', 'nil', 'without', 'denies', 'negative', 'never', 'नहीं', 'नही', 'न', 'ना', 'बिना',
                   'లేదు', 'లేవు', 'కాదు', 'இல்லை', 'இல்லாமல்'}
+# A hedge in the quote means the doctor suspects, not states. Telugu and Tamil hedges are not yet listed.
+HEDGE_WORDS = {'likely', 'probably', 'possibly', 'probable', 'suspected', 'suspect', 'provisional', 'seems',
+               'looks like', 'could be', 'लग रहा', 'लग रही', 'लगता', 'लगती', 'शायद', 'संभवतः'}
 SIDE_WORDS = {'left': {'left', 'बायां', 'बाएँ', 'बाएं', 'बाईं', 'ఎడమ', 'இடது'},
               'right': {'right', 'दायां', 'दाएँ', 'दाएं', 'दाईं', 'కుడి', 'வலது'},
               'bilateral': {'bilateral', 'both', 'दोनों', 'రెండు', 'இரண்டு'}}
@@ -100,6 +103,8 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         negated = has_word(quote, NEGATION_WORDS)
         if (item.assertion == 'absent' and not negated) or (item.assertion == 'present' and negated and item.kind not in ('advice', 'plan', 'follow_up', 'order', 'referral') and not re.search(r'\bsorry\b', quote)):
             issues.append(issue('negation_mismatch', item.id))
+        if item.certainty == 'stated' and item.assertion == 'present' and has_word(quote, HEDGE_WORDS):
+            issues.append(issue('certainty_mismatch', item.id))
         if item.laterality and not has_word(quote, SIDE_WORDS[item.laterality]):
             issues.append(issue('laterality_mismatch', item.id))
         kept.append(item)

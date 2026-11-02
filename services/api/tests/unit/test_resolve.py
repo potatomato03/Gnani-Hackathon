@@ -59,3 +59,57 @@ def test_correction_without_a_reason_is_refused():
     draft = make_draft([resolved_medicine(dose=None)])
     with pytest.raises(ResolutionRefused):
         resolve(draft, [fix("set_dose", "rx1", {"amount": "1", "unit": "tablet"}, reason=" ")], REF)
+
+
+def flagged_draft():
+    # A Check 1 block on item x2 and a Check 2 block on the line that cites it (runbook D-87).
+    from voicerx.contracts.issues import Issue
+    from voicerx.contracts.report import ReportLine
+    from voicerx.pipeline.assemble import content_hash
+
+    draft = make_draft([resolved_medicine()])
+    draft.sections["history_present_illness"].append(ReportLine(text="Dry cough", cites=["x1"]))
+    draft.issues += [Issue(code="negation_mismatch", severity="block", target="x2", message="negation mismatch"),
+                     Issue(code="negation_mismatch", severity="block", target="history_present_illness:0",
+                           message="negation mismatch"),
+                     Issue(code="section_mismatch", severity="warn", target="history_present_illness:1",
+                           message="section mismatch")]
+    draft.content_hash = content_hash(draft)
+    return draft
+
+
+def test_editing_a_flagged_line_clears_its_flags_and_keeps_its_citations():
+    draft = flagged_draft()
+    fixed = resolve(draft, [fix("edit_line", "history_present_illness:0", {"text": "No fever since yesterday"})], REF)
+    assert fixed.sections["history_present_illness"][0].text == "No fever since yesterday"
+    assert fixed.sections["history_present_illness"][0].cites == ["x2"]
+    assert not any(i.severity == "block" for i in fixed.issues)
+    assert approve(fixed, "Dr Test", AT).version == 2
+
+
+def test_removing_a_line_renumbers_later_flags_and_lists_an_emptied_section():
+    draft = flagged_draft()
+    fixed = resolve(draft, [fix("remove_line", "history_present_illness:0", {}),
+                            fix("remove_line", "chief_complaints:0", {}).model_copy(update={"id": "r2"})], REF)
+    assert [line.text for line in fixed.sections["history_present_illness"]] == ["Dry cough"]
+    assert {(i.code, i.target) for i in fixed.issues} == {("section_mismatch", "history_present_illness:0")}
+    assert "Complaints" in fixed.not_discussed
+
+
+def test_finding_flag_stays_while_another_unedited_line_still_uses_it():
+    from voicerx.contracts.report import ReportLine
+    from voicerx.pipeline.assemble import content_hash
+
+    draft = flagged_draft()
+    draft.sections["advice"].append(ReportLine(text="Fever absent", cites=["x2"]))
+    draft.content_hash = content_hash(draft)
+    fixed = resolve(draft, [fix("edit_line", "history_present_illness:0", {"text": "No fever"})], REF)
+    assert ("negation_mismatch", "x2") in {(i.code, i.target) for i in fixed.issues}
+
+
+def test_line_correction_needs_a_real_line_and_text():
+    draft = flagged_draft()
+    for correction in (fix("edit_line", "diagnoses:5", {"text": "x"}), fix("edit_line", "nonsense", {"text": "x"}),
+                       fix("edit_line", "history_present_illness:0", {"text": "  "})):
+        with pytest.raises(ResolutionRefused):
+            resolve(draft, [correction], REF)

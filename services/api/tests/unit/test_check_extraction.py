@@ -139,6 +139,18 @@ def test_phrase_ending_in_the_sentence_mark_still_binds():
     assert checked.medications[0].schedule is not None
 
 
+def test_hedged_finding_recorded_as_definite_blocks():
+    # typed-groq-2 fam-008-a: "Acid reflux लग रहा है" (seems like acid reflux) came back stated (runbook C-43).
+    transcript = "Acid reflux लग रहा है। Impression acute tonsillitis."
+    hedged = item(id="x1", kind="symptom", term="acid reflux", quote="Acid reflux लग रहा है।", assertion="present")
+    assert "certainty_mismatch" in codes(run([hedged], transcript=transcript))
+    assert "certainty_mismatch" not in codes(run([item(**{**hedged.model_dump(), "kind": "diagnosis",
+                                                          "certainty": "provisional"})], transcript=transcript))
+    stated = item(id="x2", kind="diagnosis", term="acute tonsillitis", quote="Impression acute tonsillitis.",
+                  assertion="present")
+    assert "certainty_mismatch" not in codes(run([stated], transcript=transcript))
+
+
 def test_dose_from_another_sentence_is_not_borrowed():
     transcript = "Dolo six fifty after food for three days. Pan forty, one tablet in the morning."
     checked = run(meds=[med(timing_phrase=None)], transcript=transcript)

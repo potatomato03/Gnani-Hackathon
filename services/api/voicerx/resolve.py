@@ -6,9 +6,9 @@ from pathlib import Path
 from uuid import uuid4
 from pydantic import TypeAdapter, ValidationError
 from .contracts.medication import Dose, Duration, Food, Schedule
-from .contracts.report import DraftReport, Resolution
+from .contracts.report import MODEL_SECTIONS, DraftReport, ReportLine, Resolution
 from .pipeline.check_extraction import medicine_issues, MEDICINE_CODES
-from .pipeline.assemble import content_hash, medicine_row, table_medicines, current_medicine_lines
+from .pipeline.assemble import DISPLAY_NAMES, content_hash, medicine_row, table_medicines, current_medicine_lines
 from .reference import load_reference
 
 
@@ -26,6 +26,7 @@ def resolve(draft, resolutions, reference):
     frozen_reference = reference.model_copy(deep=True, update={'products': products})
     original_ids = {m.id for m in result.checked.medications}
     acknowledgements = set()
+    touched = {}  # (section, index) -> 'edit_line' or 'remove_line', indexed as in the incoming draft
     seen = {r.id for r in result.resolutions}
     try:
         for correction in resolutions:
@@ -40,6 +41,18 @@ def resolve(draft, resolutions, reference):
                 if not found or any(i.severity == 'block' for i in found):
                     raise ResolutionRefused('only an existing warning can be acknowledged')
                 acknowledgements.add(key)
+                continue
+            if correction.action in ('edit_line', 'remove_line'):
+                section, _, index = correction.target.partition(':')
+                lines = result.sections.get(section)
+                if lines is None or not index.isdigit() or int(index) >= len(lines):
+                    raise ResolutionRefused('unknown report line')
+                if correction.action == 'edit_line':
+                    text = correction.value['text'].strip()
+                    if not text:
+                        raise ResolutionRefused('an edited line needs text')
+                    lines[int(index)] = ReportLine(text=text, cites=lines[int(index)].cites)
+                touched[(section, int(index))] = correction.action
                 continue
             rx = next((m for m in result.checked.medications if m.id == correction.target), None)
             if rx is None:
@@ -79,8 +92,11 @@ def resolve(draft, resolutions, reference):
         return [i for i in issues if not (i.code in MEDICINE_CODES and i.target in original_ids)
                 and (i.target, i.code) not in acknowledgements]
     new_issues = [i for i in new_issues if (i.target, i.code) not in acknowledgements]
-    result.issues = carry(result.issues) + new_issues
-    result.checked.issues = carry(result.checked.issues) + new_issues
+    result.issues = _apply_line_changes(result, carry(result.issues), touched) + new_issues
+    result.checked.issues = _apply_line_changes(result, carry(result.checked.issues), touched) + new_issues
+    for section, index in sorted((k for k, v in touched.items() if v == 'remove_line'), reverse=True):
+        del result.sections[section][index]
+    result.not_discussed = [DISPLAY_NAMES[s] for s in MODEL_SECTIONS if not result.sections.get(s)]
     result.medicines = [medicine_row(m, frozen_reference, result.header.visit_date) for m in table_medicines(result.checked)]
     result.current_medicines = current_medicine_lines(result.checked, frozen_reference)
     result.version += 1
@@ -90,12 +106,35 @@ def resolve(draft, resolutions, reference):
     return result
 
 
+def _apply_line_changes(draft, issues, touched):
+    """Drop flags on lines the doctor edited or removed, and on findings no untouched line still uses.
+    Renumber the flags of lines that move up after a removal. Reads the draft's sections before removal."""
+    if not touched:
+        return issues
+    still_used = {c for s, lines in draft.sections.items() for i, line in enumerate(lines)
+                  if (s, i) not in touched for c in line.cites}
+    released = {c for (s, i) in touched for c in draft.sections[s][i].cites} - still_used
+    kept = []
+    for issue in issues:
+        section, _, index = issue.target.partition(':')
+        if index.isdigit():
+            if (section, int(index)) in touched:
+                continue
+            shift = sum(1 for (s, i), action in touched.items()
+                        if s == section and i < int(index) and action == 'remove_line')
+            issue = issue.model_copy(update={'target': f'{section}:{int(index) - shift}'})
+        elif issue.target in released:
+            continue
+        kept.append(issue)
+    return kept
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('--by', required=True)
     parser.add_argument('--reason', required=True)
-    for action in ('choose', 'dose', 'timing', 'food', 'duration', 'remove', 'confirm', 'ack'):
+    for action in ('choose', 'dose', 'timing', 'food', 'duration', 'remove', 'confirm', 'ack', 'edit', 'drop'):
         parser.add_argument('--' + action, action='append', default=[])
     args = parser.parse_args()
     directory = args.directory.resolve()
@@ -103,13 +142,17 @@ def main():
     draft = DraftReport.model_validate_json((directory / 'draft_report.json').read_text(encoding='utf-8'))
     corrections = []
     names = {'choose': 'choose_product', 'dose': 'set_dose', 'timing': 'set_timing', 'food': 'set_food',
-             'duration': 'set_duration', 'remove': 'remove_medicine', 'confirm': 'confirm_order', 'ack': 'acknowledge'}
+             'duration': 'set_duration', 'remove': 'remove_medicine', 'confirm': 'confirm_order', 'ack': 'acknowledge',
+             'edit': 'edit_line', 'drop': 'remove_line'}
     for flag, action in names.items():
         for entry in getattr(args, flag):
             if flag == 'ack':
                 code, target = entry.split('@', 1)
                 value = {'code': code}
-            elif flag in ('remove', 'confirm'):
+            elif flag == 'edit':
+                target, text = entry.split('=', 1)
+                value = {'text': text}
+            elif flag in ('remove', 'confirm', 'drop'):
                 target, value = entry, {}
             else:
                 target, text = entry.split('=', 1)
