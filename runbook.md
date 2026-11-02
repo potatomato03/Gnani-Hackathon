@@ -26,23 +26,23 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 |---|---|---|
 | Registration | Not confirmed | Both members register and confirm eligibility |
 | Gnani API key | Not configured | Create it on the primary registrant's account |
-| Repo | Work is on `aditya/data-setup`. `main` holds only the first commit. | Team merges when ready |
+| Repo | Implementation is on `aditya/extraction-report`; no push, merge or PR. `main` is unchanged. | Review the branch, then team merges when ready |
 | Downloaded data | Done, 7 datasets in `../DATA`, about 5 GB. Only on one machine. | Share the folder with the teammate |
 | Case families | 12 built, all `auto_checked` | Teammate review |
 | Clinical review | Not started, no doctor booked | Book a doctor, ideally before 8 Nov |
 | Language review | Not started | Find Telugu and Tamil readers |
 | Formulary | 25 of about 100 rows, all `verified: false` | Hand-check each row, then extend |
 | Audio | 22 of 25 clips rendered, all transcribed by Whisper. 3 wait on Gemini's daily limit. | Render the last 3, then listen to all of them |
-| Extraction and report | Spec and plan final: 19 tasks, Gemini first with a local fallback (D-70). Aditya approved building it. Not built. | ASTRA builds it Native, following the plan's "Handoff to ASTRA". Claude then reviews the branch (D-71). |
+| Extraction and report | Tasks 0–15, including 10b and 14b, implemented. Task 16 live evaluations running. | Finish scoring and PDF/approval checks; Claude reviews the branch (D-71). |
 | Mistral | Dropped. The key is rejected as invalid, and the plan couldn't be activated. | None |
 | Local model | `qwen3:8b` and `qwen2.5:7b` in Ollama, stored in `models/ollama` in the root folder. First probe passed. | Compared with Gemini in Task 16 |
 | Gemini text models | Overloaded on 2 Nov (HTTP 503) | Retry later. The planned client retries and falls back automatically. |
 | Gemini key | Accepted by Google, stored in the ignored `.env` | None |
 | Local transcription | Working on the GPU. `.venv` and `models` are in the root folder, on one machine only. | Teammate repeats the setup under [How to run](#how-to-run) |
 | Gold notes | None, by design. They need real audio first. | Follows audio |
-| Application code | None | Start `contracts/` and extraction |
+| Application code | Extraction/report backend, corrections, approval, PDF and FHIR implemented | Web, speech integration and patient agent remain outside this build |
 | LLM | `gemini-3.8-flash` first, `qwen3:8b` on the local GPU as fallback | Task 16 compares them on the typed scripts |
-| Evals | None | Needs the pipeline |
+| Evals | Cached clean run and ten sabotages pass; live typed run underway | Finish typed, Whisper and local comparison, record totals |
 
 ## Decisions
 
@@ -153,8 +153,16 @@ Full design: [the spec](docs/superpowers/specs/2026-11-02-extraction-and-report-
 | D-69 | Treat the second Gemini key as a fallback, not as extra quota. | Both keys may belong to one Google project and share its limit. See Q-16. | ASTRA, checked by the assistant | Assistant call |
 | D-70 | Use `gemini-3.8-flash` first and `qwen3:8b` through Ollama on the local GPU as fallback, behind one model client. Drop Mistral. Run the local model with an 8,192-token context, and never accept a reply that is cut off or overflows it. | Mistral's key was rejected (C-29). Gemini is free and the strongest option on these languages. The local model costs nothing, has no quota, works offline, and keeps transcripts on the clinic's machine, which answers Gemini's ban on clinical use (Q-15). It fits the 8 GB GPU; 12B models don't. | Aditya, on recommendation | Confirmed |
 | D-71 | ASTRA builds the plan Native, one agent doing every task in order. Claude reviews the whole branch afterwards against the plan and spec. | Claude's usage limit was about to run out. One builder suits a plan whose tasks lean on each other's interfaces, and the review still comes from someone who didn't write the code. | Aditya | Confirmed |
-
 | D-72 | PatientBox also carries official_note, defaulting to an empty string for callers that omit it. | The PDF must display the template's English-record-is-official notice separately from the unreviewed-translation note. | Builder | Assistant call |
+| D-73 | Word-cue boundaries in the negation check include Unicode combining marks. | The cached clean fixture showed a false negation on Hindi text with combining marks. All ten sabotages still block. | ASTRA | Assistant call |
+| D-74 | Whitespace normalisation keeps a same-length copy that preserves line breaks, so medicine mentions still end at a newline. | Normalising had erased the line boundary, which let a dose be borrowed from the next line. A regression test blocks it. | ASTRA | Assistant call |
+| D-75 | Approval always validates the current draft first, and reuses an earlier approval's timestamp only for identical content and approver. | The CLI could reuse an old approval before checking a draft altered since. | ASTRA | Assistant call |
+| D-76 | The PDF footer uses CSS page-margin boxes with escaped content, and spacing is tighter. | Live inspection found the footer overlapping content and a one-line second page. `fam-001-a` now fits one readable page. | ASTRA | Assistant call |
+| D-77 | An exact medicine match needs the quoted name to resolve to the same product. Conflicting identities block, and ambiguous quotes stay ambiguous. | A model-supplied medicine name could disagree with its quote, or add a strength nobody said. | ASTRA | Assistant call |
+| D-78 | Check 2 blocks a report line that states a side its citations don't support, and an unknown finding rewritten as positive. | The original word checks let both through. | ASTRA | Assistant call |
+| D-79 | `run_cases` and the CLI take `--workers 1..4` (default 1) to run independent families in parallel. Visit order is kept, Ollama calls stay one at a time, and cache writes use unique temporary files. | Gemini retries took about 23 minutes for the first two cases. This changes scheduling only. | ASTRA | Assistant call |
+| D-80 | A request that times out is retried on the same key like a 503. Only a refused or failed connection counts as an unreachable server. | One slow Gemini reply was disabling that key for the rest of the run (C-33). | Assistant | Assistant call |
+| D-81 | Run the local-model comparison (`typed-local-1`) before the Gemini run, and retry Gemini once its latency recovers. Change prompts only after both runs, so each run is scored on one prompt version. | Gemini was taking 265 to 300 seconds for a one-word reply, which puts a 25-case run at over 4 hours and would switch it to the local model partway through. | Assistant | Assistant call |
 
 ## Judgement calls
 
@@ -180,6 +188,7 @@ Places where a request or a source could be read more than one way.
 | J-16 | How bare brand names resolve | Followed the formulary's aliases. "Telma" means Telma 40 and "Amlong" means the 5 mg product, while "Pan" stays ambiguous because both Pan products carry that alias. | No special cases in code. The aliases are unverified, and get checked with the formulary rows. |
 | J-17 | "Install the Ollama model, use this root folder only", while `qwen2.5:7b` already sat in the default folder on C: | Moved Ollama's model folder to `D:\Study\JANANI\models\ollama` and copied `qwen2.5:7b` there too, so it still works. Left the old copies on C: rather than deleting them. | The setting changes where Ollama looks for every model, so the old one had to come along. Deleting the C: copies (about 9 GB) is Aditya's call. |
 | J-18 | Is `qwen3:8b` good enough to be the fallback? | Accepted it, after a probe on two typed scripts with a forced JSON schema. All 26 quoted phrases came back exactly, and `fam-008-a`'s two medicines had the right dose, timing and duration. It marked "वज़न कम नहीं हुआ" (no weight loss) as present, and filed the medicines as diagnoses as well. | The probe used a short prompt, not the plan's. The negation slip is the kind of error Check 1 blocks, so a weaker model costs more flags, not wrong reports. Task 16 measures it properly. |
+| J-19 | `fam-001-a`'s typed run raised an unexpected `laterality_mismatch`. | Counted it as a model error that Check 1 rightly blocked, not as a defect in the checks. The script says "tonsils normal". The model added "bilateral" and wrote "Bilateral tonsils normal", reading a side into the plural. | The flag is correct. The fix belongs in the stage 1 prompt (set laterality only when a side is spoken), and waits until both runs are scored (D-81). |
 
 ## Corrections
 
@@ -218,8 +227,9 @@ Mistakes and wrong statements, and how each was fixed.
 | C-29 | Aditya couldn't activate Mistral's free plan. A test of the saved key returned HTTP 401 "Invalid API Key" for both the model list and a chat request. | Dropped Mistral. See D-70. Q-18 is closed. |
 | C-30 | The first local probe used a 16,384-token context. Ollama put 20% of the model on the CPU, and it ran at 10 tokens a second, 187 seconds for one stage. | At 8,192 tokens it runs fully on the GPU at 16.5 tokens a second, about 50 seconds a stage. The longest typed script is about 300 tokens, so 8,192 leaves room. |
 | C-31 | Setting `OLLAMA_MODELS` didn't move Ollama's models. The Windows app keeps its own model location in its settings database and passes that to the server, so the first download still went to C:. | Stopped the app, backed up its settings, set the location to the root folder, copied the models there, and restarted it. The server log confirms the new folder. The `OLLAMA_MODELS` user variable is still set, to the same folder. |
-
 | C-32 | Pytest could not create its temporary directory inside the Windows tool sandbox. | Added pytest.ini with a repository-local ignored runs/pytest-tmp directory. Tests remain unchanged. |
+| C-33 | The transport returned status 0, "unreachable", for a timeout too, and the client then marked that key exhausted for the whole run. On 2 Nov a one-word Gemini request timed out at 300 seconds on the first key and took 265 seconds on the second, which is how `fam-001-b` ended up on key 2. | Test-first: a timeout now returns 504 and is retried on the same key. A refused connection is still unreachable. See D-80. |
+| C-34 | ASTRA's `typed-1` run kept going after ASTRA stopped, with no log, waiting on Gemini. It had finished 2 cases in about 30 minutes. | Left it running, because stopping another agent's process wasn't permitted, and started the local run separately with a log file. `typed-1` gets rerun once Gemini recovers, from the cache. |
 
 ## What was done
 
@@ -247,6 +257,7 @@ All on 2 Nov 2026.
 | Checked ASTRA's plan review | All six main points held, and so did both smaller corrections. Only its advice to keep two Gemini stages was out of date. Revised the spec and plan, adding Task 10b (doctor corrections) and Task 14b (cached end-to-end and sabotage tests), 19 tasks in all. |
 | Dropped Mistral, added a local model | Mistral's key was rejected. Pulled `qwen3:8b` into Ollama, moved its models to the root folder, and probed it on two typed scripts. Rewrote Task 4 for a Gemini and Ollama client, and added a local comparison run to Task 16. See D-70. |
 | Handed the build to ASTRA | Added "Handoff to ASTRA" to the plan: what to read, the setup, the working rules, and the note to leave when finished. Moved the key-leak check into `tools/key_leak_check.py` so it can run without Claude. See D-71. |
+| Implemented extraction/report tasks 0–15 | Contracts, references, number/schedule parsing, medicine matching, both model stages and checks, frozen drafts, audited corrections, approval, patient-language templates, PDFs, FHIR, runner, sabotage fixtures and scorer. 332 tests pass; Task 16 is in progress. See build log below for per-task checkpoints and D-72 onwards for deviations. |
 
 Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved voices, and the conflict between its Synthea advice and its own rule on histories.
 
@@ -262,6 +273,9 @@ Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved 
 | Checker and tests | `tools/corpus/` | 97 tests |
 | Download record | `data/DOWNLOADS.md` | Versions, licences, checksums |
 | Data rules and method | `data/README.md` | |
+| Extraction and report backend | `services/api/voicerx/` | CLI workflow; no review screen yet |
+| Report evaluation | `tools/eval/score_report.py` | Typed and approximate Whisper metrics; explicit incomplete/missing coverage |
+| Local run artifacts and response cache | `runs/` | Ignored by git; synthetic inputs only |
 
 Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaedic families, 1 family each for Hindi, Tamil and Telugu, and the shortest scripts are under the 15-second target by estimate.
 
@@ -288,6 +302,8 @@ Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaed
 | Mistral key | Rejected, HTTP 401 "Invalid API Key" |
 | `qwen3:8b` on `fam-001-a` and `fam-008-a`, forced JSON schema | 26 of 26 quoted phrases exact. Missed one negation. Fully on the GPU at 8,192 tokens of context, 16.5 tokens a second. |
 | Ollama model folder | The server log shows `D:\Study\JANANI\models\ollama`, and `ollama list` shows both models |
+| Extraction/report and corpus full suite | 332 pass, including all ten planned end-to-end sabotages and additional evidence/approval regressions |
+| Live `fam-001-a` PDF layout | One A4 page; Hindi shaped, four medicine slot columns, draft watermark, review block and page-margin footer visually checked |
 
 What the checker can't do: it confirms that quotes exist and that scripts and specs agree. It can't tell whether a quote truly means the fact, or whether a case is clinically right. Those need people.
 
@@ -439,7 +455,7 @@ The app ignores the `OLLAMA_MODELS` variable (C-31). Check with `ollama list`, a
 - Build task 4: completed; task tests and full suite passed.
 
 - Build task 5: completed; task tests and full suite passed.
-`n- Task 4 live verification: Gemini gemini-3.8-flash and Ollama qwen3:8b each returned a valid tiny-schema object on one attempt. No adapter changes were needed.
+- Task 4 live verification: Gemini gemini-3.8-flash and Ollama qwen3:8b each returned a valid tiny-schema object on one attempt. No adapter changes were needed.
 
 - Build task 6: completed; task tests and full suite passed.
 

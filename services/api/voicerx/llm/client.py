@@ -61,7 +61,13 @@ def transport(url, headers, body):
             return response.status, dict(response.headers), response.read().decode('utf-8')
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers), error.read().decode('utf-8', 'replace')
-    except (urllib.error.URLError, TimeoutError, OSError):
+    except TimeoutError:
+        return 504, {}, 'timed out'  # A slow server is retried, not written off for the run.
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, TimeoutError):
+            return 504, {}, 'timed out'
+        return 0, {}, 'server unavailable'
+    except OSError:
         return 0, {}, 'server unavailable'
 
 

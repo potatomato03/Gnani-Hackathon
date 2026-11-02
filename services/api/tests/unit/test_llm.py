@@ -103,6 +103,32 @@ def test_unreachable_server_is_exhausted_immediately(tmp_path):
     assert len(transport.calls) == 1
 
 
+def test_timeout_is_a_retryable_error_but_a_refused_connection_is_unreachable(monkeypatch):
+    import socket
+    import urllib.error
+    import urllib.request
+
+    from voicerx.llm.client import transport
+
+    def raise_(error):
+        def urlopen(*args, **kwargs):
+            raise error
+        return urlopen
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_(TimeoutError("timed out")))
+    assert transport("http://x", {}, {})[0] == 504
+    monkeypatch.setattr(urllib.request, "urlopen", raise_(urllib.error.URLError(socket.timeout("timed out"))))
+    assert transport("http://x", {}, {})[0] == 504
+    monkeypatch.setattr(urllib.request, "urlopen", raise_(urllib.error.URLError(ConnectionRefusedError())))
+    assert transport("http://x", {}, {})[0] == 0
+
+
+def test_slow_reply_is_retried_on_the_same_key(tmp_path):
+    client, transport = gemini(tmp_path, [(504, {}, "timed out"), gemini_reply({"items": []})], keys=("g1", "g2"))
+    _, meta = client.generate("s", "u", Outer, "v1")
+    assert meta.key_index == 0 and meta.attempts == 2
+
+
 def test_model_not_pulled_is_exhausted_immediately(tmp_path):
     client, transport = ollama(tmp_path, [(404, {}, '{"error":"model \'qwen3:8b\' not found"}')])
     with pytest.raises(QuotaExhausted):
