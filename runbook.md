@@ -421,3 +421,7 @@ The app ignores the `OLLAMA_MODELS` variable (C-31). Check with `ollama list`, a
 - [Whisper large-v3 for faster-whisper](https://huggingface.co/Systran/faster-whisper-large-v3)
 - [NVIDIA cuBLAS package](https://pypi.org/project/nvidia-cublas-cu12/)
 - [Synthetic Medical Dictation](https://huggingface.co/datasets/modulate/synthetic-medical-dictation)
+
+- Build task 0: completed; task tests and full suite passed.
+
+- Build task 1: completed; task tests and full suite passed.

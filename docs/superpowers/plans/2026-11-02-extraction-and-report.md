@@ -81,24 +81,24 @@ Claude then reviews the branch against this plan and the spec.
 **Files:**
 - Modify: `.gitignore` (add `runs/`)
 
-- [ ] **Step 1: Check that no key is in any file to be committed**
+- [x] **Step 1: Check that no key is in any file to be committed**
 
 Run: `../.venv/Scripts/python -I tools/key_leak_check.py . ../Gemini_API.env.txt`, and again for `../Gemini_API(2).env.txt` and `../mistral_API.env.txt`. The script reads the key without printing it.
 Expected: `files containing the key: 0` and `key in git history: False`, all three times
 
-- [ ] **Step 2: Run all existing tests**
+- [x] **Step 2: Run all existing tests**
 
 Run: `../.venv/Scripts/python -m pytest tools/corpus/tests -q`
 Expected: `128 passed`
 
-- [ ] **Step 3: Add `runs/` to `.gitignore`, then commit the audio tools, Whisper results, spec, plan, docs and runbook on `aditya/data-setup`**
+- [x] **Step 3: Add `runs/` to `.gitignore`, then commit the audio tools, Whisper results, spec, plan, docs and runbook on `aditya/data-setup`**
 
 ```bash
 git add .gitignore .env.example tools/corpus tools/key_leak_check.py data/eval/audio_index.csv data/eval/results data/README.md data/DOWNLOADS.md docs runbook.md
 git commit -m "Add audio tools, Whisper results and the extraction design"
 ```
 
-- [ ] **Step 4: Create and switch to the working branch**
+- [x] **Step 4: Create and switch to the working branch**
 
 ```bash
 git switch -c aditya/extraction-report
@@ -160,7 +160,7 @@ classes:
   penicillin: [amoxycillin, amoxicillin, ampicillin, cloxacillin, flucloxacillin, piperacillin, penicillin]
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 import pytest
@@ -208,24 +208,24 @@ def test_reference_loads_products_patients_and_allergy_classes():
     assert reference.allergy_classes_reviewed is False
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_contracts.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'voicerx.contracts.medication'`
 
-- [ ] **Step 3: Install the requirements, then implement the contracts and `load_reference`**
+- [x] **Step 3: Install the requirements, then implement the contracts and `load_reference`**
 
 Run: `../.venv/Scripts/python -m pip install -r services/api/requirements.txt`. `load_reference` reads `data/formulary/products.csv` (`components` is JSON and `aliases` is separated by `;`), `data/seed/*.json` and `data/rules/allergy_classes.yaml`.
 
 Also give the case format a taper time of day: add `when: Optional[Grid] = None` to `TaperStep` in `tools/corpus/case_schema.py`, and set `when: {type: grid, m: "1", a: "0", e: "0", "n": "0"}` on both `fam-010` taper steps. Then run `../.venv/Scripts/python tools/corpus/check_cases.py --write` and `../.venv/Scripts/python -m pytest tools/corpus/tests -q`.
 Expected: no case errors, and `128 passed`
 
-- [ ] **Step 4: Run the tests to make sure they pass**
+- [x] **Step 4: Run the tests to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_contracts.py -q`
 Expected: `6 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/api data/rules/allergy_classes.yaml tools/corpus/case_schema.py data/eval

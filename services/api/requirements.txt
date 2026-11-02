@@ -1,0 +1,6 @@
+pydantic>=2,<3
+pyyaml
+jinja2
+rapidfuzz
+pypdf
+pytest

@@ -99,6 +99,7 @@ class AsNeeded(Strict):
 class TaperStep(Strict):
     dose: Dose
     duration: Duration
+    when: Optional[Grid] = None
 
 
 class Taper(Strict):

@@ -40,8 +40,8 @@ encounters:
         schedule:
           type: taper
           steps:
-            - {dose: {amount: "2", unit: tablet}, duration: {value: 3, unit: day}}
-            - {dose: {amount: "1", unit: tablet}, duration: {value: 3, unit: day}}
+            - {dose: {amount: "2", unit: tablet}, duration: {value: 3, unit: day}, when: {type: grid, m: "1", a: "0", e: "0", "n": "0"}}
+            - {dose: {amount: "1", unit: tablet}, duration: {value: 3, unit: day}, when: {type: grid, m: "1", a: "0", e: "0", "n": "0"}}
         food: after_food
       - id: m2
         spoken_name: "Asthalin inhaler"
