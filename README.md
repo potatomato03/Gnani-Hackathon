@@ -8,7 +8,7 @@ Built for the Gnani AI Great Indian AI Internship Challenge. Speech runs on Gnan
 
 ## Status
 
-The extraction and report pipeline is implemented on `aditya/extraction-report`: two checked model stages, deterministic medicine matching and instructions, draft PDFs, audited corrections, approval and FHIR export. The web screens, speech integration and patient voice agent remain future work. See the [runbook](runbook.md) for evaluation results and limitations.
+The extraction and report pipeline is implemented on `aditya/extraction-report`: two checked model stages, deterministic medicine matching and instructions, draft PDFs, audited corrections, approval and FHIR export. The patient follow-up agent runs as a demo: a simulated WhatsApp chat (`apps/web`) on a small API (`services/api/voicerx/app.py`). After approval it sends the visit summary and timed check-ins, records the patient's answers, answers medicine questions only from the approved prescription, sends warning signs to urgent care, and gives the doctor a list of what needs attention. It works offline on synthetic patients, with text and buttons only. Voice notes, model-read replies, the real WhatsApp connection and the doctor dashboard are future work. See the [runbook](runbook.md) for evaluation results and limitations.
 
 ## Layout
 
@@ -48,9 +48,28 @@ Use `--source whisper` for recorded transcripts, `--provider ollama` for local-o
 
 Review `draft_report.json` and `report.pdf`. `python -m voicerx.resolve --help` lists explicit corrections; each correction records its author and reason and creates a new draft version. `python -m voicerx.approve runs/<run>/<case> --by "Reviewer name"` refuses blocking issues or altered content, then writes the approved PDF and FHIR bundles. FHIR exports are not officially validated; patient-language templates and allergy classes await clinical/language review.
 
+## Follow-up chat demo
+
+Needs Python 3.12+ and Node 20+. From the repository root, start the API:
+
+```bash
+PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000
+```
+
+In a second terminal, start the web app and open http://localhost:3000:
+
+```bash
+cd apps/web && npm install && npm run dev
+```
+
+Pick a visit, press **Advance to next check-in** to move the demo clock, and reply with the buttons or by typing. **Reset demo** clears every conversation. Conversations are saved under the ignored `runs/followup-demo/`. Set `NEXT_PUBLIC_API_URL` if the API runs elsewhere. With both running, `node apps/web/scripts/e2e.mjs` checks the main flows in a browser (needs Playwright).
+
+`PYTHONPATH=services/api python tools/eval/followup_questions.py` scores the agent on the case files' patient questions.
+
 ## Docs
 
 - [Runbook](runbook.md): status, decisions and everything done so far
+- [Follow-up agent research](docs/research/followup-agent.md) and [design](docs/superpowers/specs/2026-11-02-followup-agent-design.md)
 - [Decisions](docs/DECISIONS.md)
 - [Evals](docs/EVALS.md)
 - [Contributions](docs/CONTRIBUTIONS.md)

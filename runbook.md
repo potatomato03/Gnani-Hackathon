@@ -44,6 +44,7 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 | LLM | Groq `openai/gpt-oss-120b` is the working model, on two keys (D-85, D-88). Gemini (quota) and local `qwen3:8b` (safe but noisy) are fallbacks. | Compare Gemini once its daily limit resets |
 | Evals | Typed and Whisper runs scored for Groq and the local model; see Verification. Prisma trial scored privately (D-91). | Score all Prisma clips, privately |
 | Medicine knowledge | In Supabase and searchable: 46,540 chunks from openFDA labels, NLEM 2022 and Jan Aushadhi, embedded with bge-base on the GPU, plus 246,068 Indian products for brand lookup (D-94 to D-103, C-55 to C-60). 382 MB of the 500 MB free limit. Not used by the pipeline or any app yet. | Decide what the knowledge does first (Q-23); prefer single-medicine labels and the right route for brand questions |
+| Follow-up agent | Demo built on `claude/vibrant-archimedes-umbogz` (D-104 to D-110): simulated WhatsApp chat in `apps/web` on an API in `services/api/voicerx/app.py`. Text and buttons only, offline, synthetic. 7 of 7 demo-visit patient questions get the expected action (development data). Red flags and wording await doctor and language review. | Team review and merge; Q-25 to Q-28; voice notes once credits are agreed |
 
 ## Decisions
 
@@ -335,6 +336,7 @@ All on 2 Nov 2026.
 | Built the medicine knowledge chunks | Downloaded openFDA's label export (14 files, 262,903 labels), and wrote `tools/knowledge/` test-first: a name map, label selection and chunking, an NLEM 2022 parser and a Jan Aushadhi grouper (25 tests). The build gives 1,322 labels as 31,989 chunks, 381 NLEM medicines and 110 Jan Aushadhi groups. Read samples from each source and fixed what they showed: brand names in titles, NLEM table headers and notes inside categories, and form words inside Jan Aushadhi ingredients. See D-94 to D-99. |
 | Built a code knowledge graph | Ran `graphify update .` on the repo: 725 nodes, 1,742 edges, 35 communities, from code only with no model calls. Output is in the git-ignored `graphify-out/`. Query it with `graphify query "<question>" --budget 600` before reading whole files. |
 | Implemented extraction/report tasks 0–15 | Contracts, references, number/schedule parsing, medicine matching, both model stages and checks, frozen drafts, audited corrections, approval, patient-language templates, PDFs, FHIR, runner, sabotage fixtures and scorer. 332 tests pass; Task 16 is in progress. See build log below for per-task checkpoints and D-72 onwards for deviations. |
+| Researched and built the follow-up agent demo, 2–3 Nov | Research with Serper (51 searches, 39 pages; [summary](docs/research/followup-agent.md)) and a [design](docs/superpowers/specs/2026-11-02-followup-agent-design.md). Merged `aditya/extraction-report` into the session branch (J-23). Built test-first: contracts, plan, red flags, routing, grounded answers, gate, conversation engine, two new offline fixtures (`fam-004-a`, `fam-010-a`), the API and the Next.js chat page. Seed patients gained `followup_whatsapp` consent. 438 tests pass; the browser check passes 18 of 18 on desktop and phone widths. |
 
 Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved voices, and the conflict between its Synthea advice and its own rule on histories.
 
@@ -355,6 +357,11 @@ Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved 
 | Medicine knowledge chunker | `tools/knowledge/` | `download_openfda_labels.py`, then `build_chunks.py`; output in `../DATA/knowledge/chunks/` (D-98) |
 | Prisma transcription | `tools/corpus/transcribe_prisma.py` | Prisma v3.0 REST, optional formulary keyterms; output is git-ignored (D-91) |
 | Local run artifacts and response cache | `runs/` | Ignored by git; synthetic inputs only |
+| Follow-up agent | `services/api/voicerx/agent/`, `services/api/voicerx/contracts/followup.py` | Plan, red flags, routing, grounding, gate; Hindi and English wording in `agent/templates/` |
+| Follow-up demo API | `services/api/voicerx/app.py` | FastAPI; conversations saved in ignored `runs/followup-demo/` |
+| Follow-up chat demo | `apps/web` | Next.js 16; `scripts/e2e.mjs` browser check |
+| Warning-sign rules | `data/rules/red_flags.yaml` | Draft, Hindi (Devanagari and Latin) and English, pending doctor review |
+| Offline demo fixtures | `services/api/tests/fixtures/fam-004-a`, `fam-010-a` | Hand-written stage outputs quoting the typed scripts; both pass Check 1 and 2 |
 
 Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaedic families, 1 family each for Hindi, Tamil and Telugu, and the shortest scripts are under the 15-second target by estimate.
 
@@ -400,6 +407,10 @@ Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaed
 | Supabase database connection, 3 Nov | Session pooler (`aws-1-eu-central-1`, port 5432) with psycopg 3.3.6: connected to PostgreSQL 17.11. The connection string kept the template's square brackets around the password, and the password holds an `@`; the copy in `.env` (`SUPABASE_DB_URL`) drops the brackets and URL-encodes the password, and Aditya's file is unchanged. pgvector 0.8.2 turned on in the `extensions` schema, with `halfvec` available. No tables yet; database 10 MB. Password leak check on the repo and its history: clean. |
 | Supabase connection, 3 Nov | Project `rftuxwsnfinuygewssas`. Auth health with the publishable key: HTTP 200. Schema listing with the publishable key: refused (401, "Secret API key required"), as intended. Schema listing with the secret key: HTTP 200, no tables yet. Whether pgvector is on can't be seen through the API. Leak check on both keys: clean. |
 | Unit tests after the Prisma source was added | Runner and scorer suites pass, including a new test that each speech source reads its own folder |
+| Full suite after the follow-up agent, cloud container, 3 Nov | 438 passed, 2 skipped (`PDF_BROWSER=tools/cloud/headless-chrome.sh`) |
+| Follow-up agent sabotage tests | A changed dose, an uncited answer, a softened urgent reply, a non-urgent reply to a warning sign, an altered report and a check-in outside sending hours are all refused by the gate |
+| Follow-up patient questions (`tools/eval/followup_questions.py`) | 7 of 7 expected actions (answer 3/3, escalate 3/3, urgent 1/1), 0 forbidden claims. Coverage 7 of 29 questions; development data, not held out |
+| Follow-up browser check (`apps/web/scripts/e2e.mjs`) | 18 of 18 on 1280 px and 390 px widths: AI disclosure and approved medicine in the summary, quick replies, worse and urgent tasks, STOP, grounded answer, stop-medicine request escalated, no horizontal scroll |
 
 What the checker can't do: it confirms that quotes exist and that scripts and specs agree. It can't tell whether a quote truly means the fact, or whether a case is clinically right. Those need people.
 
@@ -549,6 +560,18 @@ cd tools/knowledge && ../../../.venv/Scripts/python search_local.py "what is tel
 ```
 
 To set up `.venv-embed`, create a venv in the root folder and install `fastembed-gpu==0.9.1` and `onnxruntime-gpu[cuda,cudnn]==1.31.1`. It needs an NVIDIA driver that supports CUDA 13.
+
+To run the follow-up chat demo, start the API from the repo root (on Windows, `../.venv/Scripts/uvicorn` with `$env:PYTHONPATH = 'services/api'`):
+
+```bash
+PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000
+```
+
+Then the web app, and open http://localhost:3000:
+
+```bash
+cd apps/web && npm install && npm run dev
+```
 
 ## Sources
 

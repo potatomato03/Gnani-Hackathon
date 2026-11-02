@@ -4,3 +4,7 @@ jinja2
 rapidfuzz
 pypdf
 pytest
+# Follow-up demo API (voicerx/app.py)
+fastapi==0.162.0
+uvicorn==0.54.0
+httpx==0.28.1
