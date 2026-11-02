@@ -51,6 +51,21 @@ def test_side_lost_in_writing_blocks():
     assert "laterality_mismatch" in codes(fields(examination=[ReportLine(text="Swelling over the wrist", cites=["x3"])]))
 
 
+def test_side_added_without_evidence_blocks():
+    assert 'laterality_mismatch' in codes(fields(chief_complaints=[
+        ReportLine(text='Left-sided sore throat for 3 days', cites=['x1'])]))
+
+
+def test_unknown_assertion_cannot_become_a_positive_finding():
+    unknown = CHECKED.model_copy(deep=True)
+    unknown.kept[1].assertion = 'unknown'
+    unknown.kept[1].quote = 'Fever status unknown'
+    assert 'negation_mismatch' in codes(fields(history_present_illness=[
+        ReportLine(text='Fever', cites=['x2'])]), unknown)
+    assert 'negation_mismatch' not in codes(fields(history_present_illness=[
+        ReportLine(text='Fever status unknown', cites=['x2'])]), unknown)
+
+
 def test_dose_written_into_a_section_blocks():
     assert "dose_in_text" in codes(fields(advice=[ReportLine(text="Take 2 tablets", cites=["x1"])]))
 

@@ -1,7 +1,7 @@
 """Conservative report checks. These lexical checks are not semantic proof."""
 from collections import Counter
 import re
-from .check_extraction import NEGATION_WORDS, has_word, issue, normalise
+from .check_extraction import NEGATION_WORDS, SIDE_WORDS, has_word, issue, normalise
 from .numbers import words_to_digits
 
 SECTION_KINDS = {'chief_complaints': {'symptom'}, 'history_present_illness': {'symptom', 'history', 'family_history', 'allergy'},
@@ -46,6 +46,8 @@ def check_report(fields, checked, reference):
             negative = has_word(text, NEGATION)
             if assertions == {'absent'} and not negative:
                 flag('negation_mismatch')
+            if 'unknown' in assertions and not has_word(text, {'unknown', 'uncertain', 'unclear', 'not recorded', 'not stated', 'not known'}):
+                flag('negation_mismatch')
             if assertions == {'present'} and negative and not any(has_word(x.quote, NEGATION_WORDS) for x in cited):
                 flag('negation_mismatch')
             if {'present', 'absent'} <= assertions:
@@ -59,7 +61,10 @@ def check_report(fields, checked, reference):
                 flag('certainty_mismatch')
             if any(x.temporality == 'past' for x in cited) and not has_word(text, PAST):
                 flag('temporality_mismatch', 'warn')
-            if any(x.laterality and not has_word(text, {'both', 'bilateral'} if x.laterality == 'bilateral' else {x.laterality}) for x in cited):
+            written_sides = {side for side, words in SIDE_WORDS.items() if has_word(text, words)}
+            supported_sides = {x.laterality for x in cited if x.laterality} | {
+                side for side, words in SIDE_WORDS.items() if any(has_word(x.quote, words) for x in cited)}
+            if written_sides - supported_sides or any(x.laterality and not has_word(text, {'both', 'bilateral'} if x.laterality == 'bilateral' else {x.laterality}) for x in cited):
                 flag('laterality_mismatch')
             if any(x.kind not in SECTION_KINDS[section] for x in cited):
                 flag('section_mismatch', 'warn')
