@@ -1729,7 +1729,7 @@ git commit -m "Render the report to HTML and PDF"
   - `doseAndRate` appears only when the dose is known.
   - `medicationCodeableConcept.text` is the row's frozen label.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 import json
@@ -1784,12 +1784,12 @@ def test_medicine_text_is_the_frozen_label(approved_report):
     assert request["medicationCodeableConcept"]["text"] == approved_report.medicines[0].label
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
+- [x] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_fhir.py -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add services/api/voicerx/exports/fhir.py services/api/tests
