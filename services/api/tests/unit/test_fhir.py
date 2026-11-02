@@ -48,3 +48,18 @@ def test_as_needed_medicine_has_no_invented_timing(approved_report):
 def test_medicine_text_is_the_frozen_label(approved_report):
     request = resources(build_bundles(approved_report)["prescription"], "MedicationRequest")[0]
     assert request["medicationCodeableConcept"]["text"] == approved_report.medicines[0].label
+
+
+def test_prescription_bundle_carries_only_what_a_prescription_needs(approved_report):
+    # fam-008-a's prescription bundle also held the consultation's Observation (runbook C-49).
+    from voicerx.contracts.extraction import ExtractedItem
+    from voicerx.pipeline.assemble import content_hash
+    report = approved_report.model_copy(deep=True)
+    report.checked.kept.append(ExtractedItem(id="x9", kind="exam", term="throat congested", quote="throat congested",
+        assertion="present", certainty="stated", temporality="current", laterality=None, subject="patient",
+        said_by="doctor"))
+    report.content_hash = content_hash(report)
+    assert resources(build_bundles(report)["op_consult"], "Observation")
+    kinds = {e["resource"]["resourceType"] for e in build_bundles(report)["prescription"]["entry"]}
+    assert kinds <= {"Composition", "Patient", "Practitioner", "Organization", "Encounter", "MedicationRequest"}
+    assert "MedicationRequest" in kinds

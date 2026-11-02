@@ -44,6 +44,20 @@ def test_failed_rerun_removes_the_old_report(tmp_path):
     assert not (tmp_path / "draft_report.json").exists() and not (tmp_path / "report.pdf").exists()
 
 
+def test_rerun_keeps_signed_and_versioned_files_aside(tmp_path):
+    # A cache rebuild deleted fam-008-a's approval, its PDF, FHIR bundles and draft v1 (runbook C-45).
+    kept = {"approved_report.json": "{}", "report_approved.pdf": "%PDF", "fhir_op_consult.json": "{}",
+            "fhir_prescription.json": "{}", "fhir_status.json": "{}", "draft_report.v1.json": "{}"}
+    for name, content in kept.items():
+        (tmp_path / name).write_text(content, encoding="utf-8")
+    (tmp_path / "draft_report.json").write_text("{}", encoding="utf-8")
+    case = load_case_inputs(REPO_ROOT, "typed")[0]
+    run_case(case, QuotaAtStageTwo(), load_reference(REPO_ROOT), tmp_path, frozenset())
+    aside = [d for d in tmp_path.iterdir() if d.is_dir() and d.name.startswith("superseded-")]
+    assert len(aside) == 1 and {p.name for p in aside[0].iterdir()} == set(kept)
+    assert not any((tmp_path / name).exists() for name in kept)
+
+
 def test_missing_transcript_is_reported_not_skipped(tmp_path):
     case = replace(load_case_inputs(REPO_ROOT, "typed")[0], transcript=None)
     result = run_case(case, QuotaAtStageTwo(), load_reference(REPO_ROOT), tmp_path, frozenset())

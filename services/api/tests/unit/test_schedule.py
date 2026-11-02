@@ -96,3 +96,17 @@ def test_start_tomorrow_resolves_from_the_visit_date():
 
 def test_unstated_start_stays_unstated():
     assert parse_start(None, date(2026, 10, 5)) == Start(condition="unstated")
+
+
+@pytest.mark.parametrize("phrase, want", [
+    # A cap or a negated food word is part of the instruction, not a self-correction (runbook C-48).
+    ("when needed, not more than four times a day", AsNeeded(type="as_needed", max_per_day=4)),
+    ("ज़रूरत पड़ने पर, दिन में चार बार से ज़्यादा नहीं, खाने के बाद", AsNeeded(type="as_needed", max_per_day=4)),
+])
+def test_a_cap_is_never_cut_off_as_a_correction(phrase, want):
+    assert parse_timing(phrase) == want
+
+
+def test_real_corrections_still_keep_only_the_new_value():
+    assert parse_duration("five days, sorry, three days, not five") == Duration(value=3, unit="day")
+    assert parse_duration("पाँच दिन, नहीं, तीन दिन") == Duration(value=3, unit="day")

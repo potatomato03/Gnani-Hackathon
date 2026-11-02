@@ -1,3 +1,4 @@
+from datetime import timedelta, timezone
 import os
 from pathlib import Path
 import subprocess
@@ -5,9 +6,14 @@ import tempfile
 from jinja2 import Environment, FileSystemLoader
 from ...pipeline.assemble import DISPLAY_NAMES
 
+IST = timezone(timedelta(hours=5, minutes=30), 'IST')
+
 
 def render_html(report, box):
     env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
+    # The clinic is in India: print approval times in IST whatever zone they were stored in (naive means UTC).
+    env.filters['ist'] = lambda moment: (moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)).astimezone(
+        IST).strftime('%d-%b-%Y %H:%M IST')
     # Hex escapes keep arbitrary approver names safe inside a CSS string.
     from markupsafe import Markup
     env.filters['css_string'] = lambda value: Markup('"' + ''.join('\\' + format(ord(c), 'x') + ' ' for c in str(value)) + '"')

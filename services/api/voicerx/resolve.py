@@ -27,6 +27,8 @@ def resolve(draft, resolutions, reference):
     original_ids = {m.id for m in result.checked.medications}
     acknowledgements = set()
     touched = {}  # (section, index) -> 'edit_line' or 'remove_line', indexed as in the incoming draft
+    added, dismissed = [], set()  # doctor-written lines are appended after removals; dismissed finding ids
+    kept_ids = {item.id for item in result.checked.kept}
     seen = {r.id for r in result.resolutions}
     try:
         for correction in resolutions:
@@ -53,6 +55,17 @@ def resolve(draft, resolutions, reference):
                         raise ResolutionRefused('an edited line needs text')
                     lines[int(index)] = ReportLine(text=text, cites=lines[int(index)].cites)
                 touched[(section, int(index))] = correction.action
+                continue
+            if correction.action == 'add_line':
+                text, cites = correction.value['text'].strip(), list(correction.value['cites'])
+                if correction.target not in MODEL_SECTIONS or not text or not set(cites) <= kept_ids:
+                    raise ResolutionRefused('an added line needs a section, text and known findings')
+                added.append((correction.target, ReportLine(text=text, cites=cites)))
+                continue
+            if correction.action == 'dismiss_item':
+                if correction.target not in kept_ids:
+                    raise ResolutionRefused('unknown finding')
+                dismissed.add(correction.target)
                 continue
             rx = next((m for m in result.checked.medications if m.id == correction.target), None)
             if rx is None:
@@ -92,10 +105,17 @@ def resolve(draft, resolutions, reference):
         return [i for i in issues if not (i.code in MEDICINE_CODES and i.target in original_ids)
                 and (i.target, i.code) not in acknowledgements]
     new_issues = [i for i in new_issues if (i.target, i.code) not in acknowledgements]
-    result.issues = _apply_line_changes(result, carry(result.issues), touched) + new_issues
-    result.checked.issues = _apply_line_changes(result, carry(result.checked.issues), touched) + new_issues
+    if dismissed & {c for s, lines in result.sections.items() for i, line in enumerate(lines)
+                     if touched.get((s, i)) != 'remove_line' for c in line.cites}:
+        raise ResolutionRefused('a finding still used by a report line cannot be dismissed')
+    # A finding the doctor restated in a new line, or dismissed, no longer carries the model's flags.
+    restated = dismissed | {c for _, line in added for c in line.cites}
+    result.issues = _apply_line_changes(result, carry(result.issues), touched, restated) + new_issues
+    result.checked.issues = _apply_line_changes(result, carry(result.checked.issues), touched, restated) + new_issues
     for section, index in sorted((k for k, v in touched.items() if v == 'remove_line'), reverse=True):
         del result.sections[section][index]
+    for section, line in added:
+        result.sections[section].append(line)
     result.not_discussed = [DISPLAY_NAMES[s] for s in MODEL_SECTIONS if not result.sections.get(s)]
     result.medicines = [medicine_row(m, frozen_reference, result.header.visit_date) for m in table_medicines(result.checked)]
     result.current_medicines = current_medicine_lines(result.checked, frozen_reference)
@@ -106,14 +126,15 @@ def resolve(draft, resolutions, reference):
     return result
 
 
-def _apply_line_changes(draft, issues, touched):
-    """Drop flags on lines the doctor edited or removed, and on findings no untouched line still uses.
-    Renumber the flags of lines that move up after a removal. Reads the draft's sections before removal."""
-    if not touched:
+def _apply_line_changes(draft, issues, touched, restated=frozenset()):
+    """Drop flags on lines the doctor edited or removed, on findings no untouched line still uses, and on
+    findings the doctor restated or dismissed. Renumber the flags of lines that move up after a removal.
+    Reads the draft's sections before removals and additions."""
+    if not touched and not restated:
         return issues
     still_used = {c for s, lines in draft.sections.items() for i, line in enumerate(lines)
                   if (s, i) not in touched for c in line.cites}
-    released = {c for (s, i) in touched for c in draft.sections[s][i].cites} - still_used
+    released = ({c for (s, i) in touched for c in draft.sections[s][i].cites} - still_used) | set(restated)
     kept = []
     for issue in issues:
         section, _, index = issue.target.partition(':')
@@ -134,7 +155,8 @@ def main():
     parser.add_argument('directory', type=Path)
     parser.add_argument('--by', required=True)
     parser.add_argument('--reason', required=True)
-    for action in ('choose', 'dose', 'timing', 'food', 'duration', 'remove', 'confirm', 'ack', 'edit', 'drop'):
+    for action in ('choose', 'dose', 'timing', 'food', 'duration', 'remove', 'confirm', 'ack', 'edit', 'drop',
+                   'add', 'dismiss'):
         parser.add_argument('--' + action, action='append', default=[])
     args = parser.parse_args()
     directory = args.directory.resolve()
@@ -143,7 +165,7 @@ def main():
     corrections = []
     names = {'choose': 'choose_product', 'dose': 'set_dose', 'timing': 'set_timing', 'food': 'set_food',
              'duration': 'set_duration', 'remove': 'remove_medicine', 'confirm': 'confirm_order', 'ack': 'acknowledge',
-             'edit': 'edit_line', 'drop': 'remove_line'}
+             'edit': 'edit_line', 'drop': 'remove_line', 'add': 'add_line', 'dismiss': 'dismiss_item'}
     for flag, action in names.items():
         for entry in getattr(args, flag):
             if flag == 'ack':
@@ -152,7 +174,12 @@ def main():
             elif flag == 'edit':
                 target, text = entry.split('=', 1)
                 value = {'text': text}
-            elif flag in ('remove', 'confirm', 'drop'):
+            elif flag == 'add':
+                # --add "section=text|x1,x2": the cited finding ids follow the last "|".
+                target, rest = entry.split('=', 1)
+                text, _, cites = rest.rpartition('|') if '|' in rest else (rest, '', '')
+                value = {'text': text, 'cites': [c for c in cites.split(',') if c]}
+            elif flag in ('remove', 'confirm', 'drop', 'dismiss'):
                 target, value = entry, {}
             else:
                 target, text = entry.split('=', 1)
@@ -165,13 +192,14 @@ def main():
             corrections.append(Resolution(id=str(uuid4()), action=action, target=target, value=value,
                 reason=args.reason, by=args.by, at=datetime.now(timezone.utc)))
     updated = resolve(draft, corrections, load_reference(root))
+    # Refuse before writing anything, so a refused correction leaves no stray file behind.
+    archive = directory / f'draft_report.v{draft.version}.json'
+    if archive.exists():
+        raise ResolutionRefused('previous version already archived; refusing overwrite')
     from .exports.pdf.render import render_html, html_to_pdf
     from .exports.patient_box import build_patient_box
     box = build_patient_box(updated, Path(__file__).parent / 'exports/templates/lang')
     pdf = html_to_pdf(render_html(updated, box), directory / 'report.next.pdf')
-    archive = directory / f'draft_report.v{draft.version}.json'
-    if archive.exists():
-        raise ResolutionRefused('previous version already archived; refusing overwrite')
     (directory / 'draft_report.json').rename(archive)
     (directory / 'draft_report.json').write_text(updated.model_dump_json(indent=2), encoding='utf-8')
     pdf.replace(directory / 'report.pdf')

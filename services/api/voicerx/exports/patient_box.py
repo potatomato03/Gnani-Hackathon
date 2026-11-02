@@ -25,7 +25,8 @@ def build_patient_box(report, templates_dir: Path):
     template = yaml.safe_load((templates_dir / (language + '.yaml')).read_text(encoding='utf-8'))
     ask = template['ask_doctor']
     def dose(value):
-        return value.amount + ' ' + template['units'].get(value.unit, ask) if value else ask
+        # A unit the template lacks (ml, mg) prints as itself; only an unknown dose asks the doctor.
+        return value.amount + ' ' + template['units'].get(value.unit, value.unit) if value else ask
     def duration(value):
         return template['duration'][value.unit].format(n=value.value) if value else ask
     def timing(value):
@@ -39,7 +40,7 @@ def build_patient_box(report, templates_dir: Path):
     rows = []
     for rx in table_medicines(report.checked):
         if rx.match != 'exact' or rx.product_id not in report.products_used:
-            rows.append(ask)
+            rows.append(rx.quotes.get('name_quote', rx.spoken_name) + ': ' + ask)
             continue
         name = report.products_used[rx.product_id].brand.upper()
         food = template['food'].get(rx.food, ask)

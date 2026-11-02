@@ -25,10 +25,11 @@ def _text(phrase):
     # Discard explicitly superseded wording, never choose between alternatives.
     if 'sorry' in text:
         text = text.split('sorry', 1)[1]
-    text = re.split(r',?\s+not\s+', text)[0]
-    if 'नहीं,' in text:
-        text = text.split('नहीं,', 1)[1]
-    return text
+    # Only a trailing ", not 5" or a standalone ", नहीं," marks a correction. "not more than 4" and
+    # "से ज़्यादा नहीं, खाने के बाद" are part of the instruction and must survive.
+    text = re.sub(r',?\s+not\s+\d+(?:\.\d+)?\b[^,]*$', '', text)
+    parts = re.split(r'(?:^|,)\s*नहीं\s*,', text)
+    return parts[-1] if len(parts) > 1 else text
 
 
 def _values(text, vocabulary):
@@ -74,7 +75,7 @@ def parse_timing(phrase):
         return Taper(steps=parsed)
     if any(w in text for w in ('as needed', 'when needed', 'ज़रूरत', 'जरूरत', 'sos', 'prn')):
         ns = re.findall(r'\d+', text)
-        maximum = int(ns[0]) if len(ns) == 1 and any(w in text for w in ('max', 'at most', 'no more', 'ज़्यादा नहीं', 'ज्यादा नहीं')) else None
+        maximum = int(ns[0]) if len(ns) == 1 and any(w in text for w in ('max', 'at most', 'no more', 'not more', 'ज़्यादा नहीं', 'ज्यादा नहीं')) else None
         return AsNeeded(max_per_day=maximum)
     if re.fullmatch(r'\s*[01](?:[\s-]+[01]){2,3}\s*', text):
         values = re.findall(r'\d', text)

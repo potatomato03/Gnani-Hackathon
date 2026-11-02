@@ -159,19 +159,26 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         parsed = {'dose': parse_dose(clean['dose_phrase']), 'schedule': parse_timing(clean['timing_phrase']),
                   'food': parse_food(clean['food_phrase']), 'duration': parse_duration(clean['duration_phrase']),
                   'start': parse_start(clean['start_phrase'], visit_date), 'route': clean['route_phrase']}
+        if isinstance(parsed['schedule'], Taper) and parsed['food'] is None and not clean['food_phrase']:
+            # A taper is quoted whole in its timing phrase, so its single food rule is said there too.
+            parsed['food'] = parse_food(clean['timing_phrase'])
         mapping = {'dose_phrase': 'dose', 'timing_phrase': 'schedule', 'food_phrase': 'food', 'duration_phrase': 'duration', 'start_phrase': 'start'}
         unresolved = [field for field, output in mapping.items() if clean[field] and parsed[output] is None]
         parsed['start'] = parsed['start'] or Start()
         match = match_medicine(rx.spoken_name, reference.products, current_ids)
         quoted_match = match_medicine(rx.name_quote, reference.products, current_ids)
-        if match.match == 'exact' and (quoted_match.match != 'exact' or match.product_id != quoted_match.product_id):
+        # A spoken name found verbatim in the transcript is as grounded as the quote, so its exact match stands.
+        spoken_verbatim = bool(normalise(rx.spoken_name)) and normalise(rx.spoken_name) in text
+        if match.match == 'exact' and not spoken_verbatim and (
+                quoted_match.match != 'exact' or match.product_id != quoted_match.product_id):
             # Normalized spellings may differ, but the catalog identity must be grounded.
             match = quoted_match if quoted_match.match != 'exact' else MatchResult(
                 match='unmatched', product_id=None, candidate_ids=[])
-        elif (match.match == 'unmatched' and quoted_match.match != 'unmatched'
+        elif (match.match == 'unmatched' and quoted_match.match == 'ambiguous'
               and normalise(rx.name_quote) in normalise(rx.spoken_name)):
-            # A spoken name padded with the rest of its sentence defers to its verbatim quote. A spoken name
-            # that contradicts the quote ("Dolo 500" against "Dolo six fifty") stays unmatched.
+            # A spoken name padded with the rest of its sentence defers to its verbatim quote, but only to
+            # leave the doctor a choice: a short quote ("Amlong") must never pick one strength exactly.
+            # A spoken name that contradicts the quote ("Dolo 500" against "Dolo six fifty") stays unmatched.
             match = quoted_match
         medications.append(ResolvedMedication(id=rx.id, action=rx.action, spoken_name=rx.spoken_name,
             **match.model_dump(), **parsed, unresolved=unresolved,

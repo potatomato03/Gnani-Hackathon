@@ -37,3 +37,21 @@ def test_every_language_file_fills_every_placeholder(draft_report):
     for language in ("te-IN", "ta-IN"):
         box = build_patient_box(draft_report.model_copy(update={"language_pref": language}), TEMPLATES)
         assert box.rows and all("{" not in row for row in box.rows)
+
+
+def hindi_box(draft_report, **changes):
+    rx = draft_report.checked.medications[0].model_copy(update=changes)
+    checked = draft_report.checked.model_copy(update={"medications": [rx]})
+    return build_patient_box(draft_report.model_copy(update={"language_pref": "hi-IN", "checked": checked}), TEMPLATES)
+
+
+def test_unit_missing_from_the_template_is_printed_as_itself(draft_report):
+    # A 5 ml dose printed as "5 डॉक्टर से पूछें" (runbook C-50).
+    assert hindi_box(draft_report, dose=Dose(amount="5", unit="ml")).rows[0].startswith("DOLO 650: 5 ml,")
+
+
+def test_unresolved_medicine_row_names_the_medicine(draft_report):
+    # fam-008-a's draft showed two identical "ask the doctor" lines (runbook C-50).
+    box = hindi_box(draft_report, match="unmatched", product_id=None, candidate_ids=[],
+                    quotes={"name_quote": "Mucaine gel"})
+    assert box.rows == ["Mucaine gel: डॉक्टर से पूछें"]

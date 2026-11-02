@@ -1,6 +1,6 @@
 import json
 
-from score_report import match_items, score_run
+from score_report import extracted_name, match_items, score_run
 
 
 def test_typed_quotes_match_by_overlap():
@@ -59,3 +59,14 @@ def test_clean_fixture_scores_all_facts_and_medicine():
 
 def test_wrong_dose_never_gets_exact_medicine_credit():
     assert fixture_score(changed_dose=True)['medicines_exact'] == {'count': 0, 'total': 1}
+
+
+def test_medicine_pairs_on_its_spoken_name_when_the_quote_is_only_the_brand():
+    # typed-groq-2: quote "Wysolone" against evidence "Wysolone ten" left fam-010-a unpaired (runbook C-53).
+    from voicerx.contracts.extraction import ResolvedMedication
+    from voicerx.contracts.medication import Start
+    rx = ResolvedMedication(id="rx1", action="start", spoken_name="Wysolone ten", match="exact",
+                            product_id="p-wysolone-10", candidate_ids=["p-wysolone-10"], dose=None, schedule=None,
+                            food=None, duration=None, start=Start(), route=None, unresolved=[],
+                            quotes={"name_quote": "Wysolone"})
+    assert match_items([("m1", "Wysolone ten")], [("rx1", extracted_name(rx, typed=True))], typed=True) == [("m1", "rx1")]

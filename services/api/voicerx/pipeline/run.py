@@ -1,7 +1,7 @@
 """Run synthetic transcripts through both checked stages, preserving each artifact."""
 import argparse
 from dataclasses import dataclass, asdict
-from datetime import date
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -20,6 +20,7 @@ from .check_report import check_report
 from .assemble import assemble_draft
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+SIGNED = re.compile(r'approved_report\.json|report_approved\.pdf|fhir_\w+\.json|draft_report\.v\d+\.json')
 
 
 @dataclass
@@ -109,6 +110,13 @@ def run_case(case, client, reference, out_dir, current_ids, history_issues=()):
     if out_dir == REPO_ROOT or out_dir in REPO_ROOT.parents or out_dir == REPO_ROOT / 'runs':
         raise ValueError('a dedicated case output directory is required')
     out_dir.mkdir(parents=True, exist_ok=True)
+    # A rerun must never destroy what a doctor signed or corrected: those files move aside, the rest go.
+    signed = [p for p in out_dir.iterdir() if p.is_file() and not p.is_symlink() and SIGNED.fullmatch(p.name)]
+    if signed:
+        aside = out_dir / ('superseded-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
+        aside.mkdir()
+        for path in signed:
+            path.replace(aside / path.name)
     for path in out_dir.iterdir():
         if path.is_symlink():
             raise ValueError('run output contains a symlink')

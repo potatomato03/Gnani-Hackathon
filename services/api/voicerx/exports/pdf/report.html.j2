@@ -1,4 +1,4 @@
-{% set footer %}Version {{ report.version }} · {{ report.content_hash[:12] }}{% if report.status == 'approved' %} · Approved by {{ report.approved_by }} · {{ report.approved_at.strftime('%d-%b-%Y %H:%M %Z') }}{% else %} · DRAFT, NOT APPROVED{% endif %}{% endset %}
+{% set footer %}Version {{ report.version }} · {{ report.content_hash[:12] }}{% if report.status == 'approved' %} · Approved by {{ report.approved_by }} · {{ report.approved_at|ist }}{% else %} · DRAFT, NOT APPROVED{% endif %}{% endset %}
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>VoiceRx - {{ report.case_id }}</title>
 <style>

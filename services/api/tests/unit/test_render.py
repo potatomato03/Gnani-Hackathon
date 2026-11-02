@@ -67,3 +67,10 @@ def test_pdf_prints_with_the_local_browser(draft_report, tmp_path):
     pdf = html_to_pdf(render_html(draft_report, None), tmp_path / "report.pdf")
     reader = PdfReader(str(pdf))
     assert len(reader.pages) >= 1 and "SYNTHETIC DATA" in reader.pages[0].extract_text()
+
+
+def test_approval_time_is_printed_in_indian_time(approved_report):
+    # fam-008-a's signed PDF said "14:43 UTC" for an approval at 20:13 in India (runbook C-51).
+    from datetime import datetime, timezone
+    report = approved_report.model_copy(update={"approved_at": datetime(2026, 11, 2, 14, 43, tzinfo=timezone.utc)})
+    assert "02-Nov-2026 20:13 IST" in render_html(report, None)

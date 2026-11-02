@@ -113,3 +113,37 @@ def test_line_correction_needs_a_real_line_and_text():
                        fix("edit_line", "history_present_illness:0", {"text": "  "})):
         with pytest.raises(ResolutionRefused):
             resolve(draft, [correction], REF)
+
+
+def omitted_draft():
+    # Stage 2 left x2 out, so Check 2 raised a blocking omission nothing could clear (runbook C-47).
+    from voicerx.contracts.issues import Issue
+    from voicerx.pipeline.assemble import content_hash
+
+    draft = make_draft([resolved_medicine()])
+    draft.sections["history_present_illness"] = []
+    draft.issues.append(Issue(code="omission", severity="block", target="x2", message="omission"))
+    draft.content_hash = content_hash(draft)
+    return draft
+
+
+def test_adding_a_line_for_an_omitted_finding_clears_the_omission():
+    fixed = resolve(omitted_draft(), [fix("add_line", "history_present_illness", {"text": "No fever", "cites": ["x2"]})], REF)
+    assert [(line.text, line.cites) for line in fixed.sections["history_present_illness"]] == [("No fever", ["x2"])]
+    assert "omission" not in codes(fixed) and "History" not in fixed.not_discussed
+    assert approve(fixed, "Dr Test", AT).version == 2
+
+
+def test_dismissing_an_unused_finding_clears_its_flags_but_not_one_still_in_use():
+    fixed = resolve(omitted_draft(), [fix("dismiss_item", "x2", {})], REF)
+    assert "omission" not in codes(fixed)
+    with pytest.raises(ResolutionRefused):
+        resolve(omitted_draft(), [fix("dismiss_item", "x1", {})], REF)
+
+
+def test_added_line_needs_a_known_section_text_and_kept_citations():
+    for correction in (fix("add_line", "nonsense", {"text": "x", "cites": []}),
+                       fix("add_line", "advice", {"text": " ", "cites": []}),
+                       fix("add_line", "advice", {"text": "x", "cites": ["x99"]})):
+        with pytest.raises(ResolutionRefused):
+            resolve(omitted_draft(), [correction], REF)

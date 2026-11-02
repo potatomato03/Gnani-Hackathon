@@ -39,6 +39,12 @@ def match_items(expected, kept, typed):
     return pairs
 
 
+def extracted_name(rx, typed):
+    """Pairing text for an extracted medicine. A quote of only the brand ("Wysolone") must still pair with
+    evidence that includes the strength ("Wysolone ten"), so typed pairing uses the quote and spoken name."""
+    return rx.quotes.get('name_quote', '') + ' ' + rx.spoken_name if typed else rx.spoken_name
+
+
 def metric(count, total):
     return {'count': count, 'total': total}
 
@@ -55,7 +61,7 @@ def score_variant(encounter, variant, draft, source):
     gold, actual = {f.id: f for f in facts}, {x.id: x for x in kept}
     medicine_pairs = match_items(
         [(m.id, variant.evidence.get(m.id + '.name', '') if typed else m.spoken_name) for m in medicines],
-        [(m.id, m.quotes.get('name_quote', '') if typed else m.spoken_name) for m in draft.checked.medications], typed)
+        [(m.id, extracted_name(m, typed)) for m in draft.checked.medications], typed)
     gold_rx = {m.id: m for m in medicines}
     actual_rx = {m.id: m for m in draft.checked.medications}
     fields = ('product_id', 'dose', 'schedule', 'food', 'duration')

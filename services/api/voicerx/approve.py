@@ -47,6 +47,14 @@ def main():
         previous = ApprovedReport.model_validate_json(approved_path.read_text(encoding='utf-8'))
         if previous.content_hash == draft.content_hash and previous.approved_by == args.by.strip():
             approved = previous
+        else:
+            # A different approval never overwrites a signed one; the earlier record and its outputs move aside.
+            from .pipeline.run import SIGNED
+            aside = directory / ('superseded-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
+            aside.mkdir()
+            for path in directory.iterdir():
+                if path.is_file() and SIGNED.fullmatch(path.name) and not path.name.startswith('draft_report'):
+                    path.replace(aside / path.name)
     bundles = build_bundles(approved)
     box = build_patient_box(approved, Path(__file__).parent / 'exports/templates/lang')
     html_to_pdf(render_html(approved, box), directory / 'report_approved.pdf')

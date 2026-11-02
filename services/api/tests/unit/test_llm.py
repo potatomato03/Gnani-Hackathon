@@ -244,3 +244,10 @@ def test_build_client_puts_groq_between_gemini_and_ollama(tmp_path):
     env.write_text("GEMINI_API_KEY=g1\nGROQ_API_KEY=q1\nOLLAMA_MODEL=qwen3:8b\n", encoding="utf-8")
     assert [c.adapter.name for c in build_client(env, tmp_path).clients] == ["gemini", "groq", "ollama"]
     assert [c.adapter.name for c in build_client(env, tmp_path, only="groq").clients] == ["groq"]
+
+
+def test_build_client_uses_both_groq_keys_in_order(tmp_path):
+    # Each Groq key belongs to its own organisation with its own daily token limit (runbook D-88).
+    env = tmp_path / ".env"
+    env.write_text("GROQ_API_KEY=q1\nGROQ_API_KEY_2=q2\n", encoding="utf-8")
+    assert build_client(env, tmp_path, only="groq").clients[0].keys == ["q1", "q2"]

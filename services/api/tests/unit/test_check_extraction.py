@@ -185,6 +185,33 @@ def test_verified_name_quote_decides_when_the_spoken_name_matches_nothing():
     assert checked.medications[0].match == "ambiguous" and "ambiguous_product" in codes(checked)
 
 
+def test_spoken_name_found_verbatim_outranks_a_shorter_quote():
+    # typed-groq-2 fam-011-v3: name quote "Amlong" (5 mg) against spoken "Amlong two point five" (C-52).
+    transcript = "Amlong two point five, एक tablet रात को, तीस दिन।"
+    rx = med(spoken_name="Amlong two point five", name_quote="Amlong", dose_phrase="एक tablet",
+             timing_phrase="रात को", food_phrase=None, duration_phrase="तीस दिन")
+    resolved = run(meds=[rx], transcript=transcript).medications[0]
+    assert (resolved.match, resolved.product_id) == ("exact", "p-amlong-2-5")
+
+
+def test_padded_spoken_name_never_becomes_exact_through_its_quote():
+    # The J-22 fallback must not pick Amlong 5 for a padded "Amlong two point five, एक tablet…" (C-52).
+    transcript = "Amlong two point five, एक tablet रात को, तीस दिन।"
+    rx = med(spoken_name="Amlong two point five एक tablet रात को", name_quote="Amlong", dose_phrase="एक tablet",
+             timing_phrase="रात को", food_phrase=None, duration_phrase="तीस दिन")
+    assert run(meds=[rx], transcript=transcript).medications[0].product_id != "p-amlong-5"
+
+
+def test_taper_takes_its_food_rule_from_its_own_phrase():
+    # typed-groq-2 fam-010: the taper phrase said "खाने के बाद" but food stayed empty (runbook C-54).
+    transcript = "Wysolone ten, पहले तीन दिन दो tablet सुबह खाने के बाद, फिर तीन दिन एक tablet सुबह खाने के बाद।"
+    rx = med(spoken_name="Wysolone ten", name_quote="Wysolone ten", dose_phrase=None, food_phrase=None,
+             timing_phrase="पहले तीन दिन दो tablet सुबह खाने के बाद, फिर तीन दिन एक tablet सुबह खाने के बाद",
+             duration_phrase=None)
+    resolved = run(meds=[rx], transcript=transcript).medications[0]
+    assert isinstance(resolved.schedule, Taper) and resolved.food == "after_food"
+
+
 def test_dose_from_another_sentence_is_not_borrowed():
     transcript = "Dolo six fifty after food for three days. Pan forty, one tablet in the morning."
     checked = run(meds=[med(timing_phrase=None)], transcript=transcript)

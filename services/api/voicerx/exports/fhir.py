@@ -135,8 +135,11 @@ def build_bundles(report):
             'date': report.approved_at.isoformat(), 'author': [ref('doctor')], 'custodian': ref('clinic'),
             'title': 'SYNTHETIC DATA - ' + type_code['text'], 'section': sections,
             'text': narrative(['SYNTHETIC DATA', f'Version {report.version}; SHA-256 {report.content_hash}', 'Not officially validated'])}
+        # A prescription carries only who, where and the medicine requests; the consult carries everything.
+        included = [e for key, e in entries.items()
+                    if not prescription or key in ('patient', 'doctor', 'clinic', 'encounter') or key.startswith('request:')]
         bundles[kind] = {'resourceType': 'Bundle', 'id': uid(kind + ':bundle'), 'type': 'document',
             'meta': {'profile': [BASE + 'DocumentBundle']}, 'timestamp': report.approved_at.isoformat(),
             'identifier': {'system': 'urn:voicerx:synthetic:report', 'value': f'{report.case_id}:{report.version}:{report.content_hash}:{kind}'},
-            'entry': [{'fullUrl': 'urn:uuid:' + composition['id'], 'resource': composition}, *entries.values()]}
+            'entry': [{'fullUrl': 'urn:uuid:' + composition['id'], 'resource': composition}, *included]}
     return bundles

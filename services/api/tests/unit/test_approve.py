@@ -41,3 +41,19 @@ def test_cli_reapproval_rechecks_the_current_draft(draft_report, approved_report
         main()
 
 
+
+
+def test_a_new_approval_keeps_the_earlier_signed_version(draft_report, tmp_path, monkeypatch):
+    # Approving again replaced the earlier approved record, PDF and bundles in place (runbook C-46).
+    import json
+    import sys
+    from voicerx.approve import main
+    (tmp_path / 'draft_report.json').write_text(draft_report.model_dump_json(), encoding='utf-8')
+    for name in ('Dr First', 'Dr Second'):
+        monkeypatch.setattr(sys, 'argv', ['approve', str(tmp_path), '--by', name])
+        main()
+    aside = [d for d in tmp_path.iterdir() if d.is_dir() and d.name.startswith('superseded-')]
+    assert len(aside) == 1
+    assert json.loads((aside[0] / 'approved_report.json').read_text(encoding='utf-8'))['approved_by'] == 'Dr First'
+    assert {'report_approved.pdf', 'fhir_op_consult.json'} <= {p.name for p in aside[0].iterdir()}
+    assert json.loads((tmp_path / 'approved_report.json').read_text(encoding='utf-8'))['approved_by'] == 'Dr Second'
