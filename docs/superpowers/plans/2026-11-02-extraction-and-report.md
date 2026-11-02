@@ -1824,7 +1824,7 @@ git commit -m "Export approved reports as ABDM FHIR bundles"
 - The CLI is `python -m voicerx.pipeline.run --source typed|whisper --run-id ID [--cases ...] [--provider gemini|ollama]`. It builds the client with `build_client(Path(".env"), Path("runs/cache"), only=provider)`, records each case's provider and model in `meta.json`, runs into `runs/<run_id>/<case_id>/`, and takes each case's `current_ids` and history issues from `current_ids_for`.
 - The CLI is also `python -m voicerx.approve runs/<run>/<case> --by NAME`. It writes `approved_report.json`, `report_approved.pdf`, `fhir_op_consult.json` and `fhir_prescription.json`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from dataclasses import asdict, replace
@@ -1897,12 +1897,12 @@ def test_incomplete_earlier_visit_gives_a_warning_and_no_history():
     assert [(i.code, i.severity) for i in issues] == [("previous_encounter_incomplete", "warn")]
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
+- [x] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_run.py -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add services/api/voicerx/pipeline/run.py services/api/voicerx/approve.py services/api/tests/unit/test_run.py
