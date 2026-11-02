@@ -83,7 +83,7 @@ Claude then reviews the branch against this plan and the spec.
 
 - [x] **Step 1: Check that no key is in any file to be committed**
 
-Run: `../.venv/Scripts/python -I tools/key_leak_check.py . ../Gemini_API.env.txt`, and again for `../Gemini_API(2).env.txt` and `../mistral_API.env.txt`. The script reads the key without printing it.
+Run: `../.venv/Scripts/python -I tools/key_leak_check.py .`. It reads every key in `../credentials` without printing it (runbook D-104).
 Expected: `files containing the key: 0` and `key in git history: False`, all three times
 
 - [x] **Step 2: Run all existing tests**

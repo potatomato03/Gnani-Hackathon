@@ -51,3 +51,6 @@ graphify-out/
 # Prisma results stay private until Gnani consents (DECISIONS.md)
 data/eval/results/prisma*/
 data/eval/results/scores/*prisma*
+
+# Local editor and preview settings
+.claude/
