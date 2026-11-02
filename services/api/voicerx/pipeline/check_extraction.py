@@ -5,7 +5,7 @@ import unicodedata
 from ..contracts.extraction import CheckedExtraction, DroppedItem, ResolvedMedication
 from ..contracts.issues import Issue
 from ..contracts.medication import Taper, Start
-from .match_medicine import match_medicine
+from .match_medicine import MatchResult, match_medicine
 from .schedule import parse_dose, parse_timing, parse_food, parse_duration, parse_start
 
 NEGATION_WORDS = {'no', 'not', 'nil', 'without', 'denies', 'negative', 'never', 'नहीं', 'नही', 'न', 'ना', 'बिना',
@@ -139,6 +139,11 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         unresolved = [field for field, output in mapping.items() if clean[field] and parsed[output] is None]
         parsed['start'] = parsed['start'] or Start()
         match = match_medicine(rx.spoken_name, reference.products, current_ids)
+        quoted_match = match_medicine(rx.name_quote, reference.products, current_ids)
+        if match.match == 'exact' and (quoted_match.match != 'exact' or match.product_id != quoted_match.product_id):
+            # Normalized spellings may differ, but the catalog identity must be grounded.
+            match = quoted_match if quoted_match.match != 'exact' else MatchResult(
+                match='unmatched', product_id=None, candidate_ids=[])
         medications.append(ResolvedMedication(id=rx.id, action=rx.action, spoken_name=rx.spoken_name,
             **match.model_dump(), **parsed, unresolved=unresolved,
             quotes={'name_quote': rx.name_quote, **{field: value for field, value in values.items() if value is not None}},

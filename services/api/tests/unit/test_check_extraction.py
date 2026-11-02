@@ -93,6 +93,19 @@ def test_missing_dose_on_a_new_medicine_blocks():
     assert "missing_quantity" in codes(run(meds=[med(dose_phrase=None)]))
 
 
+def test_a_known_product_cannot_replace_a_different_quoted_medicine():
+    checked = run(meds=[med(spoken_name='Pan forty')])
+    assert 'unmatched_product' in codes(checked)
+    assert checked.medications[0].product_id is None
+
+
+def test_model_cannot_add_strength_to_a_bare_quoted_name():
+    checked = run(meds=[med(spoken_name='Pan forty', name_quote='Pan', timing_phrase=None,
+                            food_phrase=None, duration_phrase=None)], transcript='Pan, one tablet.')
+    assert 'ambiguous_product' in codes(checked)
+    assert checked.medications[0].product_id is None
+
+
 def test_bare_pan_blocks_as_ambiguous():
     checked = run(meds=[med(spoken_name="Pan", name_quote="Pan", dose_phrase="एक गोली", timing_phrase="सुबह",
                             food_phrase=None, duration_phrase=None)], transcript="Pan एक गोली सुबह।")
