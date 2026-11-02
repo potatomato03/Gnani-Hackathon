@@ -25,7 +25,7 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 | Area | Status | Next step |
 |---|---|---|
 | Registration | Not confirmed | Both members register and confirm eligibility |
-| Gnani API key | Not configured | Create it on the primary registrant's account |
+| Gnani API key | In Aditya's file in the root folder and the ignored `.env`. Prisma v3.0 accepted it on 10 trial requests. | Find out what a request costs in credits (Q-03) |
 | Repo | Implementation is on `aditya/extraction-report`; no push, merge or PR. `main` is unchanged. | Review the branch, then team merges when ready |
 | Downloaded data | Done, 7 datasets in `../DATA`, about 5 GB. Only on one machine. | Share the folder with the teammate |
 | Case families | 12 built, all `auto_checked` | Teammate review |
@@ -33,7 +33,7 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 | Language review | Not started | Find Telugu and Tamil readers |
 | Formulary | 25 of about 100 rows, all `verified: false` | Hand-check each row, then extend |
 | Audio | 22 of 25 clips rendered, all transcribed by Whisper. 3 wait on Gemini's daily limit. | Render the last 3, then listen to all of them |
-| Extraction and report | Built and proven on all 25 typed cases with Groq: every expected flag fires, 33 of 33 medicines exact, no unsupported line. Doctor corrections and approval work end to end. Whisper text works for findings but not for medicine names written in Devanagari (Q-20). | Decide Q-20; rerun Gemini after its reset for comparison |
+| Extraction and report | Built and proven on all 25 typed cases with Groq: every expected flag fires, 33 of 33 medicines exact, no unsupported line. Doctor corrections and approval work end to end. Whisper text works for findings but not for medicine names written in Devanagari (Q-20). Prisma `codemix` writes brand names in Latin, which settles Q-20 on the 5 trial clips (D-93). | Transcribe the other clips with Prisma and run them; rerun Gemini after its reset for comparison |
 | Mistral | Dropped. The key is rejected as invalid, and the plan couldn't be activated. | None |
 | Local model | `qwen3:8b` and `qwen2.5:7b` in Ollama, stored in `models/ollama` in the root folder. First probe passed. | Compared with Gemini in Task 16 |
 | Gemini text models | Overloaded on 2 Nov (HTTP 503) | Retry later. The planned client retries and falls back automatically. |
@@ -42,7 +42,7 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 | Gold notes | None, by design. They need real audio first. | Follows audio |
 | Application code | Extraction/report backend, corrections, approval, PDF and FHIR implemented | Web, speech integration and patient agent remain outside this build |
 | LLM | Groq `openai/gpt-oss-120b` is the working model, on two keys (D-85, D-88). Gemini (quota) and local `qwen3:8b` (safe but noisy) are fallbacks. | Compare Gemini once its daily limit resets |
-| Evals | Typed and Whisper runs scored for Groq and the local model; see Verification | Re-score after Q-20 is settled |
+| Evals | Typed and Whisper runs scored for Groq and the local model; see Verification. Prisma trial scored privately (D-91). | Score all Prisma clips, privately |
 
 ## Decisions
 
@@ -126,6 +126,9 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 | D-49 | Transcribe in chunks of at most 10 seconds, each decoded on its own. | Whisper caps each decode at 224 tokens and silently drops the rest. See C-17. | Assistant | Assistant call |
 | D-50 | Flag a transcript as truncated if it ends in a broken character or a chunk nears the token cap. | Lost text must show up as a flag, not a clean-looking transcript. | Assistant | Assistant call |
 | D-51 | Store the second Gemini key as `GEMINI_API_KEY_2` in `.env`. | Aditya supplied it. It's held in reserve for rate limits. Whether it shares a quota with the first key is unknown. | Aditya | Confirmed |
+| D-91 | Transcribe with Prisma v3.0 on the REST endpoint, `format=codemix`, 16 kHz mono, language codes `hi-IN,en-IN` for Hinglish and one code otherwise (`tools/corpus/transcribe_prisma.py`). Prisma transcripts go to `data/eval/results/prisma*/` and their scores to `data/eval/results/scores/*prisma*`, both git-ignored; results are written up only in a private note in the root folder. | `codemix` is the style the scripts follow (D-24). The REST endpoint takes clips up to 30 seconds, which covers 20 of the 22 clips. Accuracy results can't go public until Gnani consents (Q-04). | Assistant | Assistant call |
+| D-92 | Send no brand keyterms to Prisma. | A keyterm list pulls the transcript toward the listed products, so a name the doctor leaves ambiguous (only "Pan", where Pan 40 and Pan-D both exist) can come back as one specific product. The matcher then resolves it exactly and nothing is blocked: the checks can't catch an error that is already in the transcript. The trial showed this can happen (private note). Non-brand context (topic, speaker names) is untested. | Assistant, from the 5-clip trial Aditya asked for | Assistant call |
+| D-93 | Settle Q-20 with Prisma `codemix` and no Indian-script aliases for now. | `codemix` writes English words, brand names included, in Latin script, which the Latin formulary can match; the trial clips bore this out (private note). Aliases stay an option if the full Prisma run finds names still written in Indian script. | Assistant | Assistant call |
 
 ### Extraction and report
 
@@ -291,6 +294,7 @@ All on 2 Nov 2026.
 | Handed the build to ASTRA | Added "Handoff to ASTRA" to the plan: what to read, the setup, the working rules, and the note to leave when finished. Moved the key-leak check into `tools/key_leak_check.py` so it can run without Claude. See D-71. |
 | Added Groq | Stored the key in `.env`, compared two Groq models, and added an OpenAI-compatible adapter test-first (6 tests). The fallback order is now Gemini, Groq, local. See D-85 and J-20. |
 | Finished Task 16 and the branch review | Scored Groq and the local model on typed scripts and Whisper text; corrected and approved `fam-008-a` end to end; reviewed the whole branch (9 findings) and fixed all of them plus 3 found while re-scoring (C-45 to C-54, D-88 to D-90). 372 tests pass. |
+| Ran the Prisma 5-clip trial | Aditya asked to test Prisma keyterms first. Transcribed `fam-001-a`, `fam-005-a`, `fam-006-a`, `fam-007-a` and `fam-008-a` with and without the 26 formulary brand names as keyterms (10 requests), ran both sets through the Groq pipeline, and scored them. The runner and scorer now take `prisma` and `prisma-keyterms` as sources. See D-91 to D-93; results are in the private note `../prisma-trial-2026-11-02.md`. |
 | Built a code knowledge graph | Ran `graphify update .` on the repo: 725 nodes, 1,742 edges, 35 communities, from code only with no model calls. Output is in the git-ignored `graphify-out/`. Query it with `graphify query "<question>" --budget 600` before reading whole files. |
 | Implemented extraction/report tasks 0–15 | Contracts, references, number/schedule parsing, medicine matching, both model stages and checks, frozen drafts, audited corrections, approval, patient-language templates, PDFs, FHIR, runner, sabotage fixtures and scorer. 332 tests pass; Task 16 is in progress. See build log below for per-task checkpoints and D-72 onwards for deviations. |
 
@@ -309,7 +313,8 @@ Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved 
 | Download record | `data/DOWNLOADS.md` | Versions, licences, checksums |
 | Data rules and method | `data/README.md` | |
 | Extraction and report backend | `services/api/voicerx/` | CLI workflow; no review screen yet |
-| Report evaluation | `tools/eval/score_report.py` | Typed and approximate Whisper metrics; explicit incomplete/missing coverage |
+| Report evaluation | `tools/eval/score_report.py` | Typed metrics, and approximate ones for Whisper and Prisma text; explicit incomplete/missing coverage |
+| Prisma transcription | `tools/corpus/transcribe_prisma.py` | Prisma v3.0 REST, optional formulary keyterms; output is git-ignored (D-91) |
 | Local run artifacts and response cache | `runs/` | Ignored by git; synthetic inputs only |
 
 Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaedic families, 1 family each for Hindi, Tamil and Telugu, and the shortest scripts are under the 15-second target by estimate.
@@ -348,6 +353,8 @@ Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaed
 | Why Whisper medicines score low | Whisper writes brand names in Devanagari ("डोलो 650", "टेलमा 40", "पैन"): 16 of 23 Groq medicines and 19 of 27 local ones. The matcher knows only Latin spellings, so each is `unmatched` and blocked, as the plan's Review Focus 5 requires. Safe, but the audio path cannot resolve most medicines yet. The one missed expected flag (`fam-008-a` `ambiguous_product`) is the same cause: "पैन" came back unmatched, still blocked. See Q-20. |
 | Extraction/report and corpus full suite | 332 pass, including all ten planned end-to-end sabotages and additional evidence/approval regressions |
 | Live `fam-001-a` PDF layout | One A4 page; Hindi shaped, four medicine slot columns, draft watermark, review block and page-margin footer visually checked |
+| Prisma 5-clip trial, with and without keyterms (`prisma-groq-1`, `prisma-keyterms-groq-1`) | 10 of 10 requests HTTP 200; 10 of 10 drafts. Accuracy is recorded only in the private note (Q-04). Safety finding, D-92: with keyterms, one ambiguous medicine became a specific product with no block. |
+| Unit tests after the Prisma source was added | Runner and scorer suites pass, including a new test that each speech source reads its own folder |
 
 What the checker can't do: it confirms that quotes exist and that scripts and specs agree. It can't tell whether a quote truly means the fact, or whether a case is clinically right. Those need people.
 
@@ -374,7 +381,9 @@ What the checker can't do: it confirms that quotes exist and that scripts and sp
 | Q-18 | Is Mistral's free Experiment plan activated on the account? Until it is, Mistral allows no chat requests. | Closed: the key is invalid and Mistral is dropped. See C-29. |
 | Q-17 | Whisper's Tamil is weak. It produced invented words such as "testosterone" and stray Cyrillic and Korean characters, which changed between runs. Should Tamil be scored only on typed scripts? | Team |
 | Q-19 | Do doctors often dictate in the first person ("I'll start Telma")? If so, D-63 will block too many medicines and needs a narrower rule. | Doctor reviewer, and the first typed run |
-| Q-20 | How should medicine names spoken in Indian script be resolved? Whisper writes most brands in Devanagari, so they never match the Latin formulary. Options: add Devanagari, Telugu and Tamil spellings to each formulary row as aliases (exact, auditable), transliterate before matching (any match would stay fuzzy, so blocked), or rely on Gnani Prisma's keyterm boosting to output Latin brand names (test in the planned 5-clip Prisma trial). | Team, before the audio demo |
+| Q-20 | How should medicine names spoken in Indian script be resolved? Whisper writes most brands in Devanagari, so they never match the Latin formulary. Options: add Devanagari, Telugu and Tamil spellings to each formulary row as aliases (exact, auditable), transliterate before matching (any match would stay fuzzy, so blocked), or rely on Gnani Prisma's keyterm boosting to output Latin brand names (test in the planned 5-clip Prisma trial). | Closed: Prisma `codemix` without keyterms writes brands in Latin (D-93); keyterms are off (D-92). |
+| Q-21 | Should phrase binding ignore the nukta? In the trial the model quoted "ज़रूरत" where Prisma wrote "जरूरत", so a stated timing failed to bind and was blocked. Folding ज़/ज, फ़/फ and the like would bind it, at the cost of a slightly looser verbatim rule. | Team |
+| Q-22 | Should a medicine with no timing or duration be flagged when the transcript states one? Twice in the trial the model left out a stated timing or duration, and the report showed it as not stated with no flag. The doctor sees "not stated", but nothing points at the omission. | Team |
 
 ## Free audio research
 

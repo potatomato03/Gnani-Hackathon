@@ -47,3 +47,7 @@ Thumbs.db
 
 # Local code knowledge graph (graphify)
 graphify-out/
+
+# Prisma results stay private until Gnani consents (DECISIONS.md)
+data/eval/results/prisma*/
+data/eval/results/scores/*prisma*

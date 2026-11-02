@@ -21,6 +21,8 @@ from .assemble import assemble_draft
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SIGNED = re.compile(r'approved_report\.json|report_approved\.pdf|fhir_\w+\.json|draft_report\.v\d+\.json')
+# Typed scripts, or speech-to-text output read from data/eval/results/<source>/.
+SOURCES = ('typed', 'whisper', 'prisma', 'prisma-keyterms')
 
 
 @dataclass
@@ -45,8 +47,8 @@ class RunResult:
 
 
 def load_case_inputs(repo_root: Path, source):
-    if source not in ('typed', 'whisper'):
-        raise ValueError('source must be typed or whisper')
+    if source not in SOURCES:
+        raise ValueError('source must be one of ' + ', '.join(SOURCES))
     cases = []
     for path in sorted((repo_root / 'data/eval/cases').glob('*.yaml')):
         # Deliberately do not instantiate the gold Family models or access expected fields.
@@ -57,7 +59,7 @@ def load_case_inputs(repo_root: Path, source):
                 if source == 'typed':
                     transcript = '\n'.join(u['text'] for u in variant['utterances'])
                 else:
-                    transcript_path = repo_root / 'data/eval/results/whisper' / (case_id + '.txt')
+                    transcript_path = repo_root / 'data/eval/results' / source / (case_id + '.txt')
                     transcript = transcript_path.read_text(encoding='utf-8').strip() if transcript_path.exists() else None
                 visit_date = encounter['date']
                 if isinstance(visit_date, str):
@@ -198,7 +200,7 @@ def run_cases(cases, client, reference, run_dir, workers=1, selected=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', required=True, choices=['typed', 'whisper'])
+    parser.add_argument('--source', required=True, choices=SOURCES)
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--cases', nargs='+')
     parser.add_argument('--provider', choices=['gemini', 'groq', 'ollama'])

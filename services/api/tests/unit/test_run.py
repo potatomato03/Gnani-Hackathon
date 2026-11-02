@@ -65,6 +65,17 @@ def test_missing_transcript_is_reported_not_skipped(tmp_path):
     assert len(load_case_inputs(REPO_ROOT, "whisper")) == 25
 
 
+def test_speech_sources_read_their_own_transcript_folder_and_unknown_ones_fail():
+    import pytest
+
+    cases = {c.case_id: c for c in load_case_inputs(REPO_ROOT, "prisma")}
+    expected = REPO_ROOT / "data/eval/results/prisma/fam-001-a.txt"
+    assert len(cases) == 25
+    assert (cases["fam-001-a"].transcript is None) == (not expected.exists())
+    with pytest.raises(ValueError, match="source must be one of"):
+        load_case_inputs(REPO_ROOT, "deepgram")
+
+
 def test_variants_of_one_visit_never_chain():
     cases = load_case_inputs(REPO_ROOT, "typed")
     variant_b = next(c for c in cases if c.case_id == "fam-001-b")

@@ -14,6 +14,7 @@ from rapidfuzz.fuzz import token_set_ratio
 from case_schema import Family
 from check_cases import effective
 from voicerx.contracts.report import DraftReport
+from voicerx.pipeline.run import SOURCES
 
 
 def tokens(text):
@@ -104,12 +105,12 @@ def score_variant(encounter, variant, draft, source):
 
 
 def score_run(run_dir, source):
-    if source not in ('typed', 'whisper'):
-        raise ValueError('source must be typed or whisper')
+    if source not in SOURCES:
+        raise ValueError('source must be one of ' + ', '.join(SOURCES))
     families = [Family.model_validate(yaml.safe_load(p.read_text(encoding='utf-8')))
                 for p in sorted((REPO_ROOT / 'data/eval/cases').glob('*.yaml'))]
     gold = {v.variant_id: (e, v) for f in families for e in f.encounters for v in e.variants}
-    result = dict(run_id=run_dir.name, source=source, approximate=source == 'whisper', scored=0,
+    result = dict(run_id=run_dir.name, source=source, approximate=source != 'typed', scored=0,
                   missing_input=[], incomplete=[], cases={}, metrics={}, unexpected_blocking_flags=0)
     for directory in sorted(run_dir.iterdir()):
         if not directory.is_dir() or directory.name not in gold:
@@ -144,7 +145,7 @@ def score_run(run_dir, source):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('run_dir', type=Path)
-    parser.add_argument('--source', required=True, choices=['typed', 'whisper'])
+    parser.add_argument('--source', required=True, choices=SOURCES)
     args = parser.parse_args()
     scores = score_run(args.run_dir, args.source)
     out = REPO_ROOT / 'data/eval/results/scores' / (args.run_dir.name + '.json')
