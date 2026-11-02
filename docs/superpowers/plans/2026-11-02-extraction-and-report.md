@@ -2050,7 +2050,7 @@ git commit -m "Add cached end-to-end run and sabotage tests"
   - expected flags raised, and unexpected blocking flags
   - cases with status `missing_input` or `incomplete`, listed by name and counted apart from the scored cases
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 import json
@@ -2082,12 +2082,12 @@ def test_missing_and_incomplete_cases_are_listed_not_dropped(tmp_path):
 
 With typed input, both lists hold `(id, quote)` pairs. With Whisper input, they hold `(id, term)` pairs.
 
-- [ ] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
+- [x] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest tools/eval/tests -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tools/eval
