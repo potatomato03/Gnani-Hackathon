@@ -151,6 +151,40 @@ def test_hedged_finding_recorded_as_definite_blocks():
     assert "certainty_mismatch" not in codes(run([stated], transcript=transcript))
 
 
+def test_doctor_line_marked_as_patient_speech_is_kept_and_blocked():
+    # typed-local-2 fam-005-a: the model called the doctor's Telma order patient speech, and it vanished (C-44).
+    transcript = "[doctor] Telma forty दिन में एक बार, तीस दिन तक।\n[patient] मैं Combiflam लेता हूँ।"
+    telma = med(spoken_name="Telma forty", name_quote="Telma forty", dose_phrase=None,
+                timing_phrase="दिन में एक बार", food_phrase=None, duration_phrase="तीस दिन तक", said_by="patient")
+    combiflam = med(id="rx2", spoken_name="Combiflam", name_quote="Combiflam", dose_phrase=None, timing_phrase=None,
+                    food_phrase=None, duration_phrase=None, said_by="patient")
+    checked = run(meds=[telma, combiflam], transcript=transcript)
+    assert [m.id for m in checked.medications] == ["rx1"] and checked.medications[0].speaker_unclear
+    assert ("speaker_unclear", "rx1") in {(i.code, i.target) for i in checked.issues}
+    assert ("patient_speech", "rx2") in {(i.code, i.target) for i in checked.issues}
+
+
+def test_unlabelled_order_called_patient_speech_is_kept_unless_said_in_the_first_person():
+    # Pipeline transcripts carry no speaker labels, as in fam-005-a's dictation (C-44).
+    transcript = "Telma forty दिन में एक बार, तीस दिन तक। मैं तो Combiflam लेता हूँ।"
+    telma = med(spoken_name="Telma forty", name_quote="Telma forty", dose_phrase=None,
+                timing_phrase="दिन में एक बार", food_phrase=None, duration_phrase="तीस दिन तक", said_by="patient")
+    combiflam = med(id="rx2", spoken_name="Combiflam", name_quote="Combiflam", dose_phrase=None, timing_phrase=None,
+                    food_phrase=None, duration_phrase=None, said_by="patient")
+    checked = run(meds=[telma, combiflam], transcript=transcript)
+    assert [m.id for m in checked.medications] == ["rx1"]
+    assert {"speaker_unclear", "missing_quantity"} <= {i.code for i in checked.issues if i.target == "rx1"}
+
+
+def test_verified_name_quote_decides_when_the_spoken_name_matches_nothing():
+    # typed-local-2 fam-008-a: the whole sentence came back as the spoken name, though the quote was "Pan" (J-22).
+    transcript = "Pan एक गोली सुबह खाली पेट, दो हफ़्ते।"
+    rx = med(spoken_name="Pan एक गोली सुबह खाली पेट, दो हफ़्ते", name_quote="Pan", dose_phrase="एक गोली",
+             timing_phrase="सुबह", food_phrase="खाली पेट", duration_phrase="दो हफ़्ते")
+    checked = run(meds=[rx], transcript=transcript)
+    assert checked.medications[0].match == "ambiguous" and "ambiguous_product" in codes(checked)
+
+
 def test_dose_from_another_sentence_is_not_borrowed():
     transcript = "Dolo six fifty after food for three days. Pan forty, one tablet in the morning."
     checked = run(meds=[med(timing_phrase=None)], transcript=transcript)

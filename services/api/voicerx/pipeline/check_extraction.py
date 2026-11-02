@@ -75,6 +75,13 @@ def _trim(phrase):
     return phrase.rstrip(' ।.?!,;') if phrase is not None else None
 
 
+def _line_label(text, position):
+    """The speaker label ("[doctor]", "[patient]") opening the transcript line at position, if any."""
+    line = text[text.rfind('\n', 0, position) + 1:position].lstrip()
+    match = re.match(r'\[(\w+)\]', line)
+    return match[1] if match else None
+
+
 def _sentence(text, position):
     starts = [m.end() for m in ENDS.finditer(text[:position])]
     start = starts[-1] if starts else 0
@@ -111,10 +118,17 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
     name_positions = [(m.start(), rx.id) for rx in extraction.medications
                       for m in re.finditer(re.escape(normalise(rx.name_quote)), text) if normalise(rx.name_quote)]
     for rx in extraction.medications:
-        if rx.said_by == 'patient':
+        positions = [p for p, rid in name_positions if rid == rx.id]
+        # A medicine the model calls patient speech is dropped only on evidence: a [patient] line label, or,
+        # with no label, a first-person sentence. Otherwise it is kept and blocked as unclear for the doctor
+        # to confirm, never silently dropped.
+        def patient_said(p):
+            label = _line_label(bounded_text, p)
+            return label == 'patient' if label else has_word(_sentence(bounded_text, p), FIRST_PERSON)
+        overruled = rx.said_by == 'patient' and not (positions and all(patient_said(p) for p in positions))
+        if rx.said_by == 'patient' and not overruled:
             issues.append(issue('patient_speech', rx.id, 'warn'))
             continue
-        positions = [p for p, rid in name_positions if rid == rx.id]
         if not positions:
             issues.append(issue('quote_not_found', rx.id, 'warn'))
             continue
@@ -154,10 +168,15 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
             # Normalized spellings may differ, but the catalog identity must be grounded.
             match = quoted_match if quoted_match.match != 'exact' else MatchResult(
                 match='unmatched', product_id=None, candidate_ids=[])
+        elif (match.match == 'unmatched' and quoted_match.match != 'unmatched'
+              and normalise(rx.name_quote) in normalise(rx.spoken_name)):
+            # A spoken name padded with the rest of its sentence defers to its verbatim quote. A spoken name
+            # that contradicts the quote ("Dolo 500" against "Dolo six fifty") stays unmatched.
+            match = quoted_match
         medications.append(ResolvedMedication(id=rx.id, action=rx.action, spoken_name=rx.spoken_name,
             **match.model_dump(), **parsed, unresolved=unresolved,
             quotes={'name_quote': rx.name_quote, **{field: value for field, value in values.items() if value is not None}},
-            speaker_unclear=rx.said_by == 'unclear' or has_word(_sentence(bounded_text, pos), FIRST_PERSON), unbound=unbound))
+            speaker_unclear=overruled or rx.said_by == 'unclear' or has_word(_sentence(bounded_text, pos), FIRST_PERSON), unbound=unbound))
     record = reference.patients[patient_id]
     allergies = record['allergies'] if record['allergy_status'] != 'unknown' else None
     issues += medicine_issues(medications, reference, allergies)
