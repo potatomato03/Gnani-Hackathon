@@ -40,15 +40,13 @@ def main():
     args = parser.parse_args()
     directory = args.directory.resolve()
     draft = DraftReport.model_validate_json((directory / 'draft_report.json').read_text(encoding='utf-8'))
+    # Revalidate even when reusing an earlier approval's timestamp.
+    approved = approve(draft, args.by, datetime.now(timezone.utc))
     approved_path = directory / 'approved_report.json'
     if approved_path.exists():
         previous = ApprovedReport.model_validate_json(approved_path.read_text(encoding='utf-8'))
         if previous.content_hash == draft.content_hash and previous.approved_by == args.by.strip():
             approved = previous
-        else:
-            approved = approve(draft, args.by, datetime.now(timezone.utc))
-    else:
-        approved = approve(draft, args.by, datetime.now(timezone.utc))
     bundles = build_bundles(approved)
     box = build_patient_box(approved, Path(__file__).parent / 'exports/templates/lang')
     html_to_pdf(render_html(approved, box), directory / 'report_approved.pdf')

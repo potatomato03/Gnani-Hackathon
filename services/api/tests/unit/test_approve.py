@@ -29,3 +29,15 @@ def test_draft_altered_outside_the_tools_is_refused(draft_report):
     header = draft_report.header.model_copy(update={"patient_name": "Someone Else"})
     with pytest.raises(HashMismatch):
         approve(draft_report.model_copy(update={"header": header}), "Dr Test", datetime(2026, 10, 5, 12, 0))
+def test_cli_reapproval_rechecks_the_current_draft(draft_report, approved_report, tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from voicerx.approve import main, HashMismatch
+    draft_report.header.patient_name = 'Altered after approval'
+    (tmp_path / 'draft_report.json').write_text(draft_report.model_dump_json(), encoding='utf-8')
+    (tmp_path / 'approved_report.json').write_text(approved_report.model_dump_json(), encoding='utf-8')
+    monkeypatch.setattr(sys, 'argv', ['approve', str(tmp_path), '--by', approved_report.approved_by])
+    with pytest.raises(HashMismatch):
+        main()
+
+
