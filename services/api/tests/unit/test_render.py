@@ -3,6 +3,31 @@ import pytest
 from voicerx.exports.pdf.render import find_browser, html_to_pdf, render_html
 
 
+def test_stalled_browser_is_killed_with_its_children_and_never_hangs(monkeypatch, tmp_path):
+    # A stalled Edge kept its helpers' output pipes open, so a captured run waited forever (runbook C-41).
+    import subprocess
+
+    from voicerx.exports.pdf import render
+
+    calls, killed = [], []
+
+    class Stalled:
+        pid = 4242
+
+        def __init__(self, command, **options):
+            calls.append(options)
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired("msedge", timeout)
+
+    monkeypatch.setattr(render.subprocess, "Popen", Stalled)
+    monkeypatch.setattr(render, "_kill_tree", killed.append)
+    with pytest.raises(RuntimeError, match="timed out"):
+        html_to_pdf("<p>x</p>", tmp_path / "r.pdf")
+    assert [p.pid for p in killed] == [4242]
+    assert calls[0]["stdout"] is subprocess.DEVNULL and calls[0]["stderr"] is subprocess.DEVNULL
+
+
 def test_draft_shows_synthetic_banner_and_draft_watermark(draft_report):
     html = render_html(draft_report, None)
     assert "SYNTHETIC DATA" in html and "DRAFT, NOT APPROVED" in html

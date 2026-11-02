@@ -36,9 +36,29 @@ def html_to_pdf(html, out_pdf: Path):
         command = [str(browser), '--headless=new', '--disable-gpu', '--no-pdf-header-footer',
                    '--no-first-run', '--no-default-browser-check', '--disable-extensions',
                    '--user-data-dir=' + str(root / 'profile'), '--print-to-pdf=' + str(target), source.as_uri()]
-        result = subprocess.run(command, capture_output=True, timeout=90,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        if result.returncode or not target.exists() or not target.read_bytes().startswith(b'%PDF'):
+        # No captured pipes: Edge's helper processes can hold them open after a timeout, and a captured
+        # run then waits forever. A stalled browser is killed with all its children.
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        try:
+            returncode = process.wait(timeout=90)
+        except subprocess.TimeoutExpired:
+            _kill_tree(process)
+            raise RuntimeError('headless browser timed out') from None
+        if returncode or not target.exists() or not target.read_bytes().startswith(b'%PDF'):
             raise RuntimeError('headless browser failed to produce a PDF')
         target.replace(out_pdf)
     return out_pdf
+
+
+def _kill_tree(process):
+    if os.name == 'nt':
+        subprocess.run(['taskkill', '/T', '/F', '/PID', str(process.pid)], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+    else:
+        process.kill()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass

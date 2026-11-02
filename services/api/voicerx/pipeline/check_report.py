@@ -38,7 +38,8 @@ def check_report(fields, checked, reference):
                 flag('number_not_in_source')
             if any(has_word(text, {name}) and not has_word(source, {name}) for name in names):
                 flag('medicine_not_in_source')
-            if re.search(r'\b\d+(\.\d+)?\s?(mg|mcg|ml|tablets?|tabs?|capsules?|puffs?)\b', text):
+            # A unit followed by "/" is a lab concentration ("160 mg/dL"), not a dose.
+            if re.search(r'\b\d+(\.\d+)?\s?(mg|mcg|ml|tablets?|tabs?|capsules?|puffs?)\b(?!\s*/)', text):
                 flag('dose_in_text')
             if not cited:
                 continue

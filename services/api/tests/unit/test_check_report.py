@@ -70,6 +70,12 @@ def test_dose_written_into_a_section_blocks():
     assert "dose_in_text" in codes(fields(advice=[ReportLine(text="Take 2 tablets", cites=["x1"])]))
 
 
+def test_lab_concentration_is_not_a_dose():
+    # typed-groq-2 fam-004-b: "LDL 160 mg/dL" was blocked as a medicine dose (runbook C-40).
+    assert "dose_in_text" not in codes(fields(investigation_results=[ReportLine(text="LDL 160 mg/dL", cites=["x1"])]))
+    assert "dose_in_text" in codes(fields(advice=[ReportLine(text="Paracetamol 500 mg if needed", cites=["x1"])]))
+
+
 def test_medicine_named_without_a_source_blocks():
     assert "medicine_not_in_source" in codes(fields(advice=[ReportLine(text="Avoid Combiflam", cites=["x1"])]))
 
