@@ -187,6 +187,8 @@ A4, rendered from an HTML template and printed by headless Edge locally, or Chro
 5. **Instruction box, in the patient's language,** from `templates/lang/<language>.yaml`. It notes that the English record is the official one. Until a native speaker approves the templates, it says *translation not yet reviewed*.
 6. **Footer:** record version, fingerprint, approver and time, and page x of y.
 
+The report may run to two A4 pages. Readable spacing comes before fitting one page, and a section or medicine row never splits across a page break.
+
 ## FHIR bundle
 
 ABDM profile v6.5.0, FHIR R4. One OPConsultRecord, and one PrescriptionRecord when medicines were prescribed. Each is a document Bundle with the Composition first.
