@@ -23,7 +23,6 @@ supabase/.temp/
 
 # Audio and large data stay out of git
 data/eval/audio/
-data/noise/
 *.wav
 *.mp3
 *.pcm
@@ -32,6 +31,7 @@ data/noise/
 
 # Provider response caches
 data/eval/fixtures/
+runs/
 
 # Local model files
 *.gguf
@@ -44,3 +44,10 @@ private/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local code knowledge graph (graphify)
+graphify-out/
+
+# Prisma results stay private until Gnani consents (DECISIONS.md)
+data/eval/results/prisma*/
+data/eval/results/scores/*prisma*

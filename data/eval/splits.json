@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "unit": "family",
+  "note": "The first 12 families are all development. No held-out family exists yet.",
+  "families": {
+    "fam-001": "dev",
+    "fam-002": "dev",
+    "fam-003": "dev",
+    "fam-004": "dev",
+    "fam-005": "dev",
+    "fam-006": "dev",
+    "fam-007": "dev",
+    "fam-008": "dev",
+    "fam-009": "dev",
+    "fam-010": "dev",
+    "fam-011": "dev",
+    "fam-012": "dev"
+  }
+}

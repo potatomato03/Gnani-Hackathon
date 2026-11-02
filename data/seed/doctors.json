@@ -1,0 +1,29 @@
+[
+  {
+    "doctor_id": "doc-001",
+    "synthetic": true,
+    "clinic_id": "clinic-001",
+    "name": "Dr Parth Shan",
+    "role": "doctor",
+    "specialty": "general_medicine",
+    "nmc_reg_no": "DEMO-REG-0001"
+  },
+  {
+    "doctor_id": "doc-002",
+    "synthetic": true,
+    "clinic_id": "clinic-001",
+    "name": "Dr Yug Kumer",
+    "role": "doctor",
+    "specialty": "orthopaedics",
+    "nmc_reg_no": "DEMO-REG-0002"
+  },
+  {
+    "doctor_id": "doc-003",
+    "synthetic": true,
+    "clinic_id": "clinic-001",
+    "name": "Dr Lavanya Deshpande",
+    "role": "doctor",
+    "specialty": "general_medicine",
+    "nmc_reg_no": "DEMO-REG-0003"
+  }
+]

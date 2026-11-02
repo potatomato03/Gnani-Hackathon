@@ -1,0 +1,5 @@
+faker
+pandas
+pydantic>=2
+pytest
+pyyaml

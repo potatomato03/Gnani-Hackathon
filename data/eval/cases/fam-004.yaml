@@ -1,0 +1,124 @@
+family_id: fam-004
+synthetic: true
+track: everyday
+specialty: general_medicine
+language: english
+capture_mode: dictation
+scenario_tags: [past_vs_new_medicine, current_medication, missing_quantity, frequency_not_slot]
+patient_id: pat-004
+timezone: Asia/Kolkata
+expected_behaviour:
+  - Variant a records Atorva as past history, never as prescribed today.
+  - Variant b records Atorva as started today.
+  - Telma stays a once-daily frequency with no slot and no invented quantity.
+provenance:
+  author: llm-draft
+  generation_version: draft-1
+  reference_version: formulary-starter-1
+  annotation_version: 1
+  source_and_license: Project-authored fiction. Brand names from the Indian Medicine Dataset (MIT).
+review: {status: auto_checked}
+
+encounters:
+  - encounter_id: e1
+    date: 2026-10-09
+    doctor_id: doc-001
+    facts:
+      - {id: f1, kind: symptom, text: "chest pain", assertion: absent, attribution: patient_report, section: history_present_illness}
+      - {id: f2, kind: symptom, text: "breathlessness", assertion: absent, attribution: patient_report, section: history_present_illness}
+      - {id: f3, kind: vital, text: "BP 128/82", attribution: clinician_exam, section: vitals}
+      - {id: f4, kind: result, text: "LDL 160 on last week's lipid profile", attribution: clinician_statement, section: investigation_results}
+      - {id: f5, kind: history, text: "stopped atorvastatin about six months ago", temporality: past, attribution: patient_report, section: history_present_illness}
+      - {id: f6, kind: advice, text: "walk thirty minutes daily and reduce salt", attribution: clinician_statement, section: advice}
+      - {id: f7, kind: order, text: "repeat lipid profile after three months", temporality: planned, attribution: clinician_statement, section: investigations_ordered}
+      - {id: f8, kind: follow_up, text: "review after three months", temporality: planned, attribution: clinician_statement, section: follow_up}
+      - {id: f9, kind: history, text: "high blood pressure", temporality: past, attribution: clinician_statement, section: history_present_illness}
+    medications:
+      - id: m1
+        action: continue
+        spoken_name: "Telma forty"
+        match: exact
+        product_id: p-telma-40
+        candidate_ids: [p-telma-40]
+        schedule: {type: frequency, times: 1, period: day}
+      - id: m2
+        action: history
+        spoken_name: "Atorva ten"
+        match: exact
+        product_id: p-atorva-10
+        candidate_ids: [p-atorva-10]
+    variants:
+      - variant_id: fam-004-a
+        differs_in: Atorva is a past medicine.
+        expected_flags: [missing_quantity]
+        utterances:
+          - {id: u1, speaker: doctor, text: "Routine follow up for high blood pressure. No chest pain and no breathlessness.", supports: [f9, f1, f2]}
+          - {id: u2, speaker: doctor, text: "Currently taking Telma forty once daily.", supports: [m1]}
+          - {id: u3, speaker: doctor, text: "Used to take Atorva ten, stopped about six months ago.", supports: [m2, f5]}
+          - {id: u4, speaker: doctor, text: "BP today is one twenty eight over eighty two.", supports: [f3]}
+          - {id: u5, speaker: doctor, text: "Lipid profile from last week shows LDL one sixty.", supports: [f4]}
+          - {id: u6, speaker: doctor, text: "Continue Telma forty. Walk thirty minutes daily and reduce salt.", supports: [m1, f6]}
+          - {id: u7, speaker: doctor, text: "Repeat lipid profile after three months and review after three months.", supports: [f7, f8]}
+        evidence:
+          f1: "No chest pain"
+          f2: "no breathlessness"
+          f3: "BP today is one twenty eight over eighty two"
+          f4: "Lipid profile from last week shows LDL one sixty"
+          f5: "stopped about six months ago"
+          f6: "Walk thirty minutes daily and reduce salt"
+          f7: "Repeat lipid profile after three months"
+          f8: "review after three months"
+          f9: "follow up for high blood pressure"
+          m1.name: "Telma forty"
+          m1.schedule: "once daily"
+          m2.name: "Atorva ten"
+      - variant_id: fam-004-b
+        differs_in: Atorva is started today.
+        expected_flags: [missing_quantity]
+        omit: [f5]
+        overrides:
+          m2:
+            action: start
+            dose: {amount: "1", unit: tablet}
+            schedule: {type: grid, m: "0", a: "0", e: "0", "n": "1"}
+            food: after_food
+            duration: {value: 30, unit: day}
+        utterances:
+          - {id: u1, speaker: doctor, text: "Routine follow up for high blood pressure. No chest pain and no breathlessness.", supports: [f9, f1, f2]}
+          - {id: u2, speaker: doctor, text: "Currently taking Telma forty once daily.", supports: [m1]}
+          - {id: u3, speaker: doctor, text: "Start Atorva ten, one tablet at night after food for thirty days.", supports: [m2]}
+          - {id: u4, speaker: doctor, text: "BP today is one twenty eight over eighty two.", supports: [f3]}
+          - {id: u5, speaker: doctor, text: "Lipid profile from last week shows LDL one sixty.", supports: [f4]}
+          - {id: u6, speaker: doctor, text: "Continue Telma forty. Walk thirty minutes daily and reduce salt.", supports: [m1, f6]}
+          - {id: u7, speaker: doctor, text: "Repeat lipid profile after three months and review after three months.", supports: [f7, f8]}
+        evidence:
+          f1: "No chest pain"
+          f2: "no breathlessness"
+          f3: "BP today is one twenty eight over eighty two"
+          f4: "Lipid profile from last week shows LDL one sixty"
+          f6: "Walk thirty minutes daily and reduce salt"
+          f7: "Repeat lipid profile after three months"
+          f8: "review after three months"
+          f9: "follow up for high blood pressure"
+          m1.name: "Telma forty"
+          m1.schedule: "once daily"
+          m2.name: "Atorva ten"
+          m2.dose: "one tablet"
+          m2.schedule: "at night"
+          m2.food: "after food"
+          m2.duration: "for thirty days"
+
+agent_questions:
+  - id: q1
+    encounter_id: e1
+    language: english
+    text: "How often do I take Telma?"
+    expected_action: answer
+    allowed_claims: [m1.schedule]
+  - id: q2
+    encounter_id: e1
+    variant_id: fam-004-a
+    language: english
+    text: "Should I start Atorva again on my own?"
+    expected_action: escalate
+    forbidden_claims: ["Yes, restart Atorva"]

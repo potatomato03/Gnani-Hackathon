@@ -1,0 +1,109 @@
+family_id: fam-003
+synthetic: true
+track: everyday
+specialty: orthopaedics
+language: english
+capture_mode: dictation
+scenario_tags: [correction, laterality, result_vs_order]
+patient_id: pat-003
+timezone: Asia/Kolkata
+expected_behaviour:
+  - The final record says left wrist and three days.
+  - Variant a keeps the old and new wording in evidence.
+  - The X-ray is a result, not an order.
+provenance:
+  author: llm-draft
+  generation_version: draft-1
+  reference_version: formulary-starter-1
+  annotation_version: 1
+  source_and_license: Project-authored fiction. Brand names from the Indian Medicine Dataset (MIT).
+review: {status: auto_checked}
+
+encounters:
+  - encounter_id: e1
+    date: 2026-10-08
+    doctor_id: doc-002
+    facts:
+      - {id: f1, kind: symptom, text: "left wrist pain after a slip two days ago", laterality: left, attribution: patient_report, section: chief_complaints}
+      - {id: f2, kind: exam, text: "mild swelling over the left wrist", laterality: left, attribution: clinician_exam, section: examination}
+      - {id: f3, kind: exam, text: "deformity", assertion: absent, attribution: clinician_exam, section: examination}
+      - {id: f4, kind: exam, text: "painful wrist movements", attribution: clinician_exam, section: examination}
+      - {id: f5, kind: result, text: "fracture on X-ray of the left wrist", assertion: absent, laterality: left, attribution: clinician_statement, section: investigation_results}
+      - {id: f6, kind: diagnosis, text: "left wrist sprain", laterality: left, attribution: clinician_statement, section: diagnoses}
+      - {id: f7, kind: advice, text: "wrist splint", attribution: clinician_statement, section: advice}
+      - {id: f8, kind: follow_up, text: "review after one week", temporality: planned, attribution: clinician_statement, section: follow_up}
+    medications:
+      - id: m1
+        spoken_name: "Combiflam"
+        match: exact
+        product_id: p-combiflam
+        candidate_ids: [p-combiflam]
+        dose: {amount: "1", unit: tablet}
+        schedule: {type: frequency, times: 2, period: day}
+        food: after_food
+        duration: {value: 3, unit: day}
+    variants:
+      - variant_id: fam-003-a
+        differs_in: The doctor corrects the side and the duration.
+        utterances:
+          - {id: u1, speaker: doctor, text: "Patient slipped on a wet floor two days ago and has pain in the right wrist, sorry, left wrist.", supports: [f1]}
+          - {id: u2, speaker: doctor, text: "On examination there is mild swelling over the left wrist, no deformity, and movements are painful.", supports: [f2, f3, f4]}
+          - {id: u3, speaker: doctor, text: "X-ray of the left wrist shows no fracture.", supports: [f5]}
+          - {id: u4, speaker: doctor, text: "Impression is a left wrist sprain.", supports: [f6]}
+          - {id: u5, speaker: doctor, text: "Start Combiflam, one tablet twice daily after food for five days, sorry, three days, not five.", supports: [m1]}
+          - {id: u6, speaker: doctor, text: "Wrist splint advised. Review after one week.", supports: [f7, f8]}
+        evidence:
+          f1: "slipped on a wet floor two days ago and has pain in the right wrist, sorry, left wrist"
+          f2: "mild swelling over the left wrist"
+          f3: "no deformity"
+          f4: "movements are painful"
+          f5: "X-ray of the left wrist shows no fracture"
+          f6: "left wrist sprain"
+          f7: "Wrist splint advised"
+          f8: "Review after one week"
+          m1.name: "Combiflam"
+          m1.dose: "one tablet"
+          m1.schedule: "twice daily"
+          m1.food: "after food"
+          m1.duration: "three days, not five"
+        corrections:
+          - {target: f1, field: laterality, old_value: right, new_value: left, old_quote: "right wrist", new_quote: "sorry, left wrist"}
+          - {target: m1, field: duration, old_value: "5 day", new_value: "3 day", old_quote: "for five days", new_quote: "three days, not five"}
+      - variant_id: fam-003-b
+        differs_in: The doctor states the side and the duration correctly the first time.
+        utterances:
+          - {id: u1, speaker: doctor, text: "Patient slipped on a wet floor two days ago and has pain in the left wrist.", supports: [f1]}
+          - {id: u2, speaker: doctor, text: "On examination there is mild swelling over the left wrist, no deformity, and movements are painful.", supports: [f2, f3, f4]}
+          - {id: u3, speaker: doctor, text: "X-ray of the left wrist shows no fracture.", supports: [f5]}
+          - {id: u4, speaker: doctor, text: "Impression is a left wrist sprain.", supports: [f6]}
+          - {id: u5, speaker: doctor, text: "Start Combiflam, one tablet twice daily after food for three days.", supports: [m1]}
+          - {id: u6, speaker: doctor, text: "Wrist splint advised. Review after one week.", supports: [f7, f8]}
+        evidence:
+          f1: "slipped on a wet floor two days ago and has pain in the left wrist"
+          f2: "mild swelling over the left wrist"
+          f3: "no deformity"
+          f4: "movements are painful"
+          f5: "X-ray of the left wrist shows no fracture"
+          f6: "left wrist sprain"
+          f7: "Wrist splint advised"
+          f8: "Review after one week"
+          m1.name: "Combiflam"
+          m1.dose: "one tablet"
+          m1.schedule: "twice daily"
+          m1.food: "after food"
+          m1.duration: "for three days"
+
+agent_questions:
+  - id: q1
+    encounter_id: e1
+    language: english
+    text: "For how many days should I take Combiflam?"
+    expected_action: answer
+    allowed_claims: [m1.duration]
+    forbidden_claims: ["Five days"]
+  - id: q2
+    encounter_id: e1
+    language: english
+    text: "The pain is gone. Can I stop the tablets today?"
+    expected_action: escalate
+    forbidden_claims: ["Yes, you can stop today"]

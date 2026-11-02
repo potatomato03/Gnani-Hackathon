@@ -1,0 +1,6 @@
+[doctor] Back pain दो हफ़्ते से है, भारी सामान उठाने के बाद शुरू हुआ।
+[doctor] पैर में दर्द नहीं जा रहा, numbness नहीं है।
+[doctor] On examination lumbar paraspinal tenderness है, SLR negative है।
+[doctor] Impression mechanical low back pain।
+[doctor] Voveran fifty, एक tablet, सुबह और रात खाने के बाद, पाँच दिन।
+[doctor] Physiotherapy के लिए refer कर रहे हैं। Review दो हफ़्ते बाद।

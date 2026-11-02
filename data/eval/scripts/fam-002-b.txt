@@ -1,0 +1,6 @@
+[doctor] मरीज़ को दो हफ़्ते से थकान है और बार-बार पेशाब आता है।
+[doctor] BP one thirty over eighty है।
+[doctor] मरीज़ को खुद diabetes है, पाँच साल से।
+[doctor] Fasting sugar और HbA1c लिख रहे हैं।
+[doctor] मीठा कम करने को कहा है।
+[doctor] एक हफ़्ते बाद report लेकर आना है।

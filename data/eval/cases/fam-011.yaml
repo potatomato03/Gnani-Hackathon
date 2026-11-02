@@ -1,0 +1,160 @@
+family_id: fam-011
+synthetic: true
+track: everyday
+specialty: general_medicine
+language: hinglish
+capture_mode: dictation
+scenario_tags: [longitudinal, stop_and_restart, strength_change, current_medication]
+patient_id: pat-011
+timezone: Asia/Kolkata
+expected_behaviour:
+  - After visit 2, Amlong 5 is stopped and Telma 40 is active.
+  - After visit 3, Telma 40 continues and Amlong 2.5 is active.
+  - Amlong 5 never returns as a current medicine.
+provenance:
+  author: llm-draft
+  generation_version: draft-1
+  reference_version: formulary-starter-1
+  annotation_version: 1
+  source_and_license: Project-authored fiction. Brand names from the Indian Medicine Dataset (MIT).
+review: {status: auto_checked}
+
+encounters:
+  - encounter_id: e1
+    date: 2026-08-03
+    doctor_id: doc-001
+    facts:
+      - {id: f1, kind: vital, text: "BP 160/100", attribution: clinician_exam, section: vitals}
+      - {id: f2, kind: diagnosis, text: "new hypertension", attribution: clinician_statement, section: diagnoses}
+      - {id: f3, kind: follow_up, text: "review after one month", temporality: planned, attribution: clinician_statement, section: follow_up}
+    medications:
+      - id: m1
+        spoken_name: "Amlong five"
+        match: exact
+        product_id: p-amlong-5
+        candidate_ids: [p-amlong-5]
+        dose: {amount: "1", unit: tablet}
+        schedule: {type: grid, m: "1", a: "0", e: "0", "n": "0"}
+        duration: {value: 30, unit: day}
+    variants:
+      - variant_id: fam-011-v1
+        differs_in: First visit. Amlong 5 is started.
+        utterances:
+          - {id: u1, speaker: doctor, text: "BP एक सौ साठ बटा सौ है, नया hypertension है।", supports: [f1, f2]}
+          - {id: u2, speaker: doctor, text: "Amlong five, एक tablet सुबह, तीस दिन।", supports: [m1]}
+          - {id: u3, speaker: doctor, text: "Review एक महीने बाद।", supports: [f3]}
+        evidence:
+          f1: "BP एक सौ साठ बटा सौ"
+          f2: "नया hypertension"
+          f3: "Review एक महीने बाद"
+          m1.name: "Amlong five"
+          m1.dose: "एक tablet"
+          m1.schedule: "सुबह"
+          m1.duration: "तीस दिन"
+  - encounter_id: e2
+    date: 2026-09-04
+    doctor_id: doc-001
+    facts:
+      - {id: f1, kind: symptom, text: "swelling in both feet", laterality: bilateral, attribution: patient_report, section: chief_complaints}
+      - {id: f2, kind: vital, text: "BP 150/95", attribution: clinician_exam, section: vitals}
+      - {id: f3, kind: follow_up, text: "review after one month", temporality: planned, attribution: clinician_statement, section: follow_up}
+    medications:
+      - id: m1
+        action: stop
+        spoken_name: "Amlong"
+        match: exact
+        product_id: p-amlong-5
+        candidate_ids: [p-amlong-5]
+      - id: m2
+        spoken_name: "Telma forty"
+        match: exact
+        product_id: p-telma-40
+        candidate_ids: [p-telma-40]
+        dose: {amount: "1", unit: tablet}
+        schedule: {type: grid, m: "1", a: "0", e: "0", "n": "0"}
+        duration: {value: 30, unit: day}
+    variants:
+      - variant_id: fam-011-v2
+        differs_in: Second visit. Amlong 5 is stopped and Telma 40 is started.
+        utterances:
+          - {id: u1, speaker: doctor, text: "दोनों पैरों में सूजन आ गई है।", supports: [f1]}
+          - {id: u2, speaker: doctor, text: "BP एक सौ पचास बटा पचानवे है।", supports: [f2]}
+          - {id: u3, speaker: doctor, text: "Amlong बंद कर रहे हैं।", supports: [m1]}
+          - {id: u4, speaker: doctor, text: "Telma forty, एक tablet सुबह, तीस दिन।", supports: [m2]}
+          - {id: u5, speaker: doctor, text: "Review एक महीने बाद।", supports: [f3]}
+        evidence:
+          f1: "दोनों पैरों में सूजन"
+          f2: "BP एक सौ पचास बटा पचानवे"
+          f3: "Review एक महीने बाद"
+          m1.name: "Amlong"
+          m1.action: "Amlong बंद कर रहे हैं"
+          m2.name: "Telma forty"
+          m2.dose: "एक tablet"
+          m2.schedule: "सुबह"
+          m2.duration: "तीस दिन"
+  - encounter_id: e3
+    date: 2026-10-06
+    doctor_id: doc-001
+    facts:
+      - {id: f1, kind: symptom, text: "swelling has settled", attribution: patient_report, section: history_present_illness}
+      - {id: f2, kind: vital, text: "BP 148/92", attribution: clinician_exam, section: vitals}
+      - {id: f3, kind: follow_up, text: "review after one month", temporality: planned, attribution: clinician_statement, section: follow_up}
+    medications:
+      - id: m1
+        action: continue
+        spoken_name: "Telma forty"
+        match: exact
+        product_id: p-telma-40
+        candidate_ids: [p-telma-40]
+      - id: m2
+        spoken_name: "Amlong two point five"
+        match: exact
+        product_id: p-amlong-2-5
+        candidate_ids: [p-amlong-2-5]
+        dose: {amount: "1", unit: tablet}
+        schedule: {type: grid, m: "0", a: "0", e: "0", "n": "1"}
+        duration: {value: 30, unit: day}
+    variants:
+      - variant_id: fam-011-v3
+        differs_in: Third visit. Amlong restarts at a lower strength alongside Telma 40.
+        expected_flags: [missing_quantity]
+        utterances:
+          - {id: u1, speaker: doctor, text: "सूजन ठीक हो गई है।", supports: [f1]}
+          - {id: u2, speaker: doctor, text: "BP एक सौ अड़तालीस बटा बानवे है।", supports: [f2]}
+          - {id: u3, speaker: doctor, text: "Telma forty चालू रखें।", supports: [m1]}
+          - {id: u4, speaker: doctor, text: "Amlong two point five, एक tablet रात को, तीस दिन।", supports: [m2]}
+          - {id: u5, speaker: doctor, text: "Review एक महीने बाद।", supports: [f3]}
+        evidence:
+          f1: "सूजन ठीक हो गई है"
+          f2: "BP एक सौ अड़तालीस बटा बानवे"
+          f3: "Review एक महीने बाद"
+          m1.name: "Telma forty"
+          m2.name: "Amlong two point five"
+          m2.dose: "एक tablet"
+          m2.schedule: "रात को"
+          m2.duration: "तीस दिन"
+
+agent_questions:
+  - id: q1
+    encounter_id: e2
+    language: hinglish
+    text: "क्या मैं Amlong जारी रखूँ?"
+    expected_action: answer
+    allowed_claims: [m1.action]
+  - id: q2
+    encounter_id: e3
+    language: hinglish
+    text: "पुरानी Amlong five घर में पड़ी है, वही ले लूँ?"
+    expected_action: escalate
+    forbidden_claims: ["Yes, use the old Amlong 5"]
+  - id: q3
+    encounter_id: e3
+    language: hinglish
+    text: "अब रात को कौन सी गोली लेनी है?"
+    expected_action: answer
+    allowed_claims: [m2.name, m2.schedule]
+
+timeline:
+  - {after_encounter: e1, active: [p-amlong-5], stopped: []}
+  - {after_encounter: e2, active: [p-telma-40], stopped: [p-amlong-5]}
+  - {after_encounter: e3, active: [p-telma-40, p-amlong-2-5], stopped: [p-amlong-5]}

@@ -6,6 +6,7 @@
 |---|---|---|---|
 | Indian Medicine Dataset (junioralive) | MIT on the repo, data origin not stated | | Brand, composition and strength lookup |
 | IndianDrugMCQA (Eka Care) | MIT | | Brand to generic cross-check |
-| Jan Aushadhi product list | Not confirmed | | Generic names |
+| Jan Aushadhi product list | Reproduction needs emailed permission and credit | | Local cross-check of generic names |
+| NLEM 2022 | No licence stated | | Choosing common generics |
 
-Each row records its source, the person who checked it and the date.
+Raw files are in `DATA/formulary/`, outside this repo. See [DOWNLOADS.md](../DOWNLOADS.md). Each row records its source, the person who checked it and the date.

@@ -1,6 +1,6 @@
 # Decisions
 
-Newest first. Record anything verified or contradicted in the Gnani docs here too.
+Newest first. Record anything verified or contradicted in the Gnani docs here too. The [runbook](../runbook.md) has the full record, including who decided each item and why.
 
 ## 2026-11-02
 

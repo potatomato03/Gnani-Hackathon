@@ -1,0 +1,31 @@
+title: మందులు ఎలా తీసుకోవాలి
+official_note: ఆంగ్ల నివేదికే అధికారిక రికార్డు.
+unreviewed_note: ఈ అనువాదం ఇంకా సమీక్షించబడలేదు.
+ask_doctor: వైద్యుడిని అడగండి
+slots:
+  m: ఉదయం
+  a: మధ్యాహ్నం
+  e: సాయంత్రం
+  n: రాత్రి
+food:
+  after_food: భోజనం తర్వాత
+  before_food: భోజనానికి ముందు
+  with_food: భోజనంతో
+  empty_stomach: ఖాళీ కడుపుతో
+units:
+  tablet: మాత్ర
+  capsule: క్యాప్సూల్
+  puff: పఫ్
+  teaspoon: చెంచా
+frequency: రోజుకు {n} సార్లు
+as_needed: అవసరమైనప్పుడు
+as_needed_max: అవసరమైనప్పుడు, రోజుకు {n} సార్లకు మించకుండా
+duration:
+  day: '{n} రోజులు'
+  week: '{n} వారాలు'
+  month: '{n} నెలలు'
+row: '{name}: {dose}, {when}, {food}, {duration}'
+taper_row: '{name}: {steps}, {food}'
+taper_step: '{dose} {when} {duration}'
+then: ', తరువాత '
+reviewed_by: null

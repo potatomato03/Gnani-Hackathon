@@ -1,0 +1,116 @@
+{
+  "items": [
+    {
+      "id": "x1",
+      "kind": "symptom",
+      "term": "sore throat for three days",
+      "quote": "तीन दिन से गले में दर्द",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x2",
+      "kind": "symptom",
+      "term": "dry cough",
+      "quote": "सूखी खाँसी",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x3",
+      "kind": "symptom",
+      "term": "fever",
+      "quote": "बुखार नहीं है",
+      "assertion": "absent",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x4",
+      "kind": "exam",
+      "term": "throat congested",
+      "quote": "throat congested",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x5",
+      "kind": "exam",
+      "term": "tonsils normal",
+      "quote": "tonsils normal",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x6",
+      "kind": "diagnosis",
+      "term": "viral pharyngitis",
+      "quote": "viral pharyngitis लग रहा है",
+      "assertion": "present",
+      "certainty": "provisional",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x7",
+      "kind": "advice",
+      "term": "warm water gargles",
+      "quote": "गुनगुने पानी से गरारे",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x8",
+      "kind": "follow_up",
+      "term": "come back if not better in three days",
+      "quote": "तीन दिन में ठीक न हो तो दोबारा दिखाना है",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "planned",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    }
+  ],
+  "medications": [
+    {
+      "id": "rx1",
+      "action": "start",
+      "spoken_name": "Dolo six fifty",
+      "name_quote": "Dolo six fifty",
+      "dose_phrase": "एक tablet",
+      "timing_phrase": "ज़रूरत पड़ने पर",
+      "food_phrase": "खाने के बाद",
+      "duration_phrase": "तीन दिन तक",
+      "start_phrase": null,
+      "route_phrase": null,
+      "said_by": "doctor"
+    }
+  ],
+  "corrections": []
+}

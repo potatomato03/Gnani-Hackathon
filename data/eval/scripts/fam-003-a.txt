@@ -1,0 +1,6 @@
+[doctor] Patient slipped on a wet floor two days ago and has pain in the right wrist, sorry, left wrist.
+[doctor] On examination there is mild swelling over the left wrist, no deformity, and movements are painful.
+[doctor] X-ray of the left wrist shows no fracture.
+[doctor] Impression is a left wrist sprain.
+[doctor] Start Combiflam, one tablet twice daily after food for five days, sorry, three days, not five.
+[doctor] Wrist splint advised. Review after one week.

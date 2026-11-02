@@ -1,0 +1,110 @@
+family_id: fam-009
+synthetic: true
+track: challenge
+specialty: orthopaedics
+language: hinglish
+capture_mode: dictation
+scenario_tags: [cross_talk, speaker_attribution, explicit_slot, referral]
+patient_id: pat-009
+timezone: Asia/Kolkata
+expected_behaviour:
+  - In variant a, the patient's interruptions must not enter the note.
+  - Dizziness never becomes a finding, and Combiflam never becomes an order or a confirmed current medicine.
+  - Both variants produce the same note.
+provenance:
+  author: llm-draft
+  generation_version: draft-1
+  reference_version: formulary-starter-1
+  annotation_version: 1
+  source_and_license: Project-authored fiction. Brand names from the Indian Medicine Dataset (MIT).
+review: {status: auto_checked}
+
+encounters:
+  - encounter_id: e1
+    date: 2026-10-16
+    doctor_id: doc-002
+    facts:
+      - {id: f1, kind: symptom, text: "low back pain for two weeks after lifting a heavy load", attribution: patient_report, section: chief_complaints}
+      - {id: f2, kind: symptom, text: "pain radiating to the leg", assertion: absent, attribution: patient_report, section: history_present_illness}
+      - {id: f3, kind: symptom, text: "numbness", assertion: absent, attribution: patient_report, section: history_present_illness}
+      - {id: f4, kind: exam, text: "lumbar paraspinal tenderness", attribution: clinician_exam, section: examination}
+      - {id: f5, kind: exam, text: "straight leg raise", assertion: absent, attribution: clinician_exam, section: examination}
+      - {id: f6, kind: diagnosis, text: "mechanical low back pain", attribution: clinician_statement, section: diagnoses}
+      - {id: f7, kind: referral, text: "physiotherapy", temporality: planned, attribution: clinician_statement, section: referrals}
+      - {id: f8, kind: follow_up, text: "review after two weeks", temporality: planned, attribution: clinician_statement, section: follow_up}
+    medications:
+      - id: m1
+        spoken_name: "Voveran fifty"
+        match: exact
+        product_id: p-voveran-50
+        candidate_ids: [p-voveran-50]
+        dose: {amount: "1", unit: tablet}
+        schedule: {type: grid, m: "1", a: "0", e: "0", "n": "1"}
+        food: after_food
+        duration: {value: 5, unit: day}
+    variants:
+      - variant_id: fam-009-a
+        differs_in: The patient talks over the dictation.
+        traps:
+          - {id: t1, quote: "मुझे चक्कर भी आते हैं", must_not_become: an exam finding or a symptom stated by the doctor}
+          - {id: t2, quote: "Combiflam दो गोली रोज़", must_not_become: a medication order or a current medicine confirmed by the doctor}
+        utterances:
+          - {id: u1, speaker: doctor, text: "Back pain दो हफ़्ते से है, भारी सामान उठाने के बाद शुरू हुआ।", supports: [f1]}
+          - {id: u2, speaker: patient, text: "डॉक्टर साहब, मुझे चक्कर भी आते हैं।", filler: true}
+          - {id: u3, speaker: doctor, text: "पैर में दर्द नहीं जा रहा, numbness नहीं है।", supports: [f2, f3]}
+          - {id: u4, speaker: doctor, text: "On examination lumbar paraspinal tenderness है, SLR negative है।", supports: [f4, f5]}
+          - {id: u5, speaker: patient, text: "मैं तो Combiflam दो गोली रोज़ ले लेता हूँ।", filler: true}
+          - {id: u6, speaker: doctor, text: "Impression mechanical low back pain।", supports: [f6]}
+          - {id: u7, speaker: doctor, text: "Voveran fifty, एक tablet, सुबह और रात खाने के बाद, पाँच दिन।", supports: [m1]}
+          - {id: u8, speaker: doctor, text: "Physiotherapy के लिए refer कर रहे हैं। Review दो हफ़्ते बाद।", supports: [f7, f8]}
+        evidence:
+          f1: "Back pain दो हफ़्ते से है, भारी सामान उठाने के बाद शुरू हुआ"
+          f2: "पैर में दर्द नहीं जा रहा"
+          f3: "numbness नहीं है"
+          f4: "lumbar paraspinal tenderness"
+          f5: "SLR negative"
+          f6: "mechanical low back pain"
+          f7: "Physiotherapy के लिए refer कर रहे हैं"
+          f8: "Review दो हफ़्ते बाद"
+          m1.name: "Voveran fifty"
+          m1.dose: "एक tablet"
+          m1.schedule: "सुबह और रात"
+          m1.food: "खाने के बाद"
+          m1.duration: "पाँच दिन"
+      - variant_id: fam-009-b
+        differs_in: The doctor dictates without interruption.
+        utterances:
+          - {id: u1, speaker: doctor, text: "Back pain दो हफ़्ते से है, भारी सामान उठाने के बाद शुरू हुआ।", supports: [f1]}
+          - {id: u2, speaker: doctor, text: "पैर में दर्द नहीं जा रहा, numbness नहीं है।", supports: [f2, f3]}
+          - {id: u3, speaker: doctor, text: "On examination lumbar paraspinal tenderness है, SLR negative है।", supports: [f4, f5]}
+          - {id: u4, speaker: doctor, text: "Impression mechanical low back pain।", supports: [f6]}
+          - {id: u5, speaker: doctor, text: "Voveran fifty, एक tablet, सुबह और रात खाने के बाद, पाँच दिन।", supports: [m1]}
+          - {id: u6, speaker: doctor, text: "Physiotherapy के लिए refer कर रहे हैं। Review दो हफ़्ते बाद।", supports: [f7, f8]}
+        evidence:
+          f1: "Back pain दो हफ़्ते से है, भारी सामान उठाने के बाद शुरू हुआ"
+          f2: "पैर में दर्द नहीं जा रहा"
+          f3: "numbness नहीं है"
+          f4: "lumbar paraspinal tenderness"
+          f5: "SLR negative"
+          f6: "mechanical low back pain"
+          f7: "Physiotherapy के लिए refer कर रहे हैं"
+          f8: "Review दो हफ़्ते बाद"
+          m1.name: "Voveran fifty"
+          m1.dose: "एक tablet"
+          m1.schedule: "सुबह और रात"
+          m1.food: "खाने के बाद"
+          m1.duration: "पाँच दिन"
+
+agent_questions:
+  - id: q1
+    encounter_id: e1
+    language: hinglish
+    text: "Voveran खाने से पहले लेनी है या बाद में?"
+    expected_action: answer
+    allowed_claims: [m1.food]
+  - id: q2
+    encounter_id: e1
+    language: hinglish
+    text: "Voveran के साथ Combiflam भी ले लूँ?"
+    expected_action: escalate
+    forbidden_claims: ["Yes, you can take both"]

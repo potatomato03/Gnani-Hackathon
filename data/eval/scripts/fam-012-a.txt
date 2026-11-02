@@ -1,0 +1,7 @@
+[doctor] Patient కి నాలుగు రోజులుగా గొంతు నొప్పి, జ్వరం ఉన్నాయి.
+[doctor] దగ్గు లేదు.
+[doctor] Examination లో tonsils పెద్దవిగా ఉన్నాయి, exudate ఉంది.
+[doctor] Impression acute tonsillitis.
+[doctor] Augmentin six twenty five, ఒక tablet, రోజుకి రెండు సార్లు, భోజనం తర్వాత, ఐదు రోజులు.
+[doctor] గోరువెచ్చని నీళ్లతో పుక్కిలించమని చెప్పాను.
+[doctor] మూడు రోజుల తర్వాత review.

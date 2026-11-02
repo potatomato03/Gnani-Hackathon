@@ -1,0 +1,8 @@
+[doctor] दो दिन से सीने में जकड़न और wheezing है, रात को ज़्यादा।
+[doctor] Known asthma है, पाँच साल से।
+[doctor] SpO2 ninety six percent है, chest में bilateral wheeze है।
+[doctor] Impression acute exacerbation of asthma।
+[doctor] Wysolone ten, पहले तीन दिन दो tablet सुबह खाने के बाद, फिर तीन दिन एक tablet सुबह खाने के बाद।
+[doctor] Asthalin inhaler दो puff ज़रूरत पड़ने पर, दिन में चार बार से ज़्यादा नहीं।
+[doctor] Montair LC एक tablet OD, तीस दिन।
+[doctor] साँस ज़्यादा फूले तो तुरंत emergency में आना है। Review एक हफ़्ते बाद।

@@ -1,0 +1,6 @@
+# Medicine knowledge: chunking, CPU embedding, Supabase upload. Into the root folder's .venv.
+# GPU embedding uses a separate .venv-embed: fastembed-gpu==0.9.1 and onnxruntime-gpu[cuda,cudnn]==1.31.1 (runbook C-57).
+fastembed==0.9.1
+psycopg[binary]==3.3.6
+pypdf==6.21.4
+numpy

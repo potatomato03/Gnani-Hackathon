@@ -1,0 +1,5 @@
+[doctor] दोनों पैरों में सूजन आ गई है।
+[doctor] BP एक सौ पचास बटा पचानवे है।
+[doctor] Amlong बंद कर रहे हैं।
+[doctor] Telma forty, एक tablet सुबह, तीस दिन।
+[doctor] Review एक महीने बाद।

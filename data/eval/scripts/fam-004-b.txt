@@ -1,0 +1,7 @@
+[doctor] Routine follow up for high blood pressure. No chest pain and no breathlessness.
+[doctor] Currently taking Telma forty once daily.
+[doctor] Start Atorva ten, one tablet at night after food for thirty days.
+[doctor] BP today is one twenty eight over eighty two.
+[doctor] Lipid profile from last week shows LDL one sixty.
+[doctor] Continue Telma forty. Walk thirty minutes daily and reduce salt.
+[doctor] Repeat lipid profile after three months and review after three months.

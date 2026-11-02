@@ -1,0 +1,31 @@
+title: दवा कैसे लें
+official_note: आधिकारिक रिकॉर्ड अंग्रेज़ी रिपोर्ट है।
+unreviewed_note: अनुवाद की अभी जाँच नहीं हुई है।
+ask_doctor: डॉक्टर से पूछें
+slots:
+  m: सुबह
+  a: दोपहर
+  e: शाम
+  n: रात
+food:
+  after_food: खाने के बाद
+  before_food: खाने से पहले
+  with_food: खाने के साथ
+  empty_stomach: खाली पेट
+units:
+  tablet: गोली
+  capsule: कैप्सूल
+  puff: पफ़
+  teaspoon: चम्मच
+frequency: दिन में {n} बार
+as_needed: ज़रूरत पड़ने पर
+as_needed_max: ज़रूरत पड़ने पर, दिन में {n} बार से ज़्यादा नहीं
+duration:
+  day: '{n} दिन'
+  week: '{n} हफ़्ते'
+  month: '{n} महीने'
+row: '{name}: {dose}, {when}, {food}, {duration}'
+taper_row: '{name}: {steps}, {food}'
+taper_step: '{dose} {when} {duration}'
+then: ', फिर '
+reviewed_by: null
