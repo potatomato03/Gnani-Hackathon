@@ -1,0 +1,31 @@
+from datetime import datetime
+
+import pytest
+
+from voicerx.approve import ApprovalBlocked, HashMismatch, approve
+from voicerx.contracts.issues import Issue
+
+
+def test_draft_with_a_blocking_issue_cannot_be_approved(draft_report):
+    blocked = draft_report.model_copy(update={"issues": [Issue(code="missing_quantity", severity="block",
+                                                               target="rx1", message="no dose")]})
+    with pytest.raises(ApprovalBlocked):
+        approve(blocked, "Dr Test", datetime(2026, 10, 5, 12, 0))
+
+
+def test_approval_needs_a_name(draft_report):
+    with pytest.raises(ValueError):
+        approve(draft_report, " ", datetime(2026, 10, 5, 12, 0))
+
+
+def test_approved_report_keeps_the_content_and_records_who_and_when(draft_report):
+    approved = approve(draft_report, "Dr Test", datetime(2026, 10, 5, 12, 0))
+    assert approved.status == "approved" and approved.version == 1
+    assert approved.content_hash == draft_report.content_hash
+    assert approved.approved_by == "Dr Test"
+
+
+def test_draft_altered_outside_the_tools_is_refused(draft_report):
+    header = draft_report.header.model_copy(update={"patient_name": "Someone Else"})
+    with pytest.raises(HashMismatch):
+        approve(draft_report.model_copy(update={"header": header}), "Dr Test", datetime(2026, 10, 5, 12, 0))

@@ -1365,7 +1365,7 @@ git commit -m "Add stage 2 report-writing prompt"
   - It recomputes `content_hash(draft)`, and raises `HashMismatch` when that differs from the stored hash.
   - The approved report keeps the draft's version and hash.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from datetime import datetime
@@ -1403,12 +1403,12 @@ def test_draft_altered_outside_the_tools_is_refused(draft_report):
 
 The `draft_report` fixture comes from Task 8.
 
-- [ ] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
+- [x] **Step 2: Run the tests to make sure they fail, implement, then run them to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_approve.py -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add services/api/voicerx/approve.py services/api/tests
