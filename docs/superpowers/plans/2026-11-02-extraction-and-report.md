@@ -256,7 +256,7 @@ git commit -m "Add report contracts and reference data loader"
   - `parse_start(phrase: str | None, visit_date: date) -> Start`
   - Each returns `None` for text it can't parse, never a guess. `parse_start(None, …)` returns `Start(condition="unstated")`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from datetime import date
@@ -359,24 +359,24 @@ def test_unstated_start_stays_unstated():
     assert parse_start(None, date(2026, 10, 5)) == Start(condition="unstated")
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_schedule.py -q`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `numbers.py` and `schedule.py`**
+- [x] **Step 3: Implement `numbers.py` and `schedule.py`**
 
 **Approach:**
 - Run `words_to_digits` first, then match small per-language tables of unit, slot, frequency, food and duration words.
 - A correction ("X, not Y" in English, or "Y नहीं, X" in Hindi) yields X.
 - Any other phrase with two different numbers returns `None`.
 
-- [ ] **Step 4: Run the tests to make sure they pass**
+- [x] **Step 4: Run the tests to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_schedule.py -q`
 Expected: all pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/api/voicerx/pipeline services/api/tests/unit/test_schedule.py
