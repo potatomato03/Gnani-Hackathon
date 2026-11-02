@@ -340,6 +340,7 @@ All on 2 Nov 2026.
 | Built a code knowledge graph | Ran `graphify update .` on the repo: 725 nodes, 1,742 edges, 35 communities, from code only with no model calls. Output is in the git-ignored `graphify-out/`. Query it with `graphify query "<question>" --budget 600` before reading whole files. |
 | Implemented extraction/report tasks 0–15 | Contracts, references, number/schedule parsing, medicine matching, both model stages and checks, frozen drafts, audited corrections, approval, patient-language templates, PDFs, FHIR, runner, sabotage fixtures and scorer. 332 tests pass; Task 16 is in progress. See build log below for per-task checkpoints and D-72 onwards for deviations. |
 | Researched and built the follow-up agent demo, 2–3 Nov | Research with Serper (51 searches, 39 pages; [summary](docs/research/followup-agent.md)) and a [design](docs/superpowers/specs/2026-11-02-followup-agent-design.md). Merged `aditya/extraction-report` into the session branch (J-23). Built test-first: contracts, plan, red flags, routing, grounded answers, gate, conversation engine, two new offline fixtures (`fam-004-a`, `fam-010-a`), the API and the Next.js chat page. Seed patients gained `followup_whatsapp` consent. 438 tests pass; the browser check passes 18 of 18 on desktop and phone widths. |
+| Added voice notes and approval-started follow-up, 3 Nov | Read Gnani's docs for the Prisma and Timbre REST endpoints. Built test-first: the Gnani client, voice in the conversation, approved-visit scanning, `voicerx.approve --review-date --followup`, the voice and visit API endpoints, and the web page's Listen, 🎤 and 🔊 controls (D-111, D-112). No live Gnani call yet: this container has no `GNANI_API_KEY`. 471 tests pass; the browser check passes 24 of 24 with the fake speech client and 20 of 20 with voice off. |
 
 Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved voices, and the conflict between its Synthea advice and its own rule on histories.
 
@@ -365,6 +366,8 @@ Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved 
 | Follow-up chat demo | `apps/web` | Next.js 16; `scripts/e2e.mjs` browser check |
 | Warning-sign rules | `data/rules/red_flags.yaml` | Draft, Hindi (Devanagari and Latin) and English, pending doctor review |
 | Offline demo fixtures | `services/api/tests/fixtures/fam-004-a`, `fam-010-a` | Hand-written stage outputs quoting the typed scripts; both pass Check 1 and 2 |
+| Gnani speech client | `services/api/voicerx/ingest/gnani.py` | Prisma v3.0 and Timbre v3.0 REST; `fake_speech.py` beside it for tests |
+| Follow-up voice and visits | `services/api/voicerx/agent/voice.py`, `agent/visits.py` | On-demand voicing with cache, voice-note transcription, approved-visit scan, `start_followup` |
 
 Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaedic families, 1 family each for Hindi, Tamil and Telugu, and the shortest scripts are under the 15-second target by estimate.
 
@@ -414,6 +417,8 @@ Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaed
 | Follow-up agent sabotage tests | A changed dose, an uncited answer, a softened urgent reply, a non-urgent reply to a warning sign, an altered report and a check-in outside sending hours are all refused by the gate |
 | Follow-up patient questions (`tools/eval/followup_questions.py`) | 7 of 7 expected actions (answer 3/3, escalate 3/3, urgent 1/1), 0 forbidden claims. Coverage 7 of 29 questions; development data, not held out |
 | Follow-up browser check (`apps/web/scripts/e2e.mjs`) | 18 of 18 on 1280 px and 390 px widths: AI disclosure and approved medicine in the summary, quick replies, worse and urgent tasks, STOP, grounded answer, stop-medicine request escalated, no horizontal scroll |
+| Full suite after voice notes and approval-started follow-up, 3 Nov | 471 passed, 2 skipped. Voice tests run on a fake Gnani client: request shape, 429 retry, key never in errors, cache, WAV limits, empty transcript, voice red flag, no stored recording. |
+| Browser check with voice, 3 Nov | 24 of 24 with `VOICERX_FAKE_SPEECH=1` (Listen, synthetic voice note answered from the approved row, fake-microphone recording converted to WAV and accepted) and 20 of 20 with voice off (controls disabled with the reason). No live Gnani call has been made for the follow-up yet. |
 
 What the checker can't do: it confirms that quotes exist and that scripts and specs agree. It can't tell whether a quote truly means the fact, or whether a case is clinically right. Those need people.
 

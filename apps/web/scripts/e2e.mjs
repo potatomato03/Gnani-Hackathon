@@ -1,5 +1,6 @@
 // End-to-end check of the follow-up demo in a real browser.
 // Needs the API on :8000 and the web app on :3000 (see README), and Playwright with a Chromium build.
+// Start the API with VOICERX_FAKE_SPEECH=1 so the voice checks run offline and spend no Gnani credits.
 // Usage: node apps/web/scripts/e2e.mjs [screenshot-dir]
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
@@ -8,10 +9,13 @@ const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
 const WEB = process.env.WEB_URL ?? "http://localhost:3000";
+const API = process.env.API_URL ?? "http://localhost:8000";
 const shots = process.argv[2];
 if (shots) mkdirSync(shots, { recursive: true });
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"], // a fake microphone
+});
 const results = [];
 const check = (name, ok) => {
   results.push([name, ok]);
@@ -41,31 +45,54 @@ async function run(viewport, label) {
   await page.locator(".task.worse").first().waitFor();
   check(`${label}: "worse" creates a task for the doctor`, await page.locator(".task.worse").count() >= 1);
 
-  await page.getByLabel("Message").fill("seene mein dard ho raha hai");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByLabel("Message", { exact: true }).fill("seene mein dard ho raha hai");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await chat.locator(".bubble.urgent").waitFor();
   const first = page.locator(".tasks .task").first();
   check(`${label}: warning sign gets the urgent reply and an urgent task on top`,
     (await first.getAttribute("class")).includes("urgent"));
   if (shots) await page.screenshot({ path: `${shots}/${label}-2-urgent.png`, fullPage: true });
 
-  await page.getByLabel("Message").fill("STOP");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByLabel("Message", { exact: true }).fill("STOP");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await chat.locator(".bubble.system").waitFor();
   check(`${label}: STOP confirms and disables Advance`,
     await page.getByRole("button", { name: /Advance to next check-in/ }).isDisabled());
 
-  await page.selectOption("select", "fam-010-a");
+  const asthma = await page.$$eval("select option", (options) =>
+    options.find((o) => o.textContent.includes("Wysolone"))?.value);
+  await page.selectOption("select", asthma);
   await chat.locator(".bubble.summary", { hasText: "WYSOLONE" }).waitFor();
-  await page.getByLabel("Message").fill("Inhaler दिन में कितनी बार ले सकते हैं?");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByLabel("Message", { exact: true }).fill("Inhaler दिन में कितनी बार ले सकते हैं?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await chat.locator(".bubble.answer").waitFor();
   check(`${label}: medicine question answered from the approved row`,
     /ASTHALIN/.test(await chat.locator(".bubble.answer").innerText()));
-  await page.getByLabel("Message").fill("Wysolone अभी बंद कर दूँ?");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByLabel("Message", { exact: true }).fill("Wysolone अभी बंद कर दूँ?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await page.locator(".task.question").first().waitFor();
   check(`${label}: request to stop a medicine goes to the doctor`, await page.locator(".task.question").count() >= 1);
+
+  const voiceOn = (await (await fetch(API + "/health")).json()).speech !== "off";
+  if (voiceOn) {
+    const listened = page.waitForResponse((r) => r.url().includes("/voice") && r.request().method() === "POST");
+    await chat.locator(".bubble.summary .listen").click();
+    check(`${label}: Listen voices the clinic message`, (await listened).ok());
+    await page.getByLabel("Message", { exact: true }).fill("Montair कब लेनी है?");
+    await page.getByRole("button", { name: "Send as synthetic voice note" }).click();
+    await chat.locator(".bubble.patient .tag.voice").first().waitFor();
+    await chat.locator(".bubble.answer", { hasText: "MONTAIR" }).waitFor();
+    check(`${label}: synthetic voice note is transcribed and answered from the approved row`, true);
+    await page.getByRole("button", { name: "Record a voice note" }).click();
+    await page.locator(".recording").waitFor();
+    await page.waitForTimeout(1500);
+    const sent = page.waitForResponse((r) => r.url().endsWith("/voice") && r.request().method() === "POST");
+    await page.getByRole("button", { name: "Stop and send voice note" }).click();
+    check(`${label}: microphone voice note is converted to WAV and accepted`, (await sent).ok());
+  } else {
+    check(`${label}: voice controls are disabled with the reason shown`,
+      await page.getByRole("button", { name: "Record a voice note" }).isDisabled());
+  }
   if (shots) await page.screenshot({ path: `${shots}/${label}-3-asthma.png`, fullPage: true });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(`${label}: no horizontal scroll`, !overflow);

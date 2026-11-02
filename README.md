@@ -62,7 +62,27 @@ In a second terminal, start the web app and open http://localhost:3000:
 cd apps/web && npm install && npm run dev
 ```
 
-Pick a visit, press **Advance to next check-in** to move the demo clock, and reply with the buttons or by typing. **Reset demo** clears every conversation. Conversations are saved under the ignored `runs/followup-demo/`. Set `NEXT_PUBLIC_API_URL` if the API runs elsewhere. With both running, `node apps/web/scripts/e2e.mjs` checks the main flows in a browser (needs Playwright).
+Pick a visit, press **Advance to next check-in** to move the demo clock, and reply with the buttons or by typing. **Reset demo** clears every conversation. Conversations are saved under the ignored `runs/followup-demo/`. Set `NEXT_PUBLIC_API_URL` if the API runs elsewhere. With both running, `node apps/web/scripts/e2e.mjs` checks the main flows in a browser (needs Playwright). Start the API with `VOICERX_FAKE_SPEECH=1` to check the voice controls offline with a fake speech client.
+
+### Voice notes (Gnani Prisma and Timbre)
+
+Voice is off until the API has a Gnani key: set `GNANI_API_KEY` in `.env` (or as an environment variable) and restart the API. Then:
+
+- **▶ Listen** on a clinic message speaks it with Timbre v3.0. Each exact text is synthesised once and cached in `runs/followup-demo/audio/`, so replays cost nothing.
+- **🎤** records a voice note of up to 30 seconds. The browser converts it to a 16 kHz WAV, Prisma v3.0 transcribes it, and the transcript goes through the same rules as a typed message. The recording itself is never saved.
+- **🔊** (shown while you type) sends the typed text as a synthetic voice note: Timbre speaks it in a patient voice and Prisma transcribes it, so a demo needs no real person's voice.
+
+Every Gnani call spends credits, so nothing is voiced or transcribed until someone asks.
+
+### Starting follow-up from a real approval
+
+Any `approved_report.json` under `runs/` shows up in the app's visit list. To start the follow-up when the doctor approves:
+
+```bash
+PYTHONPATH=services/api .venv/bin/python -m voicerx.approve runs/<run>/<case> --by "Dr Name" --review-date 2026-11-12 --followup
+```
+
+`--review-date` records a review date the doctor confirms, so the patient is reminded two days before; it is never read from report text. `--followup` sends the visit summary straight away. A patient whose record has no follow-up consent is refused.
 
 `PYTHONPATH=services/api python tools/eval/followup_questions.py` scores the agent on the case files' patient questions.
 

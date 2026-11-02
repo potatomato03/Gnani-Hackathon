@@ -115,7 +115,15 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .compose { display: flex; gap: 8px; padding: 8px 10px; background: var(--panel); border-top: 1px solid var(--line); }
 .compose input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--bg); }
-.compose button { width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+.compose .round { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+.compose .round.alt { background: var(--panel); color: var(--accent); border: 1px solid var(--accent); }
+.compose .round.stop { background: var(--urgent); color: #fff; }
+.recording { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 20px; background: var(--urgent-bg); color: var(--urgent); font-size: 14px; }
+.recording .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--urgent); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .recording .dot { animation: none; } }
+.listen { display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.tag.voice { color: var(--muted); }
 .hints { padding: 6px 12px 10px; background: var(--panel); color: var(--muted); font-size: 12px; line-height: 1.8; }
 
 .doctor { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; }

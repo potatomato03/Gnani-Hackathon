@@ -24,9 +24,9 @@ The pipeline is on `aditya/extraction-report`; the follow-up agent and web demo 
 
 The pipeline runs transcript → Stage 1 model (`extraction.json`) → Check 1 code (`checked_extraction.json`) → Stage 2 model (`report_fields.json`) → Check 2 code (`draft_report.json`) → doctor corrections (`voicerx.resolve`) → approval (`voicerx.approve`) → PDF and ABDM FHIR bundles. Outputs go to `runs/<run_id>/<case_id>/`.
 
-Follow-up agent (on `claude/vibrant-archimedes-umbogz`): from an `ApprovedReport`, code plans check-ins (`agent/plan.py`); patient replies are routed by buttons, keywords and rules-first red flags (`agent/conversation.py`, `data/rules/red_flags.yaml`); medicine questions are answered only with the approved row (`agent/ground.py`); every outbound message passes `agent/gate.py`. `voicerx/app.py` serves it, and `apps/web` is the simulated WhatsApp chat. Runbook D-104 to D-110.
+Follow-up agent (on `claude/vibrant-archimedes-umbogz`): from an `ApprovedReport`, code plans check-ins (`agent/plan.py`); patient replies are routed by buttons, keywords and rules-first red flags (`agent/conversation.py`, `data/rules/red_flags.yaml`); medicine questions are answered only with the approved row (`agent/ground.py`); every outbound message passes `agent/gate.py`. Voice notes use Gnani over REST (`ingest/gnani.py`, `agent/voice.py`): Timbre speaks a clinic message on demand and caches it, Prisma transcribes patient voice notes, and recorded audio is never stored. Any approved report under `runs/` is a follow-up visit (`agent/visits.py`); `voicerx.approve --followup` starts it. `voicerx/app.py` serves it all, and `apps/web` is the simulated WhatsApp chat. Runbook D-104 to D-112.
 
-Not built yet: the doctor dashboard, voice notes and live Gnani speech, model-read patient replies, the real WhatsApp adapter, Supabase schema for the app, the jobs worker.
+Not built yet: the doctor dashboard and web approval screen, live calls (Gnani telephony or WhatsApp calling), model-read patient replies, the real WhatsApp adapter, Supabase schema for the app, the jobs worker.
 
 ## Hard rules
 
@@ -60,7 +60,7 @@ These bind all pipeline code. The spec and plan have the full list.
 
 - **Test-first.** Write the test, see it fail for the expected reason, make it pass, then run the whole suite before committing.
 - **Never weaken, skip or delete a test to get green.** If a test looks wrong, record why in the runbook as a correction and fix it only if the spec supports the fix.
-- **Keep the runbook current, in the same commit as the change it describes** (D-03). Add entries at the end of each section and never rewrite history: mark an old entry `Replaced` and add a new one. New decisions get the next `D-` number with a status (Confirmed, Assistant call, Proposed, Open, Replaced). Mistakes get a `C-` row, ambiguous requests get a `J-` row, and open questions get a `Q-` row. A decision you make yourself is an **Assistant call**, which the team can overrule. As of the last runbook update, the highest numbers in use are D-110, C-60, J-23 and Q-28.
+- **Keep the runbook current, in the same commit as the change it describes** (D-03). Add entries at the end of each section and never rewrite history: mark an old entry `Replaced` and add a new one. New decisions get the next `D-` number with a status (Confirmed, Assistant call, Proposed, Open, Replaced). Mistakes get a `C-` row, ambiguous requests get a `J-` row, and open questions get a `Q-` row. A decision you make yourself is an **Assistant call**, which the team can overrule. As of the last runbook update, the highest numbers in use are D-112, C-60, J-24 and Q-28.
 - **Report eval results as numerator/denominator with coverage.** Name the build, prompt version and data. Synthetic results are not evidence of real-clinic performance.
 - **Live model calls only when the task needs them.** Otherwise use fakes, fixtures and the cache under `runs/`.
 - **Clinical and language content you write is a draft.** Mark it pending review. You are not a clinical reviewer, and Telugu and Tamil need a native speaker. Cases stop at `auto_checked` until an independent person reviews them (D-28).
@@ -70,7 +70,7 @@ These bind all pipeline code. The spec and plan have the full list.
 
 Cloud sessions run in a Linux container as root, with no `.env`, no `../.venv`, no `../DATA`, no GPU and no Ollama. The runbook's Windows paths (`../.venv/Scripts/python`, `D:\Study\JANANI\…`, Edge) describe Aditya's laptop and don't apply here.
 
-Set up and run the tests (checked on `claude/vibrant-archimedes-umbogz` in a cloud container: 438 passed, 2 skipped):
+Set up and run the tests (checked on `claude/vibrant-archimedes-umbogz` in a cloud container: 471 passed, 2 skipped):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -q -r services/api/requirements.txt -r tools/corpus/requirements.txt
@@ -82,8 +82,9 @@ mkdir -p runs && PYTHONPATH=services/api PDF_BROWSER=$PWD/tools/cloud/headless-c
 
 - `pytest.ini` sets `--basetemp=runs/pytest-tmp`, so `runs/` must exist first. Without it, about 40 tests error.
 - PDF rendering needs `PDF_BROWSER=tools/cloud/headless-chrome.sh`. That wrapper runs the pre-installed chrome-headless-shell with `--no-sandbox`. Always set it: without it the renderer finds `/usr/bin/google-chrome`, which stalls on `--print-to-pdf` here, and tests that render a PDF hang. Don't run `playwright install`.
-- The web demo: `cd apps/web && npm install && npm run lint && npm run build`. To check it in a browser, start the API (`PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000`) and `npx next start -p 3000` in the background, then `NODE_PATH=$(npm root -g) node apps/web/scripts/e2e.mjs <screenshot-dir>`. Stop the servers by PID (`ps -eo pid,args`), not `pkill -f`, which can match and kill the shell running it.
+- The web demo: `cd apps/web && npm install && npm run lint && npm run build`. To check it in a browser, start the API (`PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000`) and `npx next start -p 3000` in the background, then `NODE_PATH=$(npm root -g) node apps/web/scripts/e2e.mjs <screenshot-dir>`. Start the API with `VOICERX_FAKE_SPEECH=1` to cover the voice controls without spending Gnani credits. Stop the servers by PID (`ps -eo pid,args`), not `pkill -f`, which can match and kill the shell running it.
 - Module commands need `PYTHONPATH=services/api`, for example `python -m voicerx.pipeline.run --help`.
+- Gnani voice needs `GNANI_API_KEY` as an environment variable in the cloud environment's settings (never pasted in chat). Without it, `/health` reports `speech: off` and the voice endpoints return 503. Each Prisma or Timbre call spends credits (rule 7): keep calls on demand, and report live results as worked or failed only (Q-04).
 - Provider keys exist only if they're set as environment secrets. Without them, don't attempt live Gemini, Groq or Gnani calls. Ollama is never available here. Cached and typed paths work offline.
 - `tools/corpus/build_formulary.py` and the audio tools need `../DATA`, Whisper or the GPU. They can't run here.
 - Commit the work you want to keep and push it to the session branch. The container is temporary, and `runs/` is never committed.

@@ -1,6 +1,6 @@
 # Follow-up agent design
 
-Status: **demo built** (text and buttons, simulated chat); see "As built" below. Voice, models and the real WhatsApp adapter are not built. It rests on [the research](../../research/followup-agent.md), which the bracketed `R` numbers below refer to: [R4] is source 4 there. The extraction and report backend it builds on is on `aditya/extraction-report`.
+Status: **demo built** (simulated chat with text, buttons and Gnani voice notes, started from any approval); see the as-built sections below. Model-read replies, live calls and the real WhatsApp adapter are not built. It rests on [the research](../../research/followup-agent.md), which the bracketed `R` numbers below refer to: [R4] is source 4 there. The extraction and report backend it builds on is on `aditya/extraction-report`.
 
 ## Goal
 
@@ -223,6 +223,14 @@ Recorded in `runbook.md` when the demo was built. The IDs first proposed here (D
 - `DoctorTask` also carries `note`, a one-line English summary with the patient's words, and a `callback` kind for "DOCTOR" requests.
 - Follow-up wording lives in `services/api/voicerx/agent/templates/{hi,en}.yaml`, not inside the patient-box templates, so the PDF's templates stay untouched. Medicine rows still come from `exports/patient_box.py`. Telugu and Tamil follow-up wording is not written yet (Q-26).
 - `Message`, `Awaiting` and `Conversation` hold the chat itself. All are in `services/api/voicerx/contracts/followup.py`.
+
+## Voice notes and approval (as built, D-111 and D-112)
+
+- **Timbre** (`timbre-v3.0`, voice `Chetana`, language `auto` for Hindi and `en-IN` for English) speaks a clinic message only when someone taps Listen. The spoken text is exactly the message that passed the gate. Audio is cached by a hash of model, voice, language and text.
+- **Prisma** (`prisma-v3.0`, `format=codemix`, hints `hi-IN,en-IN` or `en-IN,hi-IN`, no keyterms) transcribes a patient voice note of up to 30 seconds. The browser converts the recording to a 16 kHz mono WAV, because Prisma's REST endpoint doesn't list webm. The transcript runs through the same rules as typed text. The recording is held in memory and never written to disk. An empty transcript gets a fixed "couldn't hear" reply.
+- **Synthetic voice notes:** Timbre (patient voice `Shubham`) then Prisma, so the demo needs no real voice.
+- **The client** (`ingest/gnani.py`) sends one request at a time, retries 429, and keeps the key out of errors. Tests and the offline browser check use a fake client.
+- **Approval starts follow-up.** Any approved report under `runs/` that matches its fingerprint is a visit. Consent is read from the frozen record snapshot. `voicerx.approve --review-date … --followup` records the doctor-confirmed review date in `followup.json` and sends the summary. The demo fixtures are ordinary approved visits marked `source: demo`.
 
 ## Out of scope
 

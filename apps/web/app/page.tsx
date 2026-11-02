@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type ClinicTask, type Conversation, type DemoVisit, type Message } from "@/lib/api";
+import { api, type ClinicTask, type Conversation, type Health, type Message, type Visit } from "@/lib/api";
+import { MAX_SECONDS, toWav16k } from "@/lib/wav";
 
 const IST = "Asia/Kolkata";
 const time = (iso: string) =>
@@ -26,17 +27,25 @@ const TOUCH_LABEL: Record<string, string> = {
   end_of_course: "End-of-course check",
   review: "Review reminder",
 };
+const VOICE_OFF = "Voice is off: add GNANI_API_KEY to the API's environment to use Gnani Prisma and Timbre.";
 
 export default function Page() {
-  const [visits, setVisits] = useState<DemoVisit[]>([]);
-  const [caseId, setCaseId] = useState("fam-001-a");
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [visitId, setVisitId] = useState<string | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
   const [conv, setConv] = useState<Conversation | null>(null);
   const [tasks, setTasks] = useState<ClinicTask[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState<string | null>(null);
+  const [recording, setRecording] = useState<number | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const player = useRef<HTMLAudioElement | null>(null);
+
+  const voiceOn = health !== null && health.speech !== "off";
 
   const run = useCallback(async (step: () => Promise<Conversation | void>) => {
     setBusy(true);
@@ -52,24 +61,28 @@ export default function Page() {
     }
   }, []);
 
-  const startVisit = useCallback(
-    (id: string) =>
+  const open = useCallback(
+    (id: string, restart = false) =>
       run(async () => {
         setNotice(null);
-        return api.start(id);
+        setVisitId(id);
+        return api.start(id, restart);
       }),
     [run],
   );
 
   useEffect(() => {
-    api
-      .visits()
-      .then((list) => {
+    Promise.all([api.health(), api.visits()])
+      .then(([h, list]) => {
+        setHealth(h);
         setVisits(list);
-        return startVisit("fam-001-a");
+        const first = list.find((v) => v.consent);
+        if (first) return open(first.visit_id);
       })
-      .catch(() => setError("Cannot reach the follow-up API. Start it with: PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000"));
-  }, [startVisit]);
+      .catch(() =>
+        setError("Cannot reach the follow-up API. Start it with: PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000"),
+      );
+  }, [open]);
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -81,7 +94,7 @@ export default function Page() {
   );
   const lastClinic = conv ? [...conv.messages].reverse().find((m) => m.sender === "clinic") : undefined;
   const openButtons = lastClinic && conv?.awaiting && lastClinic.buttons.length ? lastClinic.buttons : [];
-  const visit = visits.find((v) => v.case_id === caseId);
+  const visit = visits.find((v) => v.visit_id === visitId);
 
   const send = (body: { text: string } | { button: string }) => {
     if (!conv) return;
@@ -94,6 +107,75 @@ export default function Page() {
       setNotice(next.advanced ? null : "Nothing more is scheduled for this visit.");
       return next;
     });
+  };
+
+  const listen = async (m: Message) => {
+    if (!conv) return;
+    setError(null);
+    setPlaying(m.id);
+    try {
+      let audioId = m.audio_id;
+      if (!audioId) {
+        // First play: Timbre synthesises this exact message once; later plays use the cached file.
+        const voiced = await api.voice(conv.id, m.id);
+        audioId = voiced.audio_url.slice("/audio/".length, -".mp3".length);
+        const id = audioId;
+        setConv({ ...conv, messages: conv.messages.map((x) => (x.id === m.id ? { ...x, audio_id: id } : x)) });
+      }
+      const url = api.audioUrl(audioId);
+      player.current?.pause();
+      const audio = new Audio(url);
+      player.current = audio;
+      audio.onended = () => setPlaying(null);
+      audio.onerror = () => setPlaying(null);
+      await audio.play().catch(() => setPlaying(null));
+    } catch (e) {
+      setPlaying(null);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (!conv) return;
+    if (recorder.current) {
+      recorder.current.stop();
+      return;
+    }
+    setError(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError("Microphone not available. You can send a synthetic voice note instead.");
+      return;
+    }
+    const chunks: Blob[] = [];
+    const rec = new MediaRecorder(stream);
+    recorder.current = rec;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      const seconds = Math.floor((Date.now() - started) / 1000);
+      setRecording(seconds);
+      if (seconds >= MAX_SECONDS) rec.stop();
+    }, 250);
+    setRecording(0);
+    rec.ondataavailable = (e) => chunks.push(e.data);
+    rec.onstop = () => {
+      window.clearInterval(timer);
+      stream.getTracks().forEach((t) => t.stop());
+      recorder.current = null;
+      setRecording(null);
+      const conversationId = conv.id;
+      run(async () => api.voiceNote(conversationId, await toWav16k(new Blob(chunks, { type: rec.mimeType }))));
+    };
+    rec.start();
+  };
+
+  const sendSynthetic = () => {
+    const text = draft.trim();
+    if (!conv || !text) return;
+    setDraft("");
+    run(() => api.syntheticVoice(conv.id, text));
   };
 
   return (
@@ -111,18 +193,12 @@ export default function Page() {
         </div>
         <div className="controls">
           <label className="field">
-            <span>Visit</span>
-            <select
-              value={caseId}
-              onChange={(e) => {
-                setCaseId(e.target.value);
-                startVisit(e.target.value);
-              }}
-              disabled={busy}
-            >
+            <span>Approved visit</span>
+            <select value={visitId ?? ""} onChange={(e) => open(e.target.value)} disabled={busy || !visits.length}>
               {visits.map((v) => (
-                <option key={v.case_id} value={v.case_id}>
-                  {v.patient_name} · {v.medicines.join(", ")} ({v.language})
+                <option key={v.visit_id} value={v.visit_id} disabled={!v.consent}>
+                  {v.source === "demo" ? "Demo" : "Approved run"} · {v.patient_name} · {v.medicines.join(", ")} ({v.language})
+                  {v.consent ? "" : " · no follow-up consent"}
                 </option>
               ))}
             </select>
@@ -137,10 +213,10 @@ export default function Page() {
               run(async () => {
                 setNotice(null);
                 await api.reset();
-                return api.start(caseId);
+                if (visitId) return api.start(visitId);
               })
             }
-            disabled={busy}
+            disabled={busy || !visitId}
           >
             Reset demo
           </button>
@@ -157,7 +233,7 @@ export default function Page() {
               <strong>{conv?.clinic_name ?? "Clinic"}</strong>
               <small>AI assistant · {conv ? `for ${conv.patient_name}` : "…"}</small>
             </div>
-            <span className="sim">Simulated</span>
+            <span className="sim">{health?.speech === "fake" ? "Simulated · fake voice" : "Simulated"}</span>
           </div>
           <div className="chat" aria-live="polite">
             {conv?.messages.map((m, i) => {
@@ -166,7 +242,13 @@ export default function Page() {
               return (
                 <div key={m.id}>
                   {newDay && <div className="day">{day(m.at)}</div>}
-                  <Bubble m={m} />
+                  <Bubble
+                    m={m}
+                    voiceOn={voiceOn}
+                    fake={health?.speech === "fake"}
+                    playing={playing === m.id}
+                    onListen={() => listen(m)}
+                  />
                 </div>
               );
             })}
@@ -192,19 +274,56 @@ export default function Page() {
               send({ text });
             }}
           >
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={conv?.stopped ? "Messages stopped" : "Type a message"}
-              aria-label="Message"
-              maxLength={2000}
-              disabled={busy || !conv}
-            />
-            <button type="submit" disabled={busy || !conv || !draft.trim()} aria-label="Send">
-              ➤
-            </button>
+            {recording !== null ? (
+              <div className="recording" role="status">
+                <span className="dot" aria-hidden /> Recording {recording}s / {MAX_SECONDS}s — tap ■ to send
+              </div>
+            ) : (
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={conv?.stopped ? "Messages stopped" : "Type a message"}
+                aria-label="Message"
+                maxLength={2000}
+                disabled={busy || !conv}
+              />
+            )}
+            {draft.trim() && recording === null ? (
+              <>
+                <button
+                  type="button"
+                  className="round alt"
+                  onClick={sendSynthetic}
+                  disabled={busy || !conv || !voiceOn || draft.trim().length > 300}
+                  aria-label="Send as synthetic voice note"
+                  title={voiceOn ? "Send as a synthetic voice note (Timbre voice, transcribed by Prisma)" : VOICE_OFF}
+                >
+                  🔊
+                </button>
+                <button type="submit" className="round" disabled={busy || !conv} aria-label="Send">
+                  ➤
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className={`round ${recording !== null ? "stop" : ""}`}
+                onClick={toggleRecording}
+                disabled={busy || !conv || !voiceOn || conv.stopped}
+                aria-label={recording !== null ? "Stop and send voice note" : "Record a voice note"}
+                title={voiceOn ? "Record a voice note (up to 30 s). Only the transcript is kept." : VOICE_OFF}
+              >
+                {recording !== null ? "■" : "🎤"}
+              </button>
+            )}
           </form>
           <div className="hints">
+            {voiceOn ? (
+              <>Tap ▶ on a message to hear it (Gnani Timbre). Record 🎤, or type and tap 🔊 for a synthetic voice note.</>
+            ) : (
+              <>{VOICE_OFF}</>
+            )}
+            <br />
             Try: <code>seene mein dard ho raha hai</code> · <code>Inhaler दिन में कितनी बार ले सकते हैं?</code> ·{" "}
             <code>Wysolone अभी बंद कर दूँ?</code> · <code>DOCTOR</code> · <code>STOP</code>
           </div>
@@ -213,11 +332,13 @@ export default function Page() {
         <section className="doctor" aria-label="What the doctor sees">
           <h2>What the doctor sees</h2>
           <p className="muted">
-            {visit ? `${visit.doctor_name} · visit on ${visit.visit_date}` : ""} · Needs attention first; routine answers are
-            collapsed.
+            {visit
+              ? `${visit.doctor_name} · visit on ${visit.visit_date} · approved by ${visit.approved_by}` +
+                (visit.review_date ? ` · review ${visit.review_date}` : "")
+              : ""}
           </p>
           <h3>
-            Needs attention, all demo patients <span className="count">{tasks.length}</span>
+            Needs attention, all patients <span className="count">{tasks.length}</span>
           </h3>
           {tasks.length === 0 ? (
             <p className="empty">Nothing needs the doctor yet.</p>
@@ -242,9 +363,12 @@ export default function Page() {
                 <li key={r.id}>
                   <div className="rec-head">
                     <span className={`act ${r.action}`}>{r.action}</span>
-                    <small>{day(r.received_at)} {time(r.received_at)} · {r.transcript_source}</small>
+                    <small>
+                      {day(r.received_at)} {time(r.received_at)} ·{" "}
+                      {r.transcript_source === "prisma" ? "voice note (Prisma)" : r.transcript_source}
+                    </small>
                   </div>
-                  <p className="quote">«{r.raw_text}»</p>
+                  <p className="quote">«{r.raw_text || "no speech heard"}»</p>
                   {r.answers.map((a, i) => (
                     <p key={i} className="ans">
                       {a.question.replace(/_/g, " ")}: <b>{a.value.replace(/_/g, " ")}</b>
@@ -272,7 +396,8 @@ export default function Page() {
           </ol>
           <p className="muted small">
             Planned by code from the approved report, 09:00–20:00 IST, at most five per visit. Warning-sign rules and
-            message wording are drafts pending doctor and language review.
+            message wording are drafts pending doctor and language review. Voice notes are transcribed and the recording
+            is discarded.
           </p>
         </section>
       </main>
@@ -280,18 +405,30 @@ export default function Page() {
   );
 }
 
-function Bubble({ m }: { m: Message }) {
+type BubbleProps = { m: Message; voiceOn: boolean; fake: boolean; playing: boolean; onListen: () => void };
+
+function Bubble({ m, voiceOn, fake, playing, onListen }: BubbleProps) {
   return (
     <div className={`bubble ${m.sender} ${m.kind}`}>
       {m.kind === "answer" && <span className="tag">From your approved prescription</span>}
       {m.kind === "urgent" && <span className="tag">Urgent</span>}
-      <p>{m.text}</p>
+      {m.voice && (
+        <span className="tag voice">
+          🎤 Voice note · {fake ? "fake transcription (offline test, no Gnani call)" : "transcribed by Gnani Prisma"}
+        </span>
+      )}
+      <p>{m.voice && !m.text ? "(no speech heard)" : m.text}</p>
       {m.sender === "clinic" && m.buttons.length > 0 && (
         <div className="inline-buttons" aria-hidden>
           {m.buttons.map((b) => (
             <span key={b.id}>{b.label}</span>
           ))}
         </div>
+      )}
+      {m.sender === "clinic" && voiceOn && (
+        <button className="listen" onClick={onListen} disabled={playing} aria-label="Listen to this message">
+          {playing ? "♪ Playing…" : "▶ Listen"}
+        </button>
       )}
       <time>{time(m.at)}</time>
     </div>

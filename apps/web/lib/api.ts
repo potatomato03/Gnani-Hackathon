@@ -11,6 +11,8 @@ export type Message = {
   at: string;
   touch_id: string | null;
   cites: string[];
+  audio_id: string | null;
+  voice: boolean;
 };
 
 export type Touch = {
@@ -51,6 +53,7 @@ export type Conversation = {
   id: string;
   synthetic: true;
   case_id: string;
+  visit_id: string | null;
   patient_name: string;
   doctor_name: string;
   clinic_name: string;
@@ -66,24 +69,33 @@ export type Conversation = {
   advanced?: boolean;
 };
 
-export type DemoVisit = {
+export type Visit = {
+  visit_id: string;
   case_id: string;
+  source: "demo" | "run";
   synthetic: true;
   patient_name: string;
   doctor_name: string;
   clinic_name: string;
   language: string;
   visit_date: string;
+  approved_by: string;
+  review_date: string | null;
+  consent: boolean;
   medicines: string[];
+  conversation_id: string | null;
 };
+
+export type Health = { ok: boolean; synthetic: true; speech: "gnani" | "fake" | "off" };
 
 export const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
+  const raw = body instanceof Blob;
   const response = await fetch(API + path, {
     method: body === undefined ? "GET" : "POST",
-    headers: body === undefined || body === null ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined || body === null ? undefined : JSON.stringify(body),
+    headers: body === undefined || body === null ? undefined : { "Content-Type": raw ? "audio/wav" : "application/json" },
+    body: body === undefined || body === null ? undefined : raw ? (body as Blob) : JSON.stringify(body),
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
@@ -93,11 +105,19 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
-  visits: () => call<DemoVisit[]>("/demo/visits"),
-  start: (caseId: string) => call<Conversation>(`/demo/visits/${caseId}/start`, null),
+  health: () => call<Health>("/health"),
+  visits: () => call<Visit[]>("/visits"),
+  start: (visitId: string, restart = false) =>
+    call<Conversation>(`/visits/${visitId}/start${restart ? "?restart=true" : ""}`, null),
   send: (id: string, body: { text: string } | { button: string }) =>
     call<Conversation>(`/conversations/${id}/messages`, body),
   advance: (id: string) => call<Conversation>(`/conversations/${id}/advance`, null),
   tasks: () => call<ClinicTask[]>("/clinic/tasks"),
   reset: () => call<{ reset: boolean }>("/demo/reset", null),
+  // Voice (Gnani). Each call spends credits unless the audio is already cached.
+  voice: (id: string, messageId: string) =>
+    call<{ audio_url: string; cached: boolean }>(`/conversations/${id}/messages/${messageId}/voice`, null),
+  voiceNote: (id: string, wav: Blob) => call<Conversation>(`/conversations/${id}/voice`, wav),
+  syntheticVoice: (id: string, text: string) => call<Conversation>(`/conversations/${id}/voice/synthetic`, { text }),
+  audioUrl: (audioId: string) => `${API}/audio/${audioId}.mp3`,
 };
