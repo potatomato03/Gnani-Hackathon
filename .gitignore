@@ -44,3 +44,6 @@ private/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local code knowledge graph (graphify)
+graphify-out/

@@ -17,6 +17,15 @@ def test_transcript_is_fenced_and_copied_verbatim():
     assert "Dolo 650" in user
 
 
+def test_prompt_keeps_laterality_empty_unless_a_side_is_spoken():
+    # Both models filled a side for a plural like "tonsils"; qwen3:8b filled one on every item (runbook C-35).
+    from voicerx.pipeline.extract import SYSTEM
+
+    assert PROMPT_VERSION == "extract-v2"
+    assert "laterality is null unless the quote itself names a side" in SYSTEM
+    assert "A plural body part" in SYSTEM
+
+
 def test_extract_asks_for_the_extraction_schema_with_the_prompt_version():
     from conftest import REPO_ROOT
     from voicerx.reference import load_reference
