@@ -407,7 +407,7 @@ git commit -m "Add number and schedule parsing"
 
 For example, "Pan forty" scores 3 on Pan 40, but only 2 on Pan-D through its alias "Pan", because 40 is one of Pan-D's strengths. So Pan 40 wins.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 import pytest
@@ -463,19 +463,19 @@ def test_name_in_devanagari_is_unmatched_rather_than_guessed():
     assert (result.match, result.product_id, result.candidate_ids) == ("unmatched", None, [])
 ```
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_match_medicine.py -q`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `match_medicine` as described above**
+- [x] **Step 3: Implement `match_medicine` as described above**
 
-- [ ] **Step 4: Run the tests to make sure they pass**
+- [x] **Step 4: Run the tests to make sure they pass**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_match_medicine.py -q`
 Expected: all pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/api/voicerx/pipeline/match_medicine.py services/api/tests/unit/test_match_medicine.py
