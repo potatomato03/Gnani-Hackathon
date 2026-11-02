@@ -70,3 +70,104 @@ def test_saved_conversations_survive_an_api_restart(tmp_path):
     assert [t["kind"] for t in again.get("/clinic/tasks").json()] == ["callback"]
     assert again.get(f"/conversations/{conv['id']}").json()["messages"] == \
         first.get(f"/conversations/{conv['id']}").json()["messages"]
+
+
+# Voice and approved visits
+
+import io  # noqa: E402
+import wave  # noqa: E402
+
+from voicerx.ingest.fake_speech import FakeSpeech  # noqa: E402
+
+
+def clip(seconds=1.0):
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(16000)
+        out.writeframes(b"\x00\x00" * int(seconds * 16000))
+    return buffer.getvalue()
+
+
+@pytest.fixture
+def voiced(tmp_path):
+    speech = FakeSpeech()
+    return TestClient(create_app(tmp_path, speech=speech)), speech, tmp_path
+
+
+def test_health_says_whether_voice_is_on(tmp_path, voiced):
+    assert TestClient(create_app(tmp_path / "off", speech=None)).get("/health").json()["speech"] == "off"
+    assert voiced[0].get("/health").json()["speech"] == "fake"
+
+
+def test_voice_endpoints_are_off_without_a_key(tmp_path):
+    client = TestClient(create_app(tmp_path, speech=None))
+    conv = client.post("/demo/visits/fam-010-a/start").json()
+    first = conv["messages"][0]["id"]
+    assert client.post(f"/conversations/{conv['id']}/messages/{first}/voice").status_code == 503
+    assert client.post(f"/conversations/{conv['id']}/voice", content=clip()).status_code == 503
+    assert client.post(f"/conversations/{conv['id']}/voice/synthetic", json={"text": "DOCTOR"}).status_code == 503
+
+
+def test_listen_synthesises_once_and_serves_the_audio(voiced):
+    client, speech, _ = voiced
+    conv = client.post("/demo/visits/fam-010-a/start").json()
+    first = conv["messages"][0]["id"]
+    played = client.post(f"/conversations/{conv['id']}/messages/{first}/voice").json()
+    assert played["cached"] is False and played["audio_url"].startswith("/audio/")
+    again = client.post(f"/conversations/{conv['id']}/messages/{first}/voice").json()
+    assert again == {**played, "cached": True}
+    assert [c[0] for c in speech.calls] == ["synthesize"]
+    audio = client.get(played["audio_url"])
+    assert audio.status_code == 200 and audio.headers["content-type"] == "audio/wav"   # fake returns WAV
+    stored = client.get(f"/conversations/{conv['id']}").json()
+    assert stored["messages"][0]["audio_id"] == played["audio_url"][7:-4]
+    assert client.get("/audio/../../etc/passwd").status_code == 404
+    assert client.get("/audio/" + "z" * 32 + ".mp3").status_code == 404
+
+
+def test_recorded_voice_note_is_transcribed_and_never_stored(voiced):
+    client, speech, state = voiced
+    speech.transcript = "seene mein dard ho raha hai"
+    conv = client.post("/demo/visits/fam-010-a/start").json()
+    conv = client.post(f"/conversations/{conv['id']}/voice", content=clip(),
+                       headers={"Content-Type": "audio/wav"}).json()
+    patient = [m for m in conv["messages"] if m["sender"] == "patient"][-1]
+    assert patient["voice"] is True and conv["messages"][-1]["kind"] == "urgent"
+    assert conv["records"][-1]["transcript_source"] == "prisma"
+    assert not [p for p in state.rglob("*") if p.suffix in (".wav", ".webm", ".ogg")]
+
+
+def test_bad_voice_notes_are_refused(voiced):
+    client, _, _ = voiced
+    conv = client.post("/demo/visits/fam-010-a/start").json()
+    assert client.post(f"/conversations/{conv['id']}/voice", content=b"nope").status_code == 422
+    assert client.post(f"/conversations/{conv['id']}/voice", content=clip(31)).status_code == 422
+
+
+def test_synthetic_voice_note_round_trip(voiced):
+    client, speech, _ = voiced
+    conv = client.post("/demo/visits/fam-010-a/start").json()
+    conv = client.post(f"/conversations/{conv['id']}/voice/synthetic",
+                       json={"text": "Montair कब लेनी है?"}).json()
+    assert [c[0] for c in speech.calls] == ["synthesize", "transcribe"]
+    assert conv["messages"][-1]["kind"] == "answer"
+
+
+def test_visits_lists_approved_runs_and_starting_one_resumes_it(tmp_path):
+    from voicerx import approve as approve_cli
+    from test_followup_visits import draft_run
+    folder = draft_run(tmp_path / "runs")
+    approve_cli.main([str(folder), "--by", "Dr Lavanya Deshpande", "--review-date", "2026-10-26"])
+    client = TestClient(create_app(tmp_path / "runs" / "followup-demo", runs_root=tmp_path / "runs", speech=None))
+    visits = client.get("/visits").json()
+    assert [(v["source"], v["case_id"]) for v in visits] == [
+        ("demo", "fam-001-a"), ("demo", "fam-004-a"), ("demo", "fam-010-a"), ("run", "fam-010-a")]
+    run = visits[-1]
+    assert run["consent"] is True and run["review_date"] == "2026-10-26" and run["conversation_id"] is None
+    conv = client.post(f"/visits/{run['visit_id']}/start").json()
+    assert client.post(f"/visits/{run['visit_id']}/start").json()["id"] == conv["id"]
+    assert client.get("/visits").json()[-1]["conversation_id"] == conv["id"]
+    assert client.post(f"/visits/{run['visit_id']}/start?restart=true").json()["id"] != conv["id"]
+    assert client.post("/visits/nope/start").status_code == 404

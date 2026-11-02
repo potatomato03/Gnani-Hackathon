@@ -90,6 +90,9 @@ class Message(Strict):
     at: datetime
     touch_id: str | None = None
     cites: list[str] = Field(default_factory=list)
+    # A clinic message voiced by Timbre: the cached audio's name. A patient message that was a voice note.
+    audio_id: str | None = None
+    voice: bool = False
 
 
 class Awaiting(Strict):
@@ -103,6 +106,7 @@ class Conversation(Strict):
     synthetic: Literal[True] = True
     clinic_id: str
     case_id: str
+    visit_id: str | None = None     # the approved visit this follow-up runs from (agent/visits.py)
     patient_id: str
     patient_name: str
     doctor_name: str

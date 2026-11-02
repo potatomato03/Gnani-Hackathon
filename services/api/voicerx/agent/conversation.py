@@ -114,7 +114,9 @@ def advance(conv: Conversation) -> bool:
     return True
 
 
-def receive(conv: Conversation, text: str | None = None, button: str | None = None) -> FollowUpRecord:
+def receive(conv: Conversation, text: str | None = None, button: str | None = None,
+            source: str = 'typed') -> FollowUpRecord:
+    """source is 'typed', or 'prisma' for a voice note's transcript; both go through the same rules."""
     conv.clock = conv.clock + STEP
     templates = load_templates(conv.language)
     replies = templates['replies']
@@ -126,54 +128,61 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
         return _button(conv, button, label)
     text = (text or '').strip()
     conv.messages.append(Message(id=f'm{len(conv.messages) + 1}', sender='patient', text=text, at=conv.clock,
-                                 touch_id=conv.awaiting.touch_id if conv.awaiting else None))
+                                 touch_id=conv.awaiting.touch_id if conv.awaiting else None,
+                                 voice=source == 'prisma'))
+    said = _said(source)
+    if not text:
+        record = _record(conv, text, source, 'clarified', [])
+        buttons = _buttons(templates, conv.awaiting.question) if conv.awaiting else []
+        _reply(conv, record, 'question' if buttons else 'text', replies['not_heard'], buttons=buttons)
+        return record
     flags = find_red_flags(text)
     if flags:
-        record = _record(conv, text, 'typed', 'urgent', [], flags)
+        record = _record(conv, text, source, 'urgent', [], flags)
         conv.awaiting = None
         _skip_planned(conv)
-        _task(conv, 'urgent', record, f'Warning sign ({", ".join(flags)}). Patient wrote: «{text}». '
+        _task(conv, 'urgent', record, f'Warning sign ({", ".join(flags)}). {said} «{text}». '
                                       'Told to go to emergency or call 108.')
         _reply(conv, record, 'urgent', replies['urgent'].format(doctor=doctor), flags)
         return record
     plain = ' '.join(tokens(text))
     if plain in {normalise(w) for w in STOP_WORDS}:
-        return _stop(conv, text)
+        return _stop(conv, text, source)
     if plain in {normalise(w) for w in DOCTOR_WORDS} or _has(text, DOCTOR_PHRASES):
-        record = _record(conv, text, 'typed', 'escalated', [])
+        record = _record(conv, text, source, 'escalated', [])
         _task(conv, 'callback', record, f'Patient asked to speak to the clinic: «{text}».')
         _reply(conv, record, 'text', replies['callback'])
         return record
     awaiting = conv.awaiting
     if awaiting and awaiting.question == 'side_effect_detail':
         answer = FollowUpAnswer(question='side_effect_detail', value='described', quote=text)
-        record = _record(conv, text, 'typed', 'recorded', [answer])
-        _task(conv, 'side_effect', record, f'Problem with the new medicine. Patient wrote: «{text}».')
+        record = _record(conv, text, source, 'recorded', [answer])
+        _task(conv, 'side_effect', record, f'Problem with the new medicine. {said} «{text}».')
         _reply(conv, record, 'text', replies['side_effect_noted'].format(doctor=doctor))
         _next_question(conv)
         return record
     if awaiting:
         value = _read_answer(awaiting.question, text)
         if value:
-            return _answer(conv, awaiting.question, value, text, 'typed')
+            return _answer(conv, awaiting.question, value, text, source)
     if _has(text, CONSULT_PHRASES):
-        record = _record(conv, text, 'typed', 'escalated', [])
+        record = _record(conv, text, source, 'escalated', [])
         _task(conv, 'consult_request', record, f'Patient asked for an appointment: «{text}».')
         _reply(conv, record, 'text', replies['consult'])
         return record
     answer = answer_medicine_question(conv._visit.approved, templates, text, at=conv.clock)
     if answer is not None:
-        record = _record(conv, text, 'typed', 'answered', [])
+        record = _record(conv, text, source, 'answered', [])
         try:
             _reply(conv, record, 'answer', answer.text, cites=answer.cites)
             return record
         except GateRefused:
             conv.records.pop()  # nothing was sent; fall through to the doctor
     if awaiting:
-        record = _record(conv, text, 'typed', 'clarified', [])
+        record = _record(conv, text, source, 'clarified', [])
         _reply(conv, record, 'question', replies['clarify'], buttons=_buttons(templates, awaiting.question))
         return record
-    record = _record(conv, text, 'typed', 'escalated', [])
+    record = _record(conv, text, source, 'escalated', [])
     _task(conv, 'question', record, f'Question the approved visit does not answer: «{text}».')
     _reply(conv, record, 'text', replies['escalated'].format(doctor=doctor))
     return record
@@ -259,10 +268,10 @@ def _answer(conv, question, value, raw, source):
     touch = _touch(conv, conv.awaiting.touch_id)
     touch.status = 'answered'
     conv.unanswered = 0
-    answer = FollowUpAnswer(question=question, value=value, quote=raw if source == 'typed' else None)
+    answer = FollowUpAnswer(question=question, value=value, quote=raw if source != 'button' else None)
     record = _record(conv, raw, source, 'recorded', [answer])
     when = format_date(conv.clock.date())
-    said = f' Patient wrote: «{raw}».' if source == 'typed' else ''
+    said = f' {_said(source)} «{raw}».' if source != 'button' else ''
     if value == 'some_problem':
         conv.awaiting = Awaiting(touch_id=touch.id, question='side_effect_detail',
                                  remaining=conv.awaiting.remaining)
@@ -285,8 +294,12 @@ def _answer(conv, question, value, raw, source):
     return record
 
 
-def _stop(conv, text):
-    record = _record(conv, text, 'typed', 'stopped', [])
+def _said(source):
+    return 'Patient said in a voice note (Gnani Prisma transcript):' if source == 'prisma' else 'Patient wrote:'
+
+
+def _stop(conv, text, source='typed'):
+    record = _record(conv, text, source, 'stopped', [])
     conv.consents = [c for c in conv.consents if c != CONSENT]
     conv.awaiting = None
     _skip_planned(conv)
