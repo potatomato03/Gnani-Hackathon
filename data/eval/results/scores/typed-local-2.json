@@ -1,0 +1,3891 @@
+{
+  "run_id": "typed-local-2",
+  "source": "typed",
+  "approximate": false,
+  "scored": 25,
+  "missing_input": [],
+  "incomplete": [],
+  "cases": {
+    "fam-001-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 8
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 6,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 8
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 8
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 8
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "x6",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x8"
+        ],
+        [
+          "f8",
+          "x9"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f2"
+      ],
+      "unmatched_extracted_facts": [
+        "x7"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f6",
+          "extracted": "x6",
+          "field": "certainty",
+          "expected_value": "provisional",
+          "actual_value": "stated"
+        },
+        {
+          "expected": "f8",
+          "extracted": "x9",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "c771f8c5074106b1b46c2b73869af8213459f1eb0bfb211ad37d0332ee679c67",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "d787b24dbb10b2811e9dc4f872ab18d90415d5146587eeadab16aebf8880f4b6",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "03bd36a951042f0c01691ea4e068023dc52b32e2d3bfc0c0b2d73d3532bab296",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-001-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 8
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 8
+      },
+      "report_duplications": {
+        "count": 4,
+        "total": 8
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 12
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "x6",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x8"
+        ],
+        [
+          "f8",
+          "x9"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f2"
+      ],
+      "unmatched_extracted_facts": [
+        "x7"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f6",
+          "extracted": "x6",
+          "field": "certainty",
+          "expected_value": "provisional",
+          "actual_value": "stated"
+        },
+        {
+          "expected": "f8",
+          "extracted": "x9",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "e416455c4152870b13086dfec6504eb3ad3d5ee2e1c2b1fc7b13fb22a707ba71",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "152d84e5ffe79b0986fb17db9dd93de25fa1356553c22556eee3bab2e7116080",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "2c1d8c2abad5969c6231d37f0ea04146ab6dd4136f17053d3d05ff54ec67210e",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-002-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 7
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 7
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 8
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 0
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 0
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 6,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 8
+      },
+      "report_duplications": {
+        "count": 6,
+        "total": 8
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 12
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "subject_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "subject mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x7"
+        ],
+        [
+          "f7",
+          "x8"
+        ]
+      ],
+      "medicine_matches": [],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x6"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f6",
+          "extracted": "x7",
+          "field": "temporality",
+          "expected_value": "current",
+          "actual_value": "planned"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "a0d073c2d944349162a46c56f445bc19afda1fe6baf942661b3bad45fd382984",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "3764e243c05772dcf6bea3334c598ee22ca6808b4389ffe7aac166cfe48dde35",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "54c7ca951b0f3e3ff59e9d1d804ef44493db2445a7b3b2bf7b327c2394247e21",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-002-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 6,
+        "total": 7
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 7
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 7
+      },
+      "negation_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "side_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 0
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 0
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 7
+      },
+      "report_duplications": {
+        "count": 6,
+        "total": 7
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 14
+      },
+      "unexpected_blocking_flags": [],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x2"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x7"
+        ]
+      ],
+      "medicine_matches": [],
+      "unmatched_expected_facts": [
+        "f2"
+      ],
+      "unmatched_extracted_facts": [
+        "x4"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f4",
+          "extracted": "x2",
+          "field": "temporality",
+          "expected_value": "past",
+          "actual_value": "current"
+        },
+        {
+          "expected": "f6",
+          "extracted": "x6",
+          "field": "temporality",
+          "expected_value": "current",
+          "actual_value": "planned"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "85d9487a525a30f0990e0458dab3f1f7d39bf924929b2a38d426bf11faed6a3c",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "a1e7803b338ed347d245bbf716d2a6a0904c4124d9d961d948b2e3b964f6e5d5",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "30b7a656a916585269601b10490491079632425365231dd6053ec04761047501",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-003-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 5,
+        "total": 12
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 5,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 1,
+        "total": 2
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 6,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 12
+      },
+      "report_duplications": {
+        "count": 1,
+        "total": 12
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 13
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "x5",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "x12",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx1",
+          "message": "Unbound phrases: start_phrase"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx2",
+          "message": "Unbound phrases: duration_phrase"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f3",
+          "x4"
+        ],
+        [
+          "f4",
+          "x5"
+        ],
+        [
+          "f5",
+          "x6"
+        ],
+        [
+          "f6",
+          "x7"
+        ],
+        [
+          "f7",
+          "x12"
+        ],
+        [
+          "f8",
+          "x13"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f1"
+      ],
+      "unmatched_extracted_facts": [
+        "x1",
+        "x8",
+        "x9",
+        "x10",
+        "x11"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f4",
+          "extracted": "x5",
+          "field": "laterality",
+          "expected_value": null,
+          "actual_value": "left"
+        },
+        {
+          "expected": "f7",
+          "extracted": "x12",
+          "field": "laterality",
+          "expected_value": null,
+          "actual_value": "left"
+        },
+        {
+          "expected": "f8",
+          "extracted": "x13",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "9f360bbdb3e8d5cb23bdcc5dff49b0943a72a23e89b68e8863688585df98c569",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "3efa94dd4a58b5cfa99611dca404cf09ea411f00cc5fd8f95f241e31b0d5ee43",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "cfe8e15045d88be873ff045e468276ff619db08f3da95d40cea27d9f4560dca4",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-003-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 4,
+        "total": 11
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 5,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 5,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 11
+      },
+      "report_duplications": {
+        "count": 1,
+        "total": 11
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 12
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "x4",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "x10",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "unmatched_product",
+          "severity": "block",
+          "target": "rx1",
+          "message": "unmatched product"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx1",
+          "message": "Unbound phrases: start_phrase"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "history_present_illness:1",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "advice:0",
+          "message": "laterality mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x10"
+        ],
+        [
+          "f8",
+          "x11"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f1"
+      ],
+      "unmatched_extracted_facts": [
+        "x1",
+        "x7",
+        "x8",
+        "x9"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f4",
+          "extracted": "x4",
+          "field": "laterality",
+          "expected_value": null,
+          "actual_value": "left"
+        },
+        {
+          "expected": "f7",
+          "extracted": "x10",
+          "field": "laterality",
+          "expected_value": null,
+          "actual_value": "left"
+        },
+        {
+          "expected": "f8",
+          "extracted": "x11",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "6b48cc0c594916d86013dd9295b55cac6f6aa668ebab9f9c10b0274d890e8208",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "1fd6ba68f34f05b13a951de069abbbc272682d952f4e45d6f1e808b24259edc7",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "aefcf6df22aff1c5cd6d734d870dbd86c84871102a095c87460be419cd90a8a7",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-004-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 9
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 9
+      },
+      "false_facts": {
+        "count": 3,
+        "total": 10
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 2,
+        "total": 2
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 2
+      },
+      "expected_flags": {
+        "count": 1,
+        "total": 1
+      },
+      "section_accuracy": {
+        "count": 4,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 10
+      },
+      "report_duplications": {
+        "count": 5,
+        "total": 10
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 16
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "chief_complaints:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "chief_complaints:1",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:1",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:2",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:3",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:4",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:1",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:2",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:3",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:4",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "follow_up:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x4"
+        ],
+        [
+          "f4",
+          "x5"
+        ],
+        [
+          "f7",
+          "x9"
+        ],
+        [
+          "f8",
+          "x10"
+        ],
+        [
+          "f9",
+          "x3"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ],
+        [
+          "m2",
+          "rx2"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f5",
+        "f6"
+      ],
+      "unmatched_extracted_facts": [
+        "x6",
+        "x7",
+        "x8"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f1",
+          "extracted": "x1",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f2",
+          "extracted": "x2",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f3",
+          "extracted": "x4",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f4",
+          "extracted": "x5",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f4",
+          "extracted": "x5",
+          "field": "temporality",
+          "expected_value": "current",
+          "actual_value": "past"
+        },
+        {
+          "expected": "f7",
+          "extracted": "x9",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f8",
+          "extracted": "x10",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f9",
+          "extracted": "x3",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f9",
+          "extracted": "x3",
+          "field": "temporality",
+          "expected_value": "past",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "7176d8e01d8e2fe49091dff169e0383dae4ddc5b891e559a7e1048a3c1958385",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "f20da5b9c6b7974a4e8c100beda6c341cfe0d3456933f10f42205cf8b1762a2c",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "1e38abae9f03fd5434762986c1e75cc137b2ac2e2865844d3c627d5ba05c0dd6",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-004-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 6,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 4,
+        "total": 10
+      },
+      "negation_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "side_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "medicines_exact": {
+        "count": 2,
+        "total": 2
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 2
+      },
+      "expected_flags": {
+        "count": 1,
+        "total": 1
+      },
+      "section_accuracy": {
+        "count": 2,
+        "total": 6
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 10
+      },
+      "report_duplications": {
+        "count": 8,
+        "total": 10
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 18
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx1",
+          "message": "Unbound phrases: food_phrase"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "chief_complaints:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "chief_complaints:1",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "vitals:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "examination:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:1",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:2",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:3",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:4",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:5",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "advice:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "advice:1",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "advice:2",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "advice:3",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "plan:1",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f7",
+          "x5"
+        ],
+        [
+          "f8",
+          "x6"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ],
+        [
+          "m2",
+          "rx2"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f6",
+        "f9"
+      ],
+      "unmatched_extracted_facts": [
+        "x7",
+        "x8",
+        "x9",
+        "x10"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f1",
+          "extracted": "x1",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f2",
+          "extracted": "x2",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f3",
+          "extracted": "x3",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f4",
+          "extracted": "x4",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f4",
+          "extracted": "x4",
+          "field": "temporality",
+          "expected_value": "current",
+          "actual_value": "past"
+        },
+        {
+          "expected": "f7",
+          "extracted": "x5",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        },
+        {
+          "expected": "f8",
+          "extracted": "x6",
+          "field": "certainty",
+          "expected_value": "stated",
+          "actual_value": "provisional"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "d1092de5590bd238a06e00bd15f4666cfb7062fe13ae8558f0b82b7b9db2a454",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "58427bad6926f3075f30550d11c43a9440167c3aa94012cfda5d225712cd68fb",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "9b804305ac3467c0bb423584893148e06b7bbe4aa5fb64ca766e545784aa3b8d",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-005-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 4,
+        "total": 6
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 6
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 4
+      },
+      "negation_accuracy": {
+        "count": 4,
+        "total": 4
+      },
+      "side_accuracy": {
+        "count": 4,
+        "total": 4
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 1,
+        "total": 1
+      },
+      "section_accuracy": {
+        "count": 2,
+        "total": 4
+      },
+      "report_omissions": {
+        "count": 1,
+        "total": 4
+      },
+      "report_duplications": {
+        "count": 2,
+        "total": 4
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 6
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "speaker_unclear",
+          "severity": "block",
+          "target": "rx1",
+          "message": "speaker unclear"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "history_present_illness:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x2",
+          "message": "omission"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f6",
+          "x5"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f3",
+        "f5"
+      ],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "bb5b84e109dc5014639805f9c1b60ae64ede9eb04019e919ab0a17579aae0f9c",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "e22f2771938aabca5fa28530eabc5c1ddbfefefdaa4bbb7a4568d7b1e8019911",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "43930751db63179994e8cc43ea13c33197c7a49d285521fb5b612fb9c69d97e2",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-005-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 4,
+        "total": 6
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 6
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 4
+      },
+      "negation_accuracy": {
+        "count": 4,
+        "total": 4
+      },
+      "side_accuracy": {
+        "count": 4,
+        "total": 4
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 2,
+        "total": 4
+      },
+      "report_omissions": {
+        "count": 1,
+        "total": 4
+      },
+      "report_duplications": {
+        "count": 2,
+        "total": 4
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 5
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "speaker_unclear",
+          "severity": "block",
+          "target": "rx1",
+          "message": "speaker unclear"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "history_present_illness:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x2",
+          "message": "omission"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f6",
+          "x5"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f3",
+        "f5"
+      ],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "d0dd7e027222a17d32863ef83825fc31df6eaf432595b8c8f5d692f667e51eab",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "eb1dd38badca8fa7a9a4b89b465d41d81d8a73713af2cbb964b1719fc9f28d05",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "8dc64ecfb4c18045adb03753c5e662a05844acf2d1e8d1c92d6c88084bc07f7c",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-006-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 6,
+        "total": 6
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 6
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 6
+      },
+      "negation_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "side_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 6
+      },
+      "report_duplications": {
+        "count": 2,
+        "total": 6
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 8
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "missing_quantity",
+          "severity": "block",
+          "target": "rx1",
+          "message": "missing quantity"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx1",
+          "message": "Unbound phrases: dose_phrase, timing_phrase, food_phrase, duration_phrase"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "862132ffe813487fb0bd23928a953882f7f7af5004499d4631d17ed0201dbc5d",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "32af7c5d6c6582bc27282a85c8464a0672cd7d8fbb0e73e18f22d47101d251a8",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "bac88cfb4e128e56aa3fdfbbe0e515b28349622e892c85245393a39c4f76939a",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-006-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 7
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 7
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 7
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 3,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 2,
+        "total": 7
+      },
+      "report_duplications": {
+        "count": 2,
+        "total": 7
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 8
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x4",
+          "message": "omission"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x5",
+          "message": "omission"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x3"
+        ],
+        [
+          "f2",
+          "x4"
+        ],
+        [
+          "f3",
+          "x1"
+        ],
+        [
+          "f4",
+          "x2"
+        ],
+        [
+          "f5",
+          "x6"
+        ],
+        [
+          "f6",
+          "x7"
+        ],
+        [
+          "f7",
+          "x5"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "1ea798949bc9f6d3968ed775d802002b7b60611bd27432ac67198ae6232a2880",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "0a93bd31f07c26eec9f015c2e303b949735c24ff712277a8da7d03057de2be52",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "a101b23d92734a5991318828779baf2c72807c0c5e8dbfe676e2a5df2abef3ff",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-007-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 8,
+        "total": 9
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 9
+      },
+      "false_facts": {
+        "count": 5,
+        "total": 13
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 8
+      },
+      "side_accuracy": {
+        "count": 8,
+        "total": 8
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 7,
+        "total": 8
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 13
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 13
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 13
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "negation_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "negation mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "negation_mismatch",
+          "severity": "block",
+          "target": "advice:5",
+          "message": "negation mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x7"
+        ],
+        [
+          "f8",
+          "x12"
+        ],
+        [
+          "f9",
+          "x14"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f3"
+      ],
+      "unmatched_extracted_facts": [
+        "x8",
+        "x9",
+        "x10",
+        "x11",
+        "x13"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f6",
+          "extracted": "x6",
+          "field": "assertion",
+          "expected_value": "present",
+          "actual_value": "unknown"
+        },
+        {
+          "expected": "f6",
+          "extracted": "x6",
+          "field": "certainty",
+          "expected_value": "provisional",
+          "actual_value": "stated"
+        },
+        {
+          "expected": "f7",
+          "extracted": "x7",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "eafe5cc58c8bacefa7290eee3301bef2af9c6c60b4d3bcb34bae2b87aa012fc1",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "f44cbef07638375b0e16f85076121b6b5c8a7461168baf354e41df6d3776479c",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "9d33cc594a70c602b43eeded629144d96e3af132c7bf847ce73bbbe45b28afc7",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-007-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 9
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 9
+      },
+      "false_facts": {
+        "count": 2,
+        "total": 9
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 2,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 3,
+        "total": 9
+      },
+      "report_duplications": {
+        "count": 1,
+        "total": 9
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 7
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x4",
+          "message": "omission"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x5",
+          "message": "omission"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x10",
+          "message": "omission"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x7"
+        ],
+        [
+          "f9",
+          "x8"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f3",
+        "f8"
+      ],
+      "unmatched_extracted_facts": [
+        "x9",
+        "x10"
+      ],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "74b54473b15db676e4a4c4f1540eb3ddc123a3d21a1d5c3022b97e9434459a7b",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "c7639d6d1f23a57392ed65946395d8131358a50dd3e5fd71b2e390cefc2d7273",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "a7710b183206c912ed40cbc3c8df43fe56a815d00cfddc01ca7da27b7f5e5a05",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-008-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 6,
+        "total": 6
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 6
+      },
+      "false_facts": {
+        "count": 3,
+        "total": 9
+      },
+      "negation_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "side_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "medicines_exact": {
+        "count": 2,
+        "total": 2
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 2
+      },
+      "expected_flags": {
+        "count": 2,
+        "total": 2
+      },
+      "section_accuracy": {
+        "count": 2,
+        "total": 6
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 9
+      },
+      "report_duplications": {
+        "count": 4,
+        "total": 9
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 13
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "x3",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "x4",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x5"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x8"
+        ],
+        [
+          "f6",
+          "x9"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ],
+        [
+          "m2",
+          "rx2"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x2",
+        "x6",
+        "x7"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f4",
+          "extracted": "x4",
+          "field": "certainty",
+          "expected_value": "provisional",
+          "actual_value": "stated"
+        },
+        {
+          "expected": "f5",
+          "extracted": "x8",
+          "field": "temporality",
+          "expected_value": "current",
+          "actual_value": "planned"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "239198986486a5db0224f26672eb1197a48df74be3cb10b2b52c21621f3550cb",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "ffa6dca560d4c0b2086f926993976b98e5e0e1b3789b046fcbc50e014233a140",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 2
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "b614b25e60e7b847fb09a59aa53151d4a5058ddda279a1e79c3d0547bee26956",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-008-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 4,
+        "total": 6
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 6
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 5
+      },
+      "negation_accuracy": {
+        "count": 4,
+        "total": 4
+      },
+      "side_accuracy": {
+        "count": 4,
+        "total": 4
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 2
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 1,
+        "total": 1
+      },
+      "section_accuracy": {
+        "count": 4,
+        "total": 4
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 5
+      },
+      "report_duplications": {
+        "count": 3,
+        "total": 5
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 6
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "x5",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f3",
+          "x4"
+        ],
+        [
+          "f4",
+          "x5"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m2",
+          "rx2"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f5",
+        "f6"
+      ],
+      "unmatched_extracted_facts": [
+        "x2"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f4",
+          "extracted": "x5",
+          "field": "certainty",
+          "expected_value": "provisional",
+          "actual_value": "stated"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "e47898ef19b817e0cba3de8a9eae8a5e7dba9c1d9e970aca417672987a0a1c89",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "47b672d99390d5f44ba2189e4f08ca7d36d349c77b415f87df22eb4098eaf09b",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "f59b4af066a1a8b2f9d931cdbf7ea4de8ff3d57a68ba340ee322dd909b314175",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-009-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 6,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 3,
+        "total": 9
+      },
+      "negation_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "side_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 4,
+        "total": 6
+      },
+      "report_omissions": {
+        "count": 1,
+        "total": 9
+      },
+      "report_duplications": {
+        "count": 2,
+        "total": 9
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 10
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "negation_mismatch",
+          "severity": "block",
+          "target": "x4",
+          "message": "negation mismatch"
+        },
+        {
+          "code": "unmatched_product",
+          "severity": "block",
+          "target": "rx2",
+          "message": "unmatched product"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x3",
+          "message": "omission"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x9"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx2"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f3",
+        "f8"
+      ],
+      "unmatched_extracted_facts": [
+        "x2",
+        "x7",
+        "x8"
+      ],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "fc2d3fbb491649e4dceb2d8edd230fcd13398f80e3632a74984ede2d389a01ed",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "30a30906ecd9eed841d65c5c6300328b4e400b1bde583676b49c9cddcf5c6b5d",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "ac27a7e20bb20fb71e612dedcd22afee379c1693e55ebad83c5d4092cc8312d6",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-009-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 8,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 9
+      },
+      "negation_accuracy": {
+        "count": 8,
+        "total": 8
+      },
+      "side_accuracy": {
+        "count": 8,
+        "total": 8
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 3,
+        "total": 8
+      },
+      "report_omissions": {
+        "count": 3,
+        "total": 9
+      },
+      "report_duplications": {
+        "count": 1,
+        "total": 9
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 7
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x3",
+          "message": "omission"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x4",
+          "message": "omission"
+        },
+        {
+          "code": "omission",
+          "severity": "block",
+          "target": "x6",
+          "message": "omission"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f3",
+          "x4"
+        ],
+        [
+          "f4",
+          "x5"
+        ],
+        [
+          "f5",
+          "x6"
+        ],
+        [
+          "f6",
+          "x7"
+        ],
+        [
+          "f7",
+          "x9"
+        ],
+        [
+          "f8",
+          "x10"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x8"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f7",
+          "extracted": "x9",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        },
+        {
+          "expected": "f8",
+          "extracted": "x10",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "b3b93a0416cc32fcfedae4655e249b08b5ed996ee6a71f7c7d54a2f1f1ab6152",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "9a643d158b8ebbb92f59c2f08d9bd6a4a532e6bbc3261e2463a48799d41299e4",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 2
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "60bbd258639e6e03e71427f747e697600bc9a5753016a907d12db87591f9a194",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-010-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 7
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 7
+      },
+      "false_facts": {
+        "count": 4,
+        "total": 11
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 3
+      },
+      "extra_medicines": {
+        "count": 1,
+        "total": 4
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 5,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 11
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 11
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 11
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "x2",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx1",
+          "message": "Unbound phrases: timing_phrase"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx2",
+          "message": "Unbound phrases: timing_phrase"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "chief_complaints:1",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "examination:0",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f3",
+          "x4"
+        ],
+        [
+          "f4",
+          "x5"
+        ],
+        [
+          "f5",
+          "x6"
+        ],
+        [
+          "f6",
+          "x10"
+        ],
+        [
+          "f7",
+          "x11"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ],
+        [
+          "m2",
+          "rx3"
+        ],
+        [
+          "m3",
+          "rx4"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x2",
+        "x7",
+        "x8",
+        "x9"
+      ],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "4b68173bf15269a75be629bd34a5088b22ee363a9d1088527f7a4647d6ea75fa",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "5bdc931a19436582ef17cc9bde9eec0735e3abced1b363bee2ee323b7dd9be82",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "59b898836ee4ba195570037d3b8d87f62ba07da755a79fc663a210135b45adea",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-010-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 7
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 7
+      },
+      "false_facts": {
+        "count": 3,
+        "total": 10
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 3
+      },
+      "extra_medicines": {
+        "count": 1,
+        "total": 4
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 4,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 10
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 10
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 10
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx1",
+          "message": "Unbound phrases: timing_phrase"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx2",
+          "message": "Unbound phrases: timing_phrase"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x3"
+        ],
+        [
+          "f3",
+          "x4"
+        ],
+        [
+          "f4",
+          "x5"
+        ],
+        [
+          "f5",
+          "x6"
+        ],
+        [
+          "f6",
+          "x10"
+        ],
+        [
+          "f7",
+          "x11"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ],
+        [
+          "m2",
+          "rx3"
+        ],
+        [
+          "m3",
+          "rx4"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x7",
+        "x8",
+        "x9"
+      ],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "420a5b66f2a2a0dc05e170a9659cdc731f974783d486d2d2e12071ba83496905",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "3b4d08177dc6cddbb42d2ba6132f4b187c683ea459326d388c71d232c5a094d6",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "99c7230209a598b18f50262f6b5979e7dcb01a697c2680ce305a913788eae519",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-011-v1": {
+      "approximate": false,
+      "facts_found": {
+        "count": 2,
+        "total": 3
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 3
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 2
+      },
+      "negation_accuracy": {
+        "count": 2,
+        "total": 2
+      },
+      "side_accuracy": {
+        "count": 2,
+        "total": 2
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 2,
+        "total": 2
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 2
+      },
+      "report_duplications": {
+        "count": 1,
+        "total": 2
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 3
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "missing_quantity",
+          "severity": "block",
+          "target": "rx1",
+          "message": "missing quantity"
+        },
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f3"
+      ],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "419624227ae311540916cb6c7602fe4edce27a1db0450d4c1e275fdcaf6d33d4",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "92ce994729dc505d4af1e987d7bff6f5171e80e249152d781b3e7b56466271ab",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "91f203c39bfc577fbf838b8474be4aa499b1e937eb1329f3ac2bfd3f016c24f4",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-011-v2": {
+      "approximate": false,
+      "facts_found": {
+        "count": 3,
+        "total": 3
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 3
+      },
+      "false_facts": {
+        "count": 2,
+        "total": 5
+      },
+      "negation_accuracy": {
+        "count": 3,
+        "total": 3
+      },
+      "side_accuracy": {
+        "count": 3,
+        "total": 3
+      },
+      "medicines_exact": {
+        "count": 2,
+        "total": 2
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 2
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 2,
+        "total": 3
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 5
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 5
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 5
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "negation_mismatch",
+          "severity": "block",
+          "target": "x3",
+          "message": "negation mismatch"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "chief_complaints:0",
+          "message": "laterality mismatch"
+        },
+        {
+          "code": "negation_mismatch",
+          "severity": "block",
+          "target": "investigations_ordered:0",
+          "message": "negation mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x5"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ],
+        [
+          "m2",
+          "rx2"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x3",
+        "x4"
+      ],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "8b158926365ac98e6d28a60b1238d6c1dd1f655f6446217882cc4ff7beabdca7",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "6c4a6aaa3e8f97e1e0df3ddacdca2026e98586f289c2c33f92043c3405889d7c",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "292a1de0e76e2085e84f8fb41e818f0aa8f033205ce8334be0d51f988de58310",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-011-v3": {
+      "approximate": false,
+      "facts_found": {
+        "count": 3,
+        "total": 3
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 3
+      },
+      "false_facts": {
+        "count": 2,
+        "total": 5
+      },
+      "negation_accuracy": {
+        "count": 3,
+        "total": 3
+      },
+      "side_accuracy": {
+        "count": 3,
+        "total": 3
+      },
+      "medicines_exact": {
+        "count": 2,
+        "total": 2
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 2
+      },
+      "expected_flags": {
+        "count": 1,
+        "total": 1
+      },
+      "section_accuracy": {
+        "count": 1,
+        "total": 3
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 5
+      },
+      "report_duplications": {
+        "count": 1,
+        "total": 5
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 6
+      },
+      "unexpected_blocking_flags": [],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x5"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ],
+        [
+          "m2",
+          "rx2"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x3",
+        "x4"
+      ],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "5034d5221423e876fc6cac1d5660a3d6e51c4c0b3681ca667124933a0e92884f",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "65dddf02e12aaf155a33cbc3a81cea48b0de9fc4b82261cfaf09d1e955f234bd",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "1a5383e0b86927ff05791e495ec0bc8d43bd60dfc26a3302ee118eb9d2f7fa88",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-012-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 6,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 7
+      },
+      "negation_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "side_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 1,
+        "total": 1
+      },
+      "section_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 7
+      },
+      "report_duplications": {
+        "count": 2,
+        "total": 7
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 9
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "certainty_mismatch",
+          "severity": "block",
+          "target": "diagnoses:0",
+          "message": "certainty mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f4",
+          "x3"
+        ],
+        [
+          "f5",
+          "x4"
+        ],
+        [
+          "f6",
+          "x5"
+        ],
+        [
+          "f7",
+          "x7"
+        ],
+        [
+          "f8",
+          "x8"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f2",
+        "f3"
+      ],
+      "unmatched_extracted_facts": [
+        "x6"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f8",
+          "extracted": "x8",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "7a3139107122fd05307afab590f176c8dc52db1e24996f1e13809c19763dfc54",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "c1025c7113051e5b5baf0b56b3569d758a986b014a342754a68d320bad5d56c0",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "c09241ba1a04b34bbd2ba64d81a9c52a6a2977c0b8ca6df51687d0c2a0785df5",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-012-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 6,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 2,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 5,
+        "total": 11
+      },
+      "negation_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "side_accuracy": {
+        "count": 6,
+        "total": 6
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 5,
+        "total": 6
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 11
+      },
+      "report_duplications": {
+        "count": 1,
+        "total": 11
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 12
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "missing_quantity",
+          "severity": "block",
+          "target": "rx1",
+          "message": "missing quantity"
+        },
+        {
+          "code": "phrase_not_bound",
+          "severity": "block",
+          "target": "rx1",
+          "message": "Unbound phrases: dose_phrase, timing_phrase, food_phrase, duration_phrase, start_phrase"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f4",
+          "x3"
+        ],
+        [
+          "f5",
+          "x4"
+        ],
+        [
+          "f6",
+          "x5"
+        ],
+        [
+          "f7",
+          "x11"
+        ],
+        [
+          "f8",
+          "x12"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f2",
+        "f3"
+      ],
+      "unmatched_extracted_facts": [
+        "x6",
+        "x7",
+        "x8",
+        "x9",
+        "x10"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f8",
+          "extracted": "x12",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "0616b4e4dab8df9712845d40caf4157b6b89e30992b42f70109f8c568635161a",
+        "stages": {
+          "extract": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "extract-v3",
+            "cache_key": "7f5266220cb117705722289ca81be04809caa1fc6ae7cbf460291047ee88d75e",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "ollama",
+            "model": "qwen3:8b",
+            "prompt_version": "report-v2",
+            "cache_key": "524c59bebf9490ab7cfa458dfc07bb4caa5f4bba8b35a2736480dc1f724cd802",
+            "cached": true,
+            "key_index": 0,
+            "attempts": 1
+          }
+        },
+        "pdf": "ready"
+      }
+    }
+  },
+  "metrics": {
+    "facts_found": {
+      "count": 148,
+      "total": 173
+    },
+    "facts_missed": {
+      "count": 25,
+      "total": 173
+    },
+    "false_facts": {
+      "count": 52,
+      "total": 200
+    },
+    "negation_accuracy": {
+      "count": 147,
+      "total": 148
+    },
+    "side_accuracy": {
+      "count": 144,
+      "total": 148
+    },
+    "medicines_exact": {
+      "count": 21,
+      "total": 33
+    },
+    "extra_medicines": {
+      "count": 3,
+      "total": 35
+    },
+    "expected_flags": {
+      "count": 8,
+      "total": 8
+    },
+    "section_accuracy": {
+      "count": 102,
+      "total": 148
+    },
+    "report_omissions": {
+      "count": 11,
+      "total": 200
+    },
+    "report_duplications": {
+      "count": 55,
+      "total": 200
+    },
+    "unsupported_lines": {
+      "count": 0,
+      "total": 244
+    }
+  },
+  "unexpected_blocking_flags": 98,
+  "not_run": []
+}

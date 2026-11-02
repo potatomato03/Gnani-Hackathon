@@ -33,7 +33,7 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 | Language review | Not started | Find Telugu and Tamil readers |
 | Formulary | 25 of about 100 rows, all `verified: false` | Hand-check each row, then extend |
 | Audio | 22 of 25 clips rendered, all transcribed by Whisper. 3 wait on Gemini's daily limit. | Render the last 3, then listen to all of them |
-| Extraction and report | Tasks 0–15, including 10b and 14b, implemented. Task 16 live evaluations running. | Finish scoring and PDF/approval checks; Claude reviews the branch (D-71). |
+| Extraction and report | Built and proven on all 25 typed cases with Groq: every expected flag fires, 33 of 33 medicines exact, no unsupported line. Doctor corrections and approval work end to end. Whisper text works for findings but not for medicine names written in Devanagari (Q-20). | Decide Q-20; rerun Gemini after its reset for comparison |
 | Mistral | Dropped. The key is rejected as invalid, and the plan couldn't be activated. | None |
 | Local model | `qwen3:8b` and `qwen2.5:7b` in Ollama, stored in `models/ollama` in the root folder. First probe passed. | Compared with Gemini in Task 16 |
 | Gemini text models | Overloaded on 2 Nov (HTTP 503) | Retry later. The planned client retries and falls back automatically. |
@@ -41,8 +41,8 @@ As of 2 Nov 2026. Deadline: **Tue 10 Nov 2026, 11:59 PM IST**.
 | Local transcription | Working on the GPU. `.venv` and `models` are in the root folder, on one machine only. | Teammate repeats the setup under [How to run](#how-to-run) |
 | Gold notes | None, by design. They need real audio first. | Follows audio |
 | Application code | Extraction/report backend, corrections, approval, PDF and FHIR implemented | Web, speech integration and patient agent remain outside this build |
-| LLM | `gemini-3.8-flash` first, then `openai/gpt-oss-120b` on Groq, then `qwen3:8b` on the local GPU (D-85) | Task 16 compares them on the typed scripts |
-| Evals | Cached clean run and ten sabotages pass; live typed run underway | Finish typed, Whisper and local comparison, record totals |
+| LLM | Groq `openai/gpt-oss-120b` is the working model, on two keys (D-85, D-88). Gemini (quota) and local `qwen3:8b` (safe but noisy) are fallbacks. | Compare Gemini once its daily limit resets |
+| Evals | Typed and Whisper runs scored for Groq and the local model; see Verification | Re-score after Q-20 is settled |
 
 ## Decisions
 
@@ -290,6 +290,7 @@ All on 2 Nov 2026.
 | Dropped Mistral, added a local model | Mistral's key was rejected. Pulled `qwen3:8b` into Ollama, moved its models to the root folder, and probed it on two typed scripts. Rewrote Task 4 for a Gemini and Ollama client, and added a local comparison run to Task 16. See D-70. |
 | Handed the build to ASTRA | Added "Handoff to ASTRA" to the plan: what to read, the setup, the working rules, and the note to leave when finished. Moved the key-leak check into `tools/key_leak_check.py` so it can run without Claude. See D-71. |
 | Added Groq | Stored the key in `.env`, compared two Groq models, and added an OpenAI-compatible adapter test-first (6 tests). The fallback order is now Gemini, Groq, local. See D-85 and J-20. |
+| Finished Task 16 and the branch review | Scored Groq and the local model on typed scripts and Whisper text; corrected and approved `fam-008-a` end to end; reviewed the whole branch (9 findings) and fixed all of them plus 3 found while re-scoring (C-45 to C-54, D-88 to D-90). 372 tests pass. |
 | Built a code knowledge graph | Ran `graphify update .` on the repo: 725 nodes, 1,742 edges, 35 communities, from code only with no model calls. Output is in the git-ignored `graphify-out/`. Query it with `graphify query "<question>" --budget 600` before reading whole files. |
 | Implemented extraction/report tasks 0–15 | Contracts, references, number/schedule parsing, medicine matching, both model stages and checks, frozen drafts, audited corrections, approval, patient-language templates, PDFs, FHIR, runner, sabotage fixtures and scorer. 332 tests pass; Task 16 is in progress. See build log below for per-task checkpoints and D-72 onwards for deviations. |
 
@@ -342,6 +343,9 @@ Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaed
 | Typed runs on `extract-v3` and `report-v2`, after C-36 to C-44 and J-22 (drafts rebuilt from cached replies) | Groq `gpt-oss-120b`, 16 of 25 (9 wait on the daily limit): facts found 102/118, false facts 19/121, negation 102/102, sides 102/102, medicines exact 18/18, extra medicines 0, expected flags 6/6, sections 87/102, omissions 0, duplications 0, unsupported lines 0/121, unexpected blocks 4. Local `qwen3:8b`, 25 of 25: facts found 148/173, false facts 52/200, negation 147/148, sides 144/148, medicines exact 20/33, extra medicines 12, expected flags 8/8, sections 102/148, omissions 11, duplications 55, unsupported lines 0/244, unexpected blocks 97. |
 | What the unexpected blocks are | Groq: 2 invented-side quotes (J-21) and 2 hedged diagnoses recorded as stated (C-43). Local: 54 certainty (49 "Provisional:" written on stated items, 5 hedges), 11 omissions, 10 non-verbatim medicine phrases, 10 invented sides, 5 negation, 3 missing quantity, 2 speaker unclear, 1 unmatched, 1 subject. Every one checked by case: each is a model error the checks rightly blocked, none a check defect. |
 | Conclusion | Both models: every expected flag fires and no unsupported line reaches a report. Groq is the working model: near-perfect on the cases it ran. The local model is safe, because its errors are blocked, but too noisy for a doctor: about 4 blocks a report, and a duplicated line in most. |
+| Final typed runs, all fixes to C-54 (`typed-groq-2`, `typed-local-2`, `extract-v3`, `report-v2`) | Groq, 25 of 25: facts found 154/173, false facts 20/174, negation 152/154, sides 153/154, medicines exact 33/33, extra 0, expected flags 8/8, sections 133/154, omissions 0, duplications 0, unsupported lines 0/174, unexpected blocks 8 (model errors caught: 2 side-less quotes, 2 hedges, 3 negations, 1 quote spanning two clauses). Local, 25 of 25: facts 148/173, false facts 52/200, medicines exact 21/33, expected flags 8/8, unsupported lines 0/244, unexpected blocks 98, duplications 55. |
+| Whisper runs (22 transcripts; 3 `missing_input`) | Groq (`whisper-groq-1`): 21 drafts, 1 incomplete (invalid JSON twice, no report written), facts found 121/147, false facts 24/145, negation 121/121, sides 120/121, medicines exact 5/26, expected flags 5/6, unsupported lines 0/144. Local (`whisper-local-1`): facts 69/154, medicines exact 3/29, expected flags 5/6. Scores on Whisper text are approximate (its spelling differs from the scripts). |
+| Why Whisper medicines score low | Whisper writes brand names in Devanagari ("डोलो 650", "टेलमा 40", "पैन"): 16 of 23 Groq medicines and 19 of 27 local ones. The matcher knows only Latin spellings, so each is `unmatched` and blocked, as the plan's Review Focus 5 requires. Safe, but the audio path cannot resolve most medicines yet. The one missed expected flag (`fam-008-a` `ambiguous_product`) is the same cause: "पैन" came back unmatched, still blocked. See Q-20. |
 | Extraction/report and corpus full suite | 332 pass, including all ten planned end-to-end sabotages and additional evidence/approval regressions |
 | Live `fam-001-a` PDF layout | One A4 page; Hindi shaped, four medicine slot columns, draft watermark, review block and page-margin footer visually checked |
 
@@ -370,6 +374,7 @@ What the checker can't do: it confirms that quotes exist and that scripts and sp
 | Q-18 | Is Mistral's free Experiment plan activated on the account? Until it is, Mistral allows no chat requests. | Closed: the key is invalid and Mistral is dropped. See C-29. |
 | Q-17 | Whisper's Tamil is weak. It produced invented words such as "testosterone" and stray Cyrillic and Korean characters, which changed between runs. Should Tamil be scored only on typed scripts? | Team |
 | Q-19 | Do doctors often dictate in the first person ("I'll start Telma")? If so, D-63 will block too many medicines and needs a narrower rule. | Doctor reviewer, and the first typed run |
+| Q-20 | How should medicine names spoken in Indian script be resolved? Whisper writes most brands in Devanagari, so they never match the Latin formulary. Options: add Devanagari, Telugu and Tamil spellings to each formulary row as aliases (exact, auditable), transliterate before matching (any match would stay fuzzy, so blocked), or rely on Gnani Prisma's keyterm boosting to output Latin brand names (test in the planned 5-clip Prisma trial). | Team, before the audio demo |
 
 ## Free audio research
 
