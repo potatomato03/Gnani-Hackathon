@@ -1318,7 +1318,7 @@ git commit -m "Assemble the draft: header, medicine table and current medicines 
 - The system prompt states the spec's Stage 2 rules: concise clinical English, only the given items, cite every line, keep negation and certainty ("Provisional:"), no doses, strengths or timings, and no current medicines section.
 - The spec's optional per-medicine note is left out of this plan. Medicines are described by the code-built table only.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import json
@@ -1339,12 +1339,12 @@ def test_stage_two_sees_only_checked_items_never_the_transcript():
     assert "बुखार" not in user
 ```
 
-- [ ] **Step 2: Run the test to make sure it fails, implement, then run it to make sure it passes**
+- [x] **Step 2: Run the test to make sure it fails, implement, then run it to make sure it passes**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_write_report.py -q`
 Expected: FAIL first, then all pass
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add services/api/voicerx/pipeline/write_report.py services/api/tests/unit/test_write_report.py
