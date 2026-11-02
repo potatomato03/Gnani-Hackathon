@@ -1,6 +1,6 @@
 # Follow-up agent design
 
-Status: **draft for team review**. Nothing here is built. It rests on [the research](../../research/followup-agent.md), which the bracketed `R` numbers below refer to: [R4] is source 4 there. The extraction and report backend it builds on is on `aditya/extraction-report`.
+Status: **demo built** (text and buttons, simulated chat); see "As built" below. Voice, models and the real WhatsApp adapter are not built. It rests on [the research](../../research/followup-agent.md), which the bracketed `R` numbers below refer to: [R4] is source 4 there. The extraction and report backend it builds on is on `aditya/extraction-report`.
 
 ## Goal
 
@@ -202,22 +202,27 @@ class DoctorTask(Strict):
   Each must be blocked by `ground` or `gate`.
 - **New synthetic follow-up scenarios per family:** better, worse, side effect, missed doses, red flag, consult request, STOP, voice note. Written as YAML beside the cases, stopping at `auto_checked` until reviewed.
 
-## Proposed runbook entries
+## Runbook entries
 
-The runbook lives on `aditya/extraction-report`. These go in when this design is merged there.
+Recorded in `runbook.md` when the demo was built. The IDs first proposed here (D-94 to D-99, Q-23 to Q-26) had been taken by the medicine-knowledge work in the meantime, so they were renumbered:
 
-| ID | Entry | Status |
-|---|---|---|
-| D-94 | Follow-up agent is our own backend on the Cloud API, not Meta Business Agent (Health excluded) | Proposed |
-| D-95 | Demo channel is a simulated WhatsApp chat on synthetic patients; the real WhatsApp adapter stays off | Confirmed (user, 2 Nov) |
-| D-96 | Touch plan is code-built from the approved record: summary, day-2 tolerance, mid-course, end of course, review | Proposed |
-| D-97 | Limits: one outbound touch a day, five per visit, 09:00–20:00 IST, stop after two unanswered | Assistant call |
-| D-98 | Red flags are rules first, doctor-reviewed; a model may only raise urgency | Proposed |
-| D-99 | AI disclosure plus DOCTOR and STOP keywords in the first message | Proposed |
-| Q-23 | Can the approval screen capture a structured review date, so `review` touches don't depend on model text? | Team |
-| Q-24 | Which doctor reviews the red-flag list and the follow-up templates, and when? | Team |
-| Q-25 | Do we need outbound calls at all for the demo, given business-initiated WhatsApp calling isn't listed for India? | Team |
-| Q-26 | How many Prisma and Timbre credits may the follow-up demo use? | Team |
+| Runbook ID | Entry |
+|---|---|
+| D-104 | Own backend on the Cloud API, not Meta Business Agent |
+| D-105 | Simulated WhatsApp chat demo on synthetic patients (Confirmed) |
+| D-106 | Code-built touch plan from the approved report |
+| D-107 | Sending hours, caps, stop after two unanswered |
+| D-108 | Rules-first red flags; a model may only raise urgency |
+| D-109 | One gate for every outbound message; disclosure, DOCTOR and STOP |
+| D-110 | Demo visits through the real pipeline from saved stage outputs |
+| Q-25 to Q-28 | Review date at approval; red-flag and template review; outbound calls; Gnani credits |
+
+## As built (differences from the contracts above)
+
+- `FollowUpTouch` also carries `questions`, the check-in questions it asks in order, because touches on the same day merge.
+- `DoctorTask` also carries `note`, a one-line English summary with the patient's words, and a `callback` kind for "DOCTOR" requests.
+- Follow-up wording lives in `services/api/voicerx/agent/templates/{hi,en}.yaml`, not inside the patient-box templates, so the PDF's templates stay untouched. Medicine rows still come from `exports/patient_box.py`. Telugu and Tamil follow-up wording is not written yet (Q-26).
+- `Message`, `Awaiting` and `Conversation` hold the chat itself. All are in `services/api/voicerx/contracts/followup.py`.
 
 ## Out of scope
 

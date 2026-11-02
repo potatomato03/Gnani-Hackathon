@@ -1,0 +1,142 @@
+{
+  "items": [
+    {
+      "id": "x1",
+      "kind": "symptom",
+      "term": "chest tightness for two days",
+      "quote": "दो दिन से सीने में जकड़न",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x2",
+      "kind": "symptom",
+      "term": "wheezing, worse at night",
+      "quote": "wheezing है, रात को ज़्यादा",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x3",
+      "kind": "history",
+      "term": "known asthma for five years",
+      "quote": "Known asthma है, पाँच साल से",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x4",
+      "kind": "vital",
+      "term": "SpO2 96%",
+      "quote": "SpO2 ninety six percent",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x5",
+      "kind": "exam",
+      "term": "bilateral wheeze",
+      "quote": "chest में bilateral wheeze",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": "bilateral",
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x6",
+      "kind": "diagnosis",
+      "term": "acute exacerbation of asthma",
+      "quote": "Impression acute exacerbation of asthma",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x7",
+      "kind": "advice",
+      "term": "come to emergency at once if breathlessness worsens",
+      "quote": "साँस ज़्यादा फूले तो तुरंत emergency में आना है",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x8",
+      "kind": "follow_up",
+      "term": "review after one week",
+      "quote": "Review एक हफ़्ते बाद",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "planned",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    }
+  ],
+  "medications": [
+    {
+      "id": "rx1",
+      "action": "start",
+      "spoken_name": "Wysolone ten",
+      "name_quote": "Wysolone ten",
+      "dose_phrase": null,
+      "timing_phrase": "पहले तीन दिन दो tablet सुबह खाने के बाद, फिर तीन दिन एक tablet सुबह खाने के बाद",
+      "food_phrase": null,
+      "duration_phrase": null,
+      "start_phrase": null,
+      "route_phrase": null,
+      "said_by": "doctor"
+    },
+    {
+      "id": "rx2",
+      "action": "start",
+      "spoken_name": "Asthalin inhaler",
+      "name_quote": "Asthalin inhaler",
+      "dose_phrase": "दो puff",
+      "timing_phrase": "ज़रूरत पड़ने पर, दिन में चार बार से ज़्यादा नहीं",
+      "food_phrase": null,
+      "duration_phrase": null,
+      "start_phrase": null,
+      "route_phrase": null,
+      "said_by": "doctor"
+    },
+    {
+      "id": "rx3",
+      "action": "start",
+      "spoken_name": "Montair LC",
+      "name_quote": "Montair LC",
+      "dose_phrase": "एक tablet",
+      "timing_phrase": "रात को",
+      "food_phrase": null,
+      "duration_phrase": "तीस दिन",
+      "start_phrase": null,
+      "route_phrase": null,
+      "said_by": "doctor"
+    }
+  ],
+  "corrections": []
+}

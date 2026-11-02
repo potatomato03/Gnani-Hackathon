@@ -13,7 +13,7 @@ from faker import Faker
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SEED = 2704
 LANGUAGES = ["hi-IN", "hi-IN", "en-IN", "te-IN", "ta-IN"]
-CONSENTS = ["recording", "ai_processing", "call"]
+CONSENTS = ["recording", "ai_processing", "call", "followup_whatsapp"]
 # Details the case families depend on.
 CASE_PATIENTS = {
     "pat-001": {"sex": "F", "birth_year": 1994, "language_pref": "hi-IN", "allergy_status": "nka"},

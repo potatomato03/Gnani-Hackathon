@@ -1,0 +1,141 @@
+{
+  "items": [
+    {
+      "id": "x1",
+      "kind": "history",
+      "term": "high blood pressure",
+      "quote": "Routine follow up for high blood pressure",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x2",
+      "kind": "symptom",
+      "term": "chest pain",
+      "quote": "No chest pain",
+      "assertion": "absent",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x3",
+      "kind": "symptom",
+      "term": "breathlessness",
+      "quote": "no breathlessness",
+      "assertion": "absent",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x4",
+      "kind": "vital",
+      "term": "blood pressure 128/82",
+      "quote": "BP today is one twenty eight over eighty two",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x5",
+      "kind": "result",
+      "term": "LDL 160",
+      "quote": "LDL one sixty",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x6",
+      "kind": "advice",
+      "term": "walk 30 minutes daily",
+      "quote": "Walk thirty minutes daily",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x7",
+      "kind": "advice",
+      "term": "reduce salt",
+      "quote": "reduce salt",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "current",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x8",
+      "kind": "order",
+      "term": "repeat lipid profile after three months",
+      "quote": "Repeat lipid profile after three months",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "planned",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    },
+    {
+      "id": "x9",
+      "kind": "follow_up",
+      "term": "review after three months",
+      "quote": "review after three months",
+      "assertion": "present",
+      "certainty": "stated",
+      "temporality": "planned",
+      "laterality": null,
+      "subject": "patient",
+      "said_by": "doctor"
+    }
+  ],
+  "medications": [
+    {
+      "id": "rx1",
+      "action": "continue",
+      "spoken_name": "Telma forty",
+      "name_quote": "Telma forty",
+      "dose_phrase": null,
+      "timing_phrase": null,
+      "food_phrase": null,
+      "duration_phrase": null,
+      "start_phrase": null,
+      "route_phrase": null,
+      "said_by": "doctor"
+    },
+    {
+      "id": "rx2",
+      "action": "history",
+      "spoken_name": "Atorva ten",
+      "name_quote": "Atorva ten",
+      "dose_phrase": null,
+      "timing_phrase": null,
+      "food_phrase": null,
+      "duration_phrase": null,
+      "start_phrase": null,
+      "route_phrase": null,
+      "said_by": "doctor"
+    }
+  ],
+  "corrections": []
+}

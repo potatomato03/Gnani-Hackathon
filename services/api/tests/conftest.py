@@ -45,16 +45,4 @@ def approved_report(draft_report):
     return approve(draft_report, 'Dr Test', datetime(2026, 10, 5, 12, 0))
 
 
-class FixtureClient:
-    def __init__(self, directory, mutate=None):
-        self.directory, self.mutate = directory, mutate
-
-    def generate(self, system, user, schema, prompt_version):
-        import json
-        from voicerx.llm.client import CallMeta
-        name = 'extraction' if prompt_version.startswith('extract') else 'report_fields'
-        data = json.loads((self.directory / (name + '.json')).read_text(encoding='utf-8'))
-        if self.mutate:
-            data = self.mutate(prompt_version, data)
-        return schema.model_validate(data), CallMeta(provider='fixture', model='fixture',
-            prompt_version=prompt_version, cache_key=name, cached=True, key_index=0, attempts=0)
+from voicerx.fixture_client import FixtureClient  # noqa: E402  (re-exported for the tests)

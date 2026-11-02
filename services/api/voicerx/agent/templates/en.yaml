@@ -1,0 +1,37 @@
+# Follow-up messages in English. Fixed text only: no model writes these. DRAFT by the assistant, pending review.
+language: en-IN
+reviewed_by: null
+disclosure: 'Hello {patient}. I am the AI assistant for {doctor} at {clinic}. This is about your visit on {date}.'
+summary_intro: 'Your doctor prescribed:'
+keywords_help: 'Reply DOCTOR to reach the clinic. Reply STOP to stop these messages.'
+questions:
+  tolerance: 'Any problem with the new medicine?'
+  symptom_status: 'How are you feeling now?'
+  adherence: 'Are you taking your medicines on time?'
+  review_attendance: 'Can you come for your review on {date}?'
+  side_effect_detail: 'What problem are you having? Please type it.'
+buttons:
+  no_problem: 'No problem'
+  some_problem: 'Some problem'
+  stopped: 'Stopped it'
+  better: 'Better'
+  same: 'Same'
+  worse: 'Worse'
+  taking_all: 'Taking all'
+  missed_some: 'Missed some'
+  'yes': 'Yes, I will come'
+  need_another_day: 'Need another day'
+replies:
+  thanks: 'Thank you. I have added this to {doctor}''s record.'
+  answer_prefix: 'Your prescription says:'
+  answer_suffix: 'Reply DOCTOR for anything else.'
+  escalated: 'I have passed your question to {doctor}. The clinic will contact you.'
+  worse: 'I have told {doctor}, and the clinic will contact you. If you have breathlessness, chest pain or fainting, go to the nearest emergency now or call 108.'
+  stopped_medicine: 'Please do not change your medicines without asking the doctor. I have told {doctor}, and the clinic will contact you.'
+  side_effect_noted: 'Thank you. I have sent this to {doctor}, and the clinic will contact you.'
+  urgent: 'This could be serious. Go to the nearest emergency now or call 108. I have also alerted {doctor}.'
+  callback: 'Okay, I have told the clinic. They will call you.'
+  consult: 'I have sent your request for a new appointment to the clinic. They will fix a time with you.'
+  reschedule: 'Okay, I have told the clinic. They will fix a new time with you.'
+  clarify: 'Sorry, I did not understand. Please choose an option below, or reply DOCTOR.'
+  stop_confirmed: 'Okay, you will not get any more follow-up messages. Please contact the clinic directly if you need to.'

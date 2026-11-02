@@ -1,0 +1,327 @@
+"""The follow-up conversation: send the plan's touches, read replies, record them, and hand the doctor
+what needs a doctor. No model is called: buttons, keywords and fixed rules only (runbook D-104 to D-109).
+
+Order for each patient message: warning sign, STOP, DOCTOR, side-effect detail, check-in answer,
+new consultation, medicine question, then ask again (during a check-in) or pass to the doctor.
+"""
+from datetime import timedelta
+from pathlib import Path
+
+from ..contracts.followup import (Awaiting, Button, Conversation, DoctorTask, FollowUpAnswer, FollowUpRecord,
+                                  Message)
+from .gate import CONSENT, GateRefused, check_consent, check_reply, check_schedule, summary_names
+from .ground import answer_medicine_question
+from .plan import plan_followups
+from .redflags import find_red_flags
+from .templates import format_date, load_templates, medicine_rows, summary_text
+from .text import find, negated, normalise, tokens
+
+BUTTONS = {
+    'tolerance': ['no_problem', 'some_problem', 'stopped'],
+    'symptom_status': ['better', 'same', 'worse'],
+    'adherence': ['taking_all', 'missed_some', 'stopped'],
+    'review_attendance': ['yes', 'need_another_day'],
+}
+# Typed answers to a check-in. Pending language review, like the templates.
+ANSWER_WORDS = {
+    'tolerance': {
+        'no_problem': ['no problem', 'koi dikkat nahi', 'koi dikkat nahin', 'कोई दिक्कत नहीं', 'कोई परेशानी नहीं',
+                       'fine', 'theek', 'thik', 'ठीक', 'all good', 'sab theek'],
+        'some_problem': ['problem', 'dikkat', 'दिक्कत', 'परेशानी', 'takleef', 'तकलीफ', 'side effect', 'ulti',
+                         'उल्टी', 'chakkar', 'चक्कर', 'jalan', 'जलन', 'rash', 'दाने', 'khujli', 'खुजली'],
+        'stopped': ['stopped', 'band kar', 'बंद कर', 'chhod', 'छोड़'],
+    },
+    'symptom_status': {
+        'better': ['better', 'behtar', 'बेहतर', 'theek', 'thik', 'ठीक', 'aaram', 'आराम', 'fine', 'good'],
+        'same': ['same', 'waisa hi', 'waise hi', 'वैसा ही', 'वैसे ही', 'no change', 'koi farak nahi', 'कोई फर्क नहीं'],
+        'worse': ['worse', 'kharab', 'खराब', 'badh gaya', 'badh gayi', 'बढ़ गया', 'बढ़ गई', 'zyada', 'ज़्यादा', 'bura'],
+    },
+    'adherence': {
+        'taking_all': ['yes', 'haan', 'han', 'हां', 'le raha', 'le rahi', 'ले रहा', 'ले रही', 'taking', 'sab le'],
+        'missed_some': ['missed', 'miss', 'bhool', 'भूल', 'छूट', 'chhoot', 'chhut'],
+        'stopped': ['stopped', 'band kar', 'बंद कर', 'chhod', 'छोड़'],
+    },
+    'review_attendance': {
+        'yes': ['yes', 'haan', 'han', 'हां', 'aaunga', 'aaungi', 'आऊंगा', 'आऊंगी', 'aa jaunga', 'aa jaungi', 'ok',
+                'okay', 'theek hai', 'ठीक है'],
+        'need_another_day': ['another day', 'dusra din', 'doosra din', 'दूसरा दिन', 'nahi aa', 'नहीं आ',
+                             'reschedule', 'change the date'],
+    },
+}
+STOP_WORDS = {'stop', 'stop messages', 'unsubscribe', 'स्टॉप'}
+DOCTOR_WORDS = {'doctor', 'dr', 'डॉक्टर', 'daktar'}
+DOCTOR_PHRASES = ['doctor se baat', 'talk to the doctor', 'talk to doctor', 'speak to the doctor', 'डॉक्टर से बात',
+                  'call me', 'call back', 'mujhe call']
+CONSULT_PHRASES = ['appointment', 'अपॉइंटमेंट', 'new consultation', 'naya appointment', 'dikhana hai',
+                   'दिखाना है', 'milna hai', 'book a visit']
+ENGLISH = {'no_problem': 'no problem', 'some_problem': 'some problem', 'stopped': 'stopped the medicine',
+           'better': 'better', 'same': 'the same', 'worse': 'worse', 'taking_all': 'taking all medicines',
+           'missed_some': 'missed some doses', 'yes': 'will come', 'need_another_day': 'needs another day'}
+STEP = timedelta(minutes=2)
+
+
+def start(visit, conversation_id) -> Conversation:
+    """Send the visit summary right after approval. Refuses without consent."""
+    check_consent(visit.consents)
+    approved = visit.approved
+    plan = plan_followups(visit)
+    header = approved.header
+    conv = Conversation(id=conversation_id, clinic_id=visit.clinic_id, case_id=visit.case_id,
+                        patient_id=header.patient_id, patient_name=header.patient_name,
+                        doctor_name=header.doctor_name, clinic_name=header.clinic_name,
+                        language=approved.language_pref, visit_date=header.visit_date,
+                        report_hash=approved.content_hash, consents=list(visit.consents), plan=plan,
+                        clock=plan.touches[0].due_at)
+    conv._visit = visit
+    templates = load_templates(conv.language)
+    summary = plan.touches[0]
+    _send(conv, Message(id='', sender='clinic', kind='summary', touch_id=summary.id, at=conv.clock,
+                        text=summary_text(templates, approved, summary_names(conv)),
+                        cites=list(medicine_rows(approved))))
+    summary.status = 'sent'
+    return conv
+
+
+def attach(conv: Conversation, visit):
+    """Reconnect a stored conversation to its visit (the approved report is not stored twice)."""
+    conv._visit = visit
+    return conv
+
+
+def advance(conv: Conversation) -> bool:
+    """Demo clock: jump to the next planned touch and send it. Returns False when nothing more will be sent."""
+    if conv.stopped:
+        return False
+    if conv.awaiting is not None:
+        touch = _touch(conv, conv.awaiting.touch_id)
+        if touch.status == 'sent':
+            touch.status = 'expired'
+            conv.unanswered += 1
+        conv.awaiting = None
+        if conv.unanswered >= 2:
+            _skip_planned(conv)
+            _task(conv, 'no_response', None, 'Two check-ins in a row went unanswered. Follow-up messages stopped.')
+            return False
+    planned = sorted((t for t in conv.plan.touches if t.status == 'planned'), key=lambda t: t.due_at)
+    if not planned:
+        return False
+    touch = planned[0]
+    check_schedule(touch)
+    conv.clock = max(conv.clock, touch.due_at)
+    touch.status = 'sent'
+    conv.awaiting = Awaiting(touch_id=touch.id, question=touch.questions[0], remaining=touch.questions[1:])
+    _ask(conv, conv.awaiting.question, touch.id)
+    return True
+
+
+def receive(conv: Conversation, text: str | None = None, button: str | None = None) -> FollowUpRecord:
+    conv.clock = conv.clock + STEP
+    templates = load_templates(conv.language)
+    replies = templates['replies']
+    doctor = conv.doctor_name
+    if button is not None:
+        label = templates['buttons'].get(button, button)
+        conv.messages.append(Message(id=f'm{len(conv.messages) + 1}', sender='patient', text=label, at=conv.clock,
+                                     touch_id=conv.awaiting.touch_id if conv.awaiting else None))
+        return _button(conv, button, label)
+    text = (text or '').strip()
+    conv.messages.append(Message(id=f'm{len(conv.messages) + 1}', sender='patient', text=text, at=conv.clock,
+                                 touch_id=conv.awaiting.touch_id if conv.awaiting else None))
+    flags = find_red_flags(text)
+    if flags:
+        record = _record(conv, text, 'typed', 'urgent', [], flags)
+        conv.awaiting = None
+        _skip_planned(conv)
+        _task(conv, 'urgent', record, f'Warning sign ({", ".join(flags)}). Patient wrote: «{text}». '
+                                      'Told to go to emergency or call 108.')
+        _reply(conv, record, 'urgent', replies['urgent'].format(doctor=doctor), flags)
+        return record
+    plain = ' '.join(tokens(text))
+    if plain in {normalise(w) for w in STOP_WORDS}:
+        return _stop(conv, text)
+    if plain in {normalise(w) for w in DOCTOR_WORDS} or _has(text, DOCTOR_PHRASES):
+        record = _record(conv, text, 'typed', 'escalated', [])
+        _task(conv, 'callback', record, f'Patient asked to speak to the clinic: «{text}».')
+        _reply(conv, record, 'text', replies['callback'])
+        return record
+    awaiting = conv.awaiting
+    if awaiting and awaiting.question == 'side_effect_detail':
+        answer = FollowUpAnswer(question='side_effect_detail', value='described', quote=text)
+        record = _record(conv, text, 'typed', 'recorded', [answer])
+        _task(conv, 'side_effect', record, f'Problem with the new medicine. Patient wrote: «{text}».')
+        _reply(conv, record, 'text', replies['side_effect_noted'].format(doctor=doctor))
+        _next_question(conv)
+        return record
+    if awaiting:
+        value = _read_answer(awaiting.question, text)
+        if value:
+            return _answer(conv, awaiting.question, value, text, 'typed')
+    if _has(text, CONSULT_PHRASES):
+        record = _record(conv, text, 'typed', 'escalated', [])
+        _task(conv, 'consult_request', record, f'Patient asked for an appointment: «{text}».')
+        _reply(conv, record, 'text', replies['consult'])
+        return record
+    answer = answer_medicine_question(conv._visit.approved, templates, text, at=conv.clock)
+    if answer is not None:
+        record = _record(conv, text, 'typed', 'answered', [])
+        try:
+            _reply(conv, record, 'answer', answer.text, cites=answer.cites)
+            return record
+        except GateRefused:
+            conv.records.pop()  # nothing was sent; fall through to the doctor
+    if awaiting:
+        record = _record(conv, text, 'typed', 'clarified', [])
+        _reply(conv, record, 'question', replies['clarify'], buttons=_buttons(templates, awaiting.question))
+        return record
+    record = _record(conv, text, 'typed', 'escalated', [])
+    _task(conv, 'question', record, f'Question the approved visit does not answer: «{text}».')
+    _reply(conv, record, 'text', replies['escalated'].format(doctor=doctor))
+    return record
+
+
+def save(conv: Conversation, directory: Path):
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f'{conv.id}.json'
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(conv.model_dump_json(indent=2), encoding='utf-8')
+    temporary.replace(path)
+
+
+# Internals
+
+def _touch(conv, touch_id):
+    return next(t for t in conv.plan.touches if t.id == touch_id)
+
+
+def _skip_planned(conv):
+    for touch in conv.plan.touches:
+        if touch.status == 'planned':
+            touch.status = 'skipped'
+
+
+def _has(text, phrases):
+    words = tokens(text)
+    return any(find(words, p) for p in phrases)
+
+
+def _read_answer(question, text):
+    """The single answer a typed reply gives, or None when it gives none, several, or a negated one."""
+    words = tokens(text)
+    matches = []
+    for value, phrases in ANSWER_WORDS[question].items():
+        for phrase in phrases:
+            for span in find(words, phrase):
+                matches.append((span, value, negated(words, span, phrase)))
+    kept = [m for m in matches if not any(o[0][0] <= m[0][0] and m[0][1] <= o[0][1] and o[0] != m[0]
+                                          for o in matches)]
+    if not kept or any(neg for _, _, neg in kept):
+        return None
+    values = {value for _, value, _ in kept}
+    return values.pop() if len(values) == 1 else None
+
+
+def _buttons(templates, question):
+    return [Button(id=b, label=templates['buttons'][b]) for b in BUTTONS.get(question, [])]
+
+
+def _ask(conv, question, touch_id):
+    templates = load_templates(conv.language)
+    date = format_date(conv._visit.review_date) if conv._visit.review_date else ''
+    _send(conv, Message(id='', sender='clinic', kind='question', touch_id=touch_id, at=conv.clock,
+                        text=templates['questions'][question].format(date=date),
+                        buttons=_buttons(templates, question)))
+
+
+def _next_question(conv):
+    awaiting = conv.awaiting
+    if awaiting and awaiting.remaining:
+        conv.awaiting = Awaiting(touch_id=awaiting.touch_id, question=awaiting.remaining[0],
+                                 remaining=awaiting.remaining[1:])
+        _ask(conv, conv.awaiting.question, awaiting.touch_id)
+        return True
+    conv.awaiting = None
+    return False
+
+
+def _button(conv, button, label):
+    awaiting = conv.awaiting
+    templates = load_templates(conv.language)
+    if not awaiting or button not in BUTTONS.get(awaiting.question, []):
+        record = _record(conv, label, 'button', 'clarified', [])
+        _reply(conv, record, 'text', templates['replies']['clarify'])
+        return record
+    return _answer(conv, awaiting.question, button, label, 'button')
+
+
+def _answer(conv, question, value, raw, source):
+    templates = load_templates(conv.language)
+    replies, doctor = templates['replies'], conv.doctor_name
+    touch = _touch(conv, conv.awaiting.touch_id)
+    touch.status = 'answered'
+    conv.unanswered = 0
+    answer = FollowUpAnswer(question=question, value=value, quote=raw if source == 'typed' else None)
+    record = _record(conv, raw, source, 'recorded', [answer])
+    when = format_date(conv.clock.date())
+    said = f' Patient wrote: «{raw}».' if source == 'typed' else ''
+    if value == 'some_problem':
+        conv.awaiting = Awaiting(touch_id=touch.id, question='side_effect_detail',
+                                 remaining=conv.awaiting.remaining)
+        _ask(conv, 'side_effect_detail', touch.id)
+        return record
+    notable = None
+    if value == 'worse':
+        _task(conv, 'worse', record, f'Feels worse ({question.replace("_", " ")} check, {when}).{said}')
+        notable = replies['worse'].format(doctor=doctor)
+    elif value == 'stopped':
+        _task(conv, 'stopped_medicine', record, f'Says they stopped a medicine ({when}).{said}')
+        notable = replies['stopped_medicine'].format(doctor=doctor)
+    elif value == 'need_another_day':
+        _task(conv, 'consult_request', record, f'Cannot come for the review; needs another day ({when}).{said}')
+        notable = replies['reschedule']
+    if notable:
+        _reply(conv, record, 'text', notable)
+    if not _next_question(conv) and not notable:
+        _reply(conv, record, 'text', replies['thanks'].format(doctor=doctor))
+    return record
+
+
+def _stop(conv, text):
+    record = _record(conv, text, 'typed', 'stopped', [])
+    conv.consents = [c for c in conv.consents if c != CONSENT]
+    conv.awaiting = None
+    _skip_planned(conv)
+    conv.stopped = True
+    _reply(conv, record, 'system', load_templates(conv.language)['replies']['stop_confirmed'])
+    return record
+
+
+def _record(conv, raw, source, action, answers, flags=()):
+    touch_id = conv.awaiting.touch_id if conv.awaiting else None
+    record = FollowUpRecord(id=f'{conv.id}-r{len(conv.records) + 1}', clinic_id=conv.clinic_id,
+                            patient_id=conv.patient_id, visit_ref=conv.case_id, report_hash=conv.report_hash,
+                            touch_id=touch_id, channel=conv.plan.channel, received_at=conv.clock, raw_text=raw,
+                            transcript_source=source, answers=answers, red_flags=list(flags), action=action,
+                            reply_text='')
+    conv.records.append(record)
+    return record
+
+
+def _task(conv, kind, record, note):
+    conv.tasks.append(DoctorTask(id=f'{conv.id}-k{len(conv.tasks) + 1}', kind=kind,
+                                 record_id=record.id if record else None, patient_id=conv.patient_id,
+                                 visit_ref=conv.case_id, created_at=conv.clock, note=note))
+
+
+def _reply(conv, record, kind, text, flags=(), cites=(), buttons=()):
+    message = Message(id='', sender='clinic', kind=kind, text=text, at=conv.clock, cites=list(cites),
+                      buttons=list(buttons), touch_id=record.touch_id)
+    _send(conv, message, flags)
+    record.reply_text = (record.reply_text + '\n' + text).strip()
+    record.reply_cites = list(dict.fromkeys(record.reply_cites + list(cites)))
+
+
+def _send(conv, message, flags=()):
+    """Everything sent to the patient goes through the gate first."""
+    check_reply(conv, conv._visit.approved, message, list(flags))
+    message.id = f'm{len(conv.messages) + 1}'
+    conv.messages.append(message)
