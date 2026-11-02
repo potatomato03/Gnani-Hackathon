@@ -1182,7 +1182,7 @@ git commit -m "Add check 2: every report line must match what it cites"
 | Not discussed | Display names of the empty model sections, in `MODEL_SECTIONS` order |
 | Content hash | SHA-256 of the report's canonical JSON, without `content_hash`, `status`, `approved_by` and `approved_at` |
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from datetime import date
@@ -1284,14 +1284,14 @@ Add a `draft_report` fixture to `conftest.py`. It builds a clean `DraftReport` w
 - One exact medicine, `rx1`: product `p-dolo-650`, dose 1 tablet, `AsNeeded`, after food, 3 days, start unstated.
 - No issues.
 
-- [ ] **Step 2: Run the tests to make sure they fail**
+- [x] **Step 2: Run the tests to make sure they fail**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_assemble.py -q`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `assemble.py` with the fixed wording above**
+- [x] **Step 3: Implement `assemble.py` with the fixed wording above**
 
-- [ ] **Step 4: Run the tests to make sure they pass, then commit**
+- [x] **Step 4: Run the tests to make sure they pass, then commit**
 
 Run: `../.venv/Scripts/python -m pytest services/api/tests/unit/test_assemble.py -q`
 Expected: all pass
