@@ -19,11 +19,12 @@ def load_templates(language):
     return yaml.safe_load((HERE / (SUPPORTED[language] + '.yaml')).read_text(encoding='utf-8'))
 
 
-def medicine_rows(approved):
+def medicine_rows(approved, language=None):
     """Medicine id -> the exact row the patient may be told: the patient-language box row (fixed templates),
-    or for English the approved medicine table row. Never model text."""
+    or for English the approved medicine table row. Never model text. language: the conversation's language
+    when the patient chose English for a visit in another language (D-116); None means the visit's own."""
     medicines = table_medicines(approved.checked)
-    box = build_patient_box(approved, BOX_TEMPLATES)
+    box = None if language == 'en-IN' else build_patient_box(approved, BOX_TEMPLATES)
     if box is not None:
         rows = box.rows
     else:
@@ -33,8 +34,8 @@ def medicine_rows(approved):
     return {rx.id: row for rx, row in zip(medicines, rows)}
 
 
-def box_note(approved):
-    box = build_patient_box(approved, BOX_TEMPLATES)
+def box_note(approved, language=None):
+    box = None if language == 'en-IN' else build_patient_box(approved, BOX_TEMPLATES)
     return box.note if box is not None else ''
 
 
@@ -47,13 +48,13 @@ def answer_text(templates, row):
     return '\n'.join([reply['answer_prefix'], row, reply['answer_suffix']])
 
 
-def summary_text(templates, approved, names):
+def summary_text(templates, approved, names, language=None):
     """names: patient, doctor, clinic, date. The disclosure comes first (research R27)."""
-    rows = medicine_rows(approved)
+    rows = medicine_rows(approved, language)
     parts = [templates['disclosure'].format(**names)]
     if rows:
         parts.append('\n'.join([templates['summary_intro'], *rows.values()]))
-    note = box_note(approved)
+    note = box_note(approved, language)
     if note:
         parts.append(note)
     parts.append(templates['keywords_help'])

@@ -41,19 +41,19 @@ def which_medicine(approved, text):
     return named[0] if len(named) == 1 else None
 
 
-def answer_medicine_question(approved, templates, text, at=None, message_id='draft'):
+def answer_medicine_question(approved, templates, text, at=None, message_id='draft', language=None):
     if contains(text, CHANGES) or not contains(text, ASKS):
         return None
     rx = which_medicine(approved, text)
     if rx is None:
         return None
-    return answer_for(approved, templates, rx.id, at=at, message_id=message_id)
+    return answer_for(approved, templates, rx.id, at=at, message_id=message_id, language=language)
 
 
-def answer_for(approved, templates, medicine_id, at=None, message_id='draft'):
+def answer_for(approved, templates, medicine_id, at=None, message_id='draft', language=None):
     """The fixed-row answer for a medicine already identified (by the rules above or a validated model
     reading, D-115). None when the id isn't an approved medicine."""
-    rows = medicine_rows(approved)
+    rows = medicine_rows(approved, language)
     if medicine_id not in rows:
         return None
     from datetime import datetime, timezone

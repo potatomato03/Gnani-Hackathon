@@ -31,6 +31,8 @@ GRAPH_BASE = 'https://graph.facebook.com'
 GRAPH_VERSION = 'v26.0'
 WINDOW = timedelta(hours=24)
 BODY_LIMIT, TITLE_LIMIT, MAX_BUTTONS = 1024, 20, 3
+# Interactive list (4 to 10 choices, e.g. the quick menu, D-117): body 4096, button label 20, row title 24.
+LIST_BODY_LIMIT, ROW_TITLE_LIMIT, MAX_ROWS, LIST_BUTTON = 4096, 24, 10, 'Menu'
 JOIN = re.compile(r'^\s*join\s+([A-Za-z0-9_\-]+)\s*$', re.IGNORECASE)
 REQUIRED = ('WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN',
             'WHATSAPP_TEST_NUMBERS')
@@ -141,6 +143,12 @@ class GraphClient:
         return self._message(to, {'type': 'interactive', 'interactive': {
             'type': 'button', 'body': {'text': text},
             'action': {'buttons': [{'type': 'reply', 'reply': {'id': i, 'title': label}} for i, label in buttons]}}})
+
+    def send_list(self, to, text, button_label, rows):
+        return self._message(to, {'type': 'interactive', 'interactive': {
+            'type': 'list', 'body': {'text': text},
+            'action': {'button': button_label,
+                       'sections': [{'title': button_label, 'rows': [{'id': i, 'title': t} for i, t in rows]}]}}})
 
     def send_audio(self, to, media_id, voice=True):
         return self._message(to, {'type': 'audio', 'audio': {'id': media_id, 'voice': voice}})
@@ -310,9 +318,13 @@ class WhatsAppChannel:
         buttons = [(b.id, b.label) for b in message.buttons]
         fits = (len(message.text) <= BODY_LIMIT and len(buttons) <= MAX_BUTTONS
                 and all(len(label) <= TITLE_LIMIT for _, label in buttons))
+        listed = (len(message.text) <= LIST_BODY_LIMIT and len(buttons) <= MAX_ROWS
+                  and all(len(label) <= ROW_TITLE_LIMIT for _, label in buttons))
         if buttons and fits:
             self.graph.send_buttons(number, message.text, buttons)
-        elif buttons:   # too long for reply buttons: the labels are typed answers the router already reads
+        elif buttons and listed:
+            self.graph.send_list(number, message.text, LIST_BUTTON, buttons)
+        elif buttons:   # too long for buttons or a list: the labels are typed answers the router already reads
             self.graph.send_text(number, message.text + '\n\n' + '\n'.join(f'• {label}' for _, label in buttons))
         else:
             self.graph.send_text(number, message.text)

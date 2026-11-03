@@ -9,9 +9,8 @@ from pathlib import Path
 from ..contracts.followup import Conversation, MemoryItem, Understanding
 from ..llm.client import ModelOutputInvalid, QuotaExhausted
 from ..pipeline.assemble import table_medicines
-from .conversation import BUTTONS
+from .conversation import BUTTONS, offered_languages
 from .redflags import load_rules
-from .templates import SUPPORTED
 from .text import find, tokens
 
 PROMPT_VERSION = 'understand-v1'
@@ -26,11 +25,6 @@ def _medicines(conv):
 
 def _flag_ids():
     return {flag['id'] for flag in load_rules()['flags']}
-
-
-def offered_languages(conv):
-    """The visit's own language and English, where follow-up templates exist (D-116)."""
-    return {conv._visit.approved.language_pref, 'en-IN'} & set(SUPPORTED)
 
 
 def _quoted(text, quote):
@@ -64,7 +58,7 @@ def _payload(conv, text, memory):
         'medicines': [{'id': rx.id, 'brand': products[rx.product_id].brand, 'spoken_name': rx.spoken_name}
                       for rx in _medicines(conv)],
         'warning_sign_ids': sorted(_flag_ids()),
-        'languages_offered': sorted(offered_languages(conv)),
+        'languages_offered': offered_languages(conv),
         'recent_memory': [{'kind': m.kind, 'text': m.text, 'at': m.at.isoformat()} for m in memory[-MEMORY_ITEMS:]],
         'message': text,
     }

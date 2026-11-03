@@ -4,6 +4,7 @@ reviewed_by: null
 disclosure: 'Hello {patient}. I am the AI assistant for {doctor} at {clinic}. This is about your visit on {date}.'
 summary_intro: 'Your doctor prescribed:'
 keywords_help: 'Reply DOCTOR to reach the clinic. Reply STOP to stop these messages.'
+language_prompt: "Hello {patient}, I am the AI assistant for {doctor} at {clinic}. Which language would you like to chat in?\n\nनमस्ते {patient}, मैं {clinic} में {doctor} का AI सहायक हूँ। आप किस भाषा में बात करना चाहेंगे?"
 questions:
   tolerance: 'Any problem with the new medicine?'
   symptom_status: 'How are you feeling now?'
@@ -23,6 +24,13 @@ buttons:
   need_another_day: 'Need another day'
   stop_yes: 'Yes, stop'
   stop_no: 'No, continue'
+  menu_medicines: 'My medicines'
+  menu_doctor: 'Talk to doctor'
+  menu_report: 'Send a report'
+  menu_language: 'Change language'
+  menu_stop: 'Stop messages'
+  lang_hi-IN: 'हिंदी'
+  lang_en-IN: 'English'
 replies:
   thanks: 'Thank you. I have added this to {doctor}''s record.'
   answer_prefix: 'Your prescription says:'

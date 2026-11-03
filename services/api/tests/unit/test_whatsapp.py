@@ -73,7 +73,9 @@ class FakeGraph:
         return 404, {}, b'{"error": {"message": "unknown test route"}}'
 
     def texts(self):
-        return [m["text"]["body"] for m in self.sent if m["type"] == "text"]
+        """Every message body sent, text or interactive (buttons, list)."""
+        return [m["text"]["body"] if m["type"] == "text" else m["interactive"]["body"]["text"]
+                for m in self.sent if m["type"] in ("text", "interactive")]
 
 
 class Clock:
@@ -188,8 +190,13 @@ def test_join_starts_the_visit_and_sends_the_summary(world):
     conversation_id = join(client)
     conv = client.get(f"/conversations/{conversation_id}").json()
     assert conv["plan"]["channel"] == "whatsapp"
-    assert graph.sent[0]["to"] == PHONE and graph.sent[0]["type"] == "text"
-    assert graph.sent[0]["text"]["body"] == conv["messages"][0]["text"] and "MONTAIR" in graph.texts()[0]
+    summary = graph.sent[0]
+    assert summary["to"] == PHONE and summary["type"] == "interactive"
+    assert summary["interactive"]["type"] == "list"         # five quick-menu buttons go as a list (D-117)
+    assert summary["interactive"]["body"]["text"] == conv["messages"][0]["text"] and "MONTAIR" in graph.texts()[0]
+    rows = summary["interactive"]["action"]["sections"][0]["rows"]
+    assert [r["id"] for r in rows] == [b["id"] for b in conv["messages"][0]["buttons"]]
+    assert all(len(r["title"]) <= 24 for r in rows) and len(summary["interactive"]["action"]["button"]) <= 20
     assert conv["contact"] and PHONE not in json.dumps(conv)
 
 

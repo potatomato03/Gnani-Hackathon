@@ -5,6 +5,7 @@ reviewed_by: null
 disclosure: 'नमस्ते {patient}। मैं {clinic} में {doctor} का AI सहायक हूँ। यह मैसेज {date} की आपकी जाँच के बारे में है।'
 summary_intro: 'डॉक्टर ने आपकी दवाइयाँ इस तरह लिखी हैं:'
 keywords_help: 'डॉक्टर से बात करनी हो तो DOCTOR लिखें। मैसेज बंद करने के लिए STOP लिखें।'
+language_prompt: "Hello {patient}, I am the AI assistant for {doctor} at {clinic}. Which language would you like to chat in?\n\nनमस्ते {patient}, मैं {clinic} में {doctor} का AI सहायक हूँ। आप किस भाषा में बात करना चाहेंगे?"
 questions:
   tolerance: 'नई दवा से कोई दिक्कत तो नहीं हो रही?'
   symptom_status: 'अब आप कैसा महसूस कर रहे हैं?'
@@ -24,6 +25,13 @@ buttons:
   need_another_day: 'दूसरा दिन चाहिए'
   stop_yes: 'हाँ, बंद करें'
   stop_no: 'नहीं, जारी रखें'
+  menu_medicines: 'मेरी दवाइयाँ'
+  menu_doctor: 'डॉक्टर से बात'
+  menu_report: 'रिपोर्ट भेजें'
+  menu_language: 'भाषा बदलें'
+  menu_stop: 'मैसेज बंद करें'
+  lang_hi-IN: 'हिंदी'
+  lang_en-IN: 'English'
 replies:
   thanks: 'धन्यवाद। मैंने यह {doctor} के रिकॉर्ड में जोड़ दिया है।'
   answer_prefix: 'आपकी पर्ची के अनुसार:'

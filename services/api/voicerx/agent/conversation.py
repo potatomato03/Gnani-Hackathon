@@ -16,9 +16,14 @@ from .gate import CONSENT, GateRefused, check_consent, check_reply, check_schedu
 from .ground import CHANGES, answer_for, answer_medicine_question
 from .plan import plan_followups
 from .redflags import find_red_flags
-from .templates import format_date, load_templates, medicine_rows, summary_text
+from .templates import SUPPORTED, format_date, load_templates, medicine_rows, summary_text
 from .text import contains, find, negated, normalise, tokens
 
+# The quick menu (D-117): attached to the summary, the greeting and "didn't understand" outside a check-in.
+MENU = ['menu_medicines', 'menu_doctor', 'menu_report', 'menu_language', 'menu_stop']
+# Typed answers to the first-message language question, before any model is asked.
+LANGUAGE_WORDS = {'en-IN': ['english', 'angrezi', 'angreji', 'अंग्रेज़ी', 'अंग्रेजी', 'इंग्लिश'],
+                  'hi-IN': ['hindi', 'हिंदी', 'हिन्दी']}
 BUTTONS = {
     'tolerance': ['no_problem', 'some_problem', 'stopped'],
     'symptom_status': ['better', 'same', 'worse'],
@@ -63,8 +68,10 @@ ENGLISH = {'no_problem': 'no problem', 'some_problem': 'some problem', 'stopped'
 STEP = timedelta(minutes=2)
 
 
-def start(visit, conversation_id) -> Conversation:
-    """Send the visit summary right after approval. Refuses without consent."""
+def start(visit, conversation_id, ask_language: bool = False) -> Conversation:
+    """Send the visit summary right after approval. Refuses without consent. With ask_language, a visit whose
+    language isn't English first asks (in that language and English) which one to chat in; the summary
+    follows the choice (D-116)."""
     check_consent(visit.consents)
     approved = visit.approved
     plan = plan_followups(visit)
@@ -76,13 +83,39 @@ def start(visit, conversation_id) -> Conversation:
                         report_hash=approved.content_hash, consents=list(visit.consents), plan=plan,
                         clock=plan.touches[0].due_at)
     conv._visit = visit
-    templates = load_templates(conv.language)
-    summary = plan.touches[0]
-    _send(conv, Message(id='', sender='clinic', kind='summary', touch_id=summary.id, at=conv.clock,
-                        text=summary_text(templates, approved, summary_names(conv)),
-                        cites=list(medicine_rows(approved))))
-    summary.status = 'sent'
+    if ask_language and len(offered_languages(conv)) > 1:
+        conv.language_chosen = False
+        _send(conv, _language_prompt(conv))
+    else:
+        _send_summary(conv)
     return conv
+
+
+def offered_languages(conv):
+    """The visit's own language and English, where follow-up templates exist; the visit's language first."""
+    return [lang for lang in dict.fromkeys([conv._visit.approved.language_pref, 'en-IN']) if lang in SUPPORTED]
+
+
+def menu_buttons(templates):
+    return [Button(id=b, label=templates['buttons'][b]) for b in MENU]
+
+
+def _language_prompt(conv):
+    native = load_templates(conv._visit.approved.language_pref)
+    return Message(id='', sender='clinic', kind='question', at=conv.clock,
+                   text=native['language_prompt'].format(**summary_names(conv)),
+                   buttons=[Button(id=f'lang_{lang}', label=native['buttons'][f'lang_{lang}'])
+                            for lang in offered_languages(conv)])
+
+
+def _send_summary(conv):
+    templates = load_templates(conv.language)
+    summary = conv.plan.touches[0]
+    _send(conv, Message(id='', sender='clinic', kind='summary', touch_id=summary.id, at=conv.clock,
+                        text=summary_text(templates, conv._visit.approved, summary_names(conv), conv.language),
+                        cites=list(medicine_rows(conv._visit.approved, conv.language)),
+                        buttons=menu_buttons(templates)))
+    summary.status = 'sent'
 
 
 def attach(conv: Conversation, visit):
@@ -93,7 +126,7 @@ def attach(conv: Conversation, visit):
 
 def advance(conv: Conversation) -> bool:
     """Demo clock: jump to the next planned touch and send it. Returns False when nothing more will be sent."""
-    if conv.stopped:
+    if conv.stopped or not conv.language_chosen:
         return False
     if conv.awaiting is not None:
         touch = _touch(conv, conv.awaiting.touch_id)
@@ -153,6 +186,12 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
         _task(conv, 'callback', record, f'Patient asked to speak to the clinic: «{text}».')
         _reply(conv, record, 'text', replies['callback'])
         return record
+    if not conv.language_chosen:
+        chosen = [lang for lang in offered_languages(conv) if contains(text, LANGUAGE_WORDS.get(lang, []))]
+        if len(chosen) == 1:
+            record = _record(conv, text, source, 'recorded', [])
+            _set_language(conv, chosen[0], record)
+            return record
     reading = nlu(conv, text) if nlu else None
     if reading is not None and reading.warning_signs:     # a model may add a warning sign, never remove one
         return _urgent(conv, text, source, reading.warning_signs)
@@ -173,7 +212,7 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
         _task(conv, 'consult_request', record, f'Patient asked for an appointment: «{text}».')
         _reply(conv, record, 'text', replies['consult'])
         return record
-    answer = answer_medicine_question(conv._visit.approved, templates, text, at=conv.clock)
+    answer = answer_medicine_question(conv._visit.approved, templates, text, at=conv.clock, language=conv.language)
     if answer is not None:
         record = _record(conv, text, source, 'answered', [])
         try:
@@ -222,7 +261,8 @@ def _act(conv, reading, text, source):
     if intent == 'checkin_answer':           # validated: the value is one the awaited question accepts
         return _answer(conv, conv.awaiting.question, reading.answer_value, text, source)
     if intent == 'medicine_question' and not contains(text, CHANGES):
-        answer = answer_for(conv._visit.approved, templates, reading.medicine_id, at=conv.clock)
+        answer = answer_for(conv._visit.approved, templates, reading.medicine_id, at=conv.clock,
+                            language=conv.language)
         if answer is not None:
             record = _record(conv, text, source, 'answered', [])
             try:
@@ -248,7 +288,7 @@ def _act(conv, reading, text, source):
         _reply(conv, record, 'question', replies['stop_confirm'],
                buttons=[Button(id=b, label=templates['buttons'][b]) for b in ('stop_yes', 'stop_no')])
     elif intent == 'greeting':
-        _reply(conv, record, 'text', replies['greeting'].format(doctor=doctor))
+        _reply(conv, record, 'text', replies['greeting'].format(doctor=doctor), buttons=menu_buttons(templates))
     elif intent == 'send_report':
         _reply(conv, record, 'text', replies['upload_hint'].format(doctor=doctor))
     elif intent == 'change_language':
@@ -263,8 +303,12 @@ def _act(conv, reading, text, source):
 
 
 def _set_language(conv, language, record):
+    """The patient's choice: the summary in that language if it hasn't gone out yet, else a confirmation."""
     conv.language, conv.language_chosen = language, True
-    _reply(conv, record, 'text', load_templates(language)['replies']['language_set'])
+    if conv.plan.touches[0].status == 'planned':
+        _send_summary(conv)
+    else:
+        _reply(conv, record, 'text', load_templates(language)['replies']['language_set'])
 
 
 def voice_not_used(conv: Conversation) -> FollowUpRecord:
@@ -352,11 +396,37 @@ def _button(conv, button, label):
         record = _record(conv, label, 'button', 'clarified', [])
         _reply(conv, record, 'text', templates['replies']['stop_cancelled'])
         return record
+    if button.startswith('lang_') and button[len('lang_'):] in offered_languages(conv):
+        record = _record(conv, label, 'button', 'recorded', [])
+        _set_language(conv, button[len('lang_'):], record)
+        return record
+    if button in MENU:
+        return _menu(conv, button, label, templates)
     if not awaiting or button not in BUTTONS.get(awaiting.question, []):
         record = _record(conv, label, 'button', 'clarified', [])
-        _reply(conv, record, 'text', templates['replies']['clarify'])
+        _reply(conv, record, 'text', templates['replies']['clarify'],
+               buttons=[] if awaiting else menu_buttons(templates))
         return record
     return _answer(conv, awaiting.question, button, label, 'button')
+
+
+def _menu(conv, button, label, templates):
+    replies, doctor = templates['replies'], conv.doctor_name
+    if button == 'menu_doctor':
+        return _escalate(conv, label, 'button', 'callback', 'Patient asked to speak to the clinic (menu).',
+                         replies['callback'])
+    record = _record(conv, label, 'button', 'answered' if button == 'menu_medicines' else 'clarified', [])
+    if button == 'menu_medicines':
+        _send_summary(conv)
+    elif button == 'menu_report':
+        _reply(conv, record, 'text', replies['upload_hint'].format(doctor=doctor))
+    elif button == 'menu_language':
+        _send(conv, _language_prompt(conv))
+    else:   # menu_stop
+        conv.confirm_stop = True
+        _reply(conv, record, 'question', replies['stop_confirm'],
+               buttons=[Button(id=b, label=templates['buttons'][b]) for b in ('stop_yes', 'stop_no')])
+    return record
 
 
 def _answer(conv, question, value, raw, source):

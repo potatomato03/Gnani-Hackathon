@@ -41,13 +41,13 @@ def check_reply(conv, approved, message: Message, red_flags):
     if message.kind == 'urgent' and message.text != urgent:
         raise GateRefused('the urgent reply is fixed text and cannot be changed')
     if message.kind == 'answer':
-        rows = medicine_rows(approved)
+        rows = medicine_rows(approved, conv.language)
         if len(message.cites) != 1 or message.cites[0] not in rows \
                 or message.text != answer_text(templates, rows[message.cites[0]]):
             raise GateRefused('an answer must be exactly the cited approved medicine row')
     if message.kind == 'summary':
-        if message.cites != list(medicine_rows(approved)) or message.text != summary_text(
-                templates, approved, summary_names(conv)):
+        if message.cites != list(medicine_rows(approved, conv.language)) or message.text != summary_text(
+                templates, approved, summary_names(conv), conv.language):
             raise GateRefused('the summary must be exactly the approved medicine rows in fixed wording')
     return message
 

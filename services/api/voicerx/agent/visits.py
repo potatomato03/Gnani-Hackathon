@@ -96,15 +96,16 @@ def stored_conversations(state_dir: Path | None = None):
     return [Conversation.model_validate_json(p.read_text(encoding='utf-8')) for p in paths]
 
 
-def start_followup(visit: Visit, state_dir: Path | None = None, restart=False) -> Conversation:
-    """Start the follow-up for an approved visit, or return the one already running. Sends the summary."""
+def start_followup(visit: Visit, state_dir: Path | None = None, restart=False, ask_language=False) -> Conversation:
+    """Start the follow-up for an approved visit, or return the one already running. Sends the summary, or
+    with ask_language the first-message language question (D-116)."""
     from .conversation import attach, save, start
     state_dir = Path(state_dir or STATE)
     if not restart:
         for conv in reversed(stored_conversations(state_dir)):
             if conv.visit_id == visit.visit_id and conv.report_hash == visit.approved.content_hash:
                 return attach(conv, visit)
-    conv = start(visit, uuid4().hex[:12])
+    conv = start(visit, uuid4().hex[:12], ask_language=ask_language)
     conv.visit_id = visit.visit_id
     save(conv, Path(state_dir) / 'conversations')
     return conv
