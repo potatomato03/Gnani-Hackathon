@@ -95,3 +95,13 @@ def test_each_suggestion_carries_the_standard_instructions_it_would_bring():
 def test_the_view_lists_the_summary_headings_in_order():
     groups = view(make_draft([resolved_medicine()]))['report_groups']
     assert groups[0] == ['Present problem', ['chief_complaints', 'history_present_illness']]
+
+
+def test_an_instruction_said_away_from_its_medicine_can_be_used_in_one_click():
+    rx = resolved_medicine(duration=None, unbound=['duration_phrase'],
+                           quotes={'name_quote': 'Dolo six fifty', 'duration_phrase': 'for three days'})
+    data = view(make_draft([rx]))
+    [card] = [i for i in data['issue_views'] if i['code'] == 'phrase_not_bound']
+    assert card['message'] == 'Said away from this medicine: duration “for three days”'
+    assert card['uses'] == [{'label': 'Use “for three days”',
+                             'item': {'action': 'set_duration', 'value': {'value': 3, 'unit': 'day'}}}]

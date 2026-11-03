@@ -319,3 +319,23 @@ def test_a_form_word_after_the_name_still_lets_the_next_sentence_count():
     transcript = "Start Dolo six fifty tablet. One tablet twice daily after food for three days."
     rx = run(meds=[med(dose_phrase="One tablet")], transcript=transcript).medications[0]
     assert rx.unbound == []
+
+
+def test_a_second_spelling_of_the_same_medicine_carries_its_instructions():
+    # Speech recognition may spell one medicine two ways in a dictation (runbook C-71).
+    transcript = ("Start a painkiller such as Combiflam. Along with Dolo six fifty, Combyflam will be taken for three "
+                  "days two times a day.")
+    meds = [med(id="rx1", spoken_name="Combiflam", name_quote="Combiflam", dose_phrase=None,
+                timing_phrase="two times a day", food_phrase=None, duration_phrase="for three days"),
+            med(id="rx2", dose_phrase=None, timing_phrase=None, food_phrase=None, duration_phrase=None)]
+    rx = run(meds=meds, transcript=transcript).medications[0]
+    assert rx.unbound == [] and rx.duration == Duration(value=3, unit="day")
+
+
+def test_a_medicine_does_not_take_the_instructions_said_for_the_one_before_it():
+    transcript = "Dolo six fifty will be taken for three days once after lunch, and Pan forty before breakfast."
+    meds = [med(timing_phrase="once after lunch", food_phrase=None, dose_phrase=None),
+            med(id="rx2", spoken_name="Pan forty", name_quote="Pan forty", dose_phrase=None, timing_phrase=None,
+                food_phrase="before breakfast", duration_phrase="for three days")]
+    pan = run(meds=meds, transcript=transcript).medications[1]
+    assert "duration_phrase" in pan.unbound

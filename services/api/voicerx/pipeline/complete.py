@@ -79,7 +79,7 @@ def _choose(rx, products, generics, finder):
     return found if rx.match == 'unmatched' else None
 
 
-def _bare_number(phrase):
+def bare_number(phrase):
     text = words_to_digits((phrase or '').lower()).strip(' .,')
     return text if re.fullmatch(r'\d+(?:\.\d+)?', text) else None
 
@@ -100,7 +100,7 @@ def complete(checked, reference, rules, allergies, finder=None, generics=frozens
         product = products.get(rx.product_id) if rx.match == 'exact' else None
         if not product or rx.action not in PRESCRIBED:
             continue
-        number = _bare_number(rx.quotes.get('dose_phrase'))
+        number = bare_number(rx.quotes.get('dose_phrase'))
         if rx.dose is None and number and not isinstance(rx.schedule, Taper) and product.form in DOSE_FORMS:
             # "one Pan D": the number was said, the unit is the product's form.
             rx.dose = Dose(amount=number, unit=product.form)

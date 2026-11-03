@@ -1,5 +1,7 @@
 """Evidence integrity, mention boundaries, and deterministic medication checks."""
 from hashlib import sha256
+
+from rapidfuzz import fuzz
 import re
 import unicodedata
 from ..contracts.extraction import CheckedExtraction, DroppedItem, ResolvedMedication
@@ -71,7 +73,7 @@ def medicine_issues(medications, reference, allergies):
         if rx.speaker_unclear:
             issues.append(issue('speaker_unclear', rx.id))
         if rx.unbound:
-            issues.append(issue('phrase_not_bound', rx.id, message='Unbound phrases: ' + ', '.join(rx.unbound)))
+            issues.append(issue('phrase_not_bound', rx.id, message=said_away(rx)))
         for field in rx.unresolved:
             issues.append(issue('unparsed_' + field.removesuffix('_phrase'), rx.id, 'warn'))
     return issues
@@ -79,6 +81,37 @@ def medicine_issues(medications, reference, allergies):
 
 LINKING = {'is', 'are', 'was', 'will', 'be', 'should', 'for', 'dose', 'dosage', 'tablet', 'tablets', 'tab', 'capsule',
            'capsules', 'cap', 'syrup', 'sachet', 'inhaler', 'drops'}
+
+
+LEAD_WORDS = 4
+FIELD_WORDS = {'dose_phrase': 'dose', 'timing_phrase': 'timing', 'food_phrase': 'food', 'duration_phrase': 'duration',
+               'start_phrase': 'start', 'route_phrase': 'route'}
+
+
+def said_away(rx):
+    """What was said away from this medicine, as heard: 'Said away from this medicine: duration “for three days”'."""
+    said = [f'{FIELD_WORDS.get(f, f)} “{rx.quotes[f]}”' if rx.quotes.get(f) else FIELD_WORDS.get(f, f) for f in rx.unbound]
+    return 'Said away from this medicine: ' + ', '.join(said)
+
+
+def _other_spellings(medications, text, taken):
+    """Later mentions of a medicine spelt another way (speech recognition wrote one brand two ways in one
+    dictation, runbook C-71): words of five letters or more that closely match the first word of its quote and
+    are not part of another medicine's name. Each counts as a mention of that medicine."""
+    spans = [(s, e) for s, e, _ in taken]
+    found = []
+    for rx in medications:
+        words = normalise(rx.name_quote).split()
+        if not words or len(words[0]) < 5:
+            continue
+        for match in re.finditer(r'\S+', text):
+            word = match.group().strip('.,;:!?…।')
+            start = match.start()
+            if (len(word) >= 5 and word != words[0] and fuzz.ratio(word, words[0]) >= 75
+                    and not any(s <= start < e for s, e in spans)):
+                found.append((start, start + len(word), rx.id))
+                spans.append((start, start + len(word)))
+    return found
 
 
 def _patient_voice(sentence):
@@ -157,6 +190,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         kept.append(item)
     name_positions = [(m.start(), m.end(), rx.id) for rx in extraction.medications
                       for m in re.finditer(re.escape(normalise(rx.name_quote)), text) if normalise(rx.name_quote)]
+    name_positions += _other_spellings(extraction.medications, text, name_positions)
     for rx in extraction.medications:
         positions = [p for p, _, rid in name_positions if rid == rx.id]
         # A medicine the model calls patient speech is dropped only on evidence: a [patient] line label, or,
@@ -186,18 +220,22 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
             corrected.add(correction.field)
         possibilities = []
         for pos in positions:
-            # A medicine's words run from the start of its sentence (or the end of the medicine named before it
-            # there), so "one Pan D" keeps its dose, and stop at the sentence end or the next medicine named.
+            # A medicine's words run from a few words before its name, so "one Pan D" keeps its dose, to the
+            # sentence end or the next medicine named.
             # Only when its own sentence says nothing after the name ("the dosage for Pan D is... One after
             # breakfast") do they run on through the next sentence, and never across a line (another turn).
             others = [(s, e) for s, e, rid in name_positions if rid != rx.id]
             next_name = min((s for s, _ in others if s > pos), default=len(text))
             earlier_end = max((e for s, e in others if e <= pos), default=0)
             ends = [m.end() for m in ENDS.finditer(bounded_text[:pos])]
-            begin = max(earlier_end, ends[-1] if ends else 0)
+            # Only a short lead-in before the name counts ("take one Pan D"); further back, the words belong
+            # to the medicine said before it.
+            lead = [m.start() for m in re.finditer(r'\S+', text[:pos])][-LEAD_WORDS:]
+            begin = max(earlier_end, ends[-1] if ends else 0, lead[0] if lead else 0)
             first_end = ENDS.search(bounded_text, pos)
             stop = first_end.start() if first_end else len(text)
-            after_name = set(re.findall(r'\w+', text[pos + len(normalise(rx.name_quote)):stop])) - LINKING
+            name_end = next(e for s, e, rid in name_positions if s == pos and rid == rx.id)
+            after_name = set(re.findall(r'\w+', text[name_end:stop])) - LINKING
             if first_end and first_end.group() != '\n' and not after_name:
                 second_end = ENDS.search(bounded_text, first_end.end())
                 stop = second_end.start() if second_end else len(text)

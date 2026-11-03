@@ -6,7 +6,11 @@ from uuid import uuid4
 
 from ..contracts.report import MODEL_SECTIONS, Resolution
 from ..pipeline.assemble import DISPLAY_NAMES, REPORT_GROUPS, product_label, table_medicines
-from ..standard import proposals
+from ..contracts.medication import Dose, Grid
+from ..pipeline.check_extraction import said_away
+from ..pipeline.complete import bare_number
+from ..pipeline.schedule import parse_dose, parse_duration, parse_food, parse_meal, parse_timing
+from ..standard import DOSE_FORMS, proposals
 from .catalog import parse_composition
 
 SCHEMA_VERSION = 1
@@ -81,6 +85,38 @@ def suggestion_form(suggestion):
     return suggestion.get('form') or LABEL_FORMS.get(suggestion['label'].split(' (')[0].split()[-1], 'other')
 
 
+def phrase_uses(rx, products):
+    """One-click corrections for instructions said away from their medicine: each phrase as heard, read as that
+    field's value. A phrase that can't be read offers nothing; the edit buttons remain."""
+    product = products.get(rx.product_id)
+    uses = []
+    for field in rx.unbound:
+        phrase = rx.quotes.get(field)
+        if not phrase:
+            continue
+        value, action = None, None
+        if field == 'dose_phrase':
+            dose = parse_dose(phrase)
+            number = bare_number(phrase)
+            if dose is None and number and product and product.form in DOSE_FORMS:
+                dose = Dose(amount=number, unit=product.form)
+            action, value = 'set_dose', dose.model_dump() if dose else None
+        elif field == 'timing_phrase':
+            schedule, meal = parse_timing(phrase), parse_meal(phrase)
+            if schedule is None and meal:
+                schedule = Grid(**{s: '1' if s in meal[1] else '0' for s in 'maen'})
+            action, value = 'set_timing', {'schedule': schedule.model_dump(mode='json')} if schedule else None
+        elif field == 'food_phrase':
+            food = parse_food(phrase)
+            action, value = 'set_food', {'food': food} if food else None
+        elif field == 'duration_phrase':
+            duration = parse_duration(phrase)
+            action, value = 'set_duration', duration.model_dump() if duration else None
+        if value:
+            uses.append({'label': f'Use “{phrase}”', 'item': {'action': action, 'value': value}})
+    return uses
+
+
 def report_view(report, encounter_id, patient_id, organisation_id, catalog, capabilities, approval=None, artifacts=(),
                 suggestions=None, rules=None):
     medication_ids = {m.id for m in report.checked.medications}
@@ -93,14 +129,20 @@ def report_view(report, encounter_id, patient_id, organisation_id, catalog, capa
             for cite in line.cites:
                 cited_by.setdefault(cite, []).append(ref)
     findings = {item.id: {**item.model_dump(mode='json'), 'cited_by': cited_by.get(item.id, [])} for item in report.checked.kept}
+    products = {**catalog, **report.products_used}
+    by_id = {rx.id: rx for rx in report.checked.medications}
     issue_views = []
     for number, issue in enumerate(report.issues):
         kind = _target_kind(issue.target, medication_ids, findings)
         issue_views.append({'uid': f'i{number}', 'code': issue.code, 'severity': issue.severity, 'target': issue.target,
-                            'target_kind': kind, 'title': TITLES.get(issue.code, issue.message), 'message': issue.message,
+                            'target_kind': kind, 'title': TITLES.get(issue.code, issue.message),
+                            # Drafts saved before 4 Nov carry "Unbound phrases: duration_phrase"; say it as heard.
+                            'message': said_away(by_id[issue.target]) if issue.code == 'phrase_not_bound'
+                            and issue.target in by_id else issue.message,
                             'lines': cited_by.get(issue.target, []) if kind == 'finding' else [],
-                            'actions': _actions(issue, kind, cited_by.get(issue.target))})
-    products = {**catalog, **report.products_used}
+                            'actions': _actions(issue, kind, cited_by.get(issue.target)),
+                            'uses': phrase_uses(by_id[issue.target], products)
+                            if issue.code == 'phrase_not_bound' and issue.target in by_id else []})
     rows = dict(zip((m.id for m in table_medicines(report.checked)), report.medicines))
     medication_views = []
     for rx in report.checked.medications:

@@ -781,6 +781,10 @@ async function showReview(encounter, view) {
         issue.title !== issue.message && !issue.message.startsWith(issue.code.replaceAll('_', ' ')) ? h('p', { class: 'where', text: issue.message }) : '');
       const med = issue.target_kind === 'medicine' ? medById[issue.target] : null;
       if (canEdit && med?.suggestions?.length && PRODUCT_CODES.includes(issue.code)) card.append(suggestionList(med, card, issue));
+      // An instruction said away from its medicine: use it as heard, in one click.
+      if (canEdit && issue.uses?.length) card.append(h('div', { class: 'choices' }, issue.uses.map(u => h('button', {
+        class: 'btn btn-sm btn-dark', type: 'button',
+        onclick: () => submit([{ ...u.item, target: issue.target, reason: `Said “${u.label.slice(5, -1)}” for this medicine; confirmed by the doctor.` }]) }, u.label))));
       // Accept leads; the rest are ways to edit.
       const ordered = [...issue.actions.filter(a => ONE_CLICK.includes(a)), ...issue.actions.filter(a => !ONE_CLICK.includes(a))];
       if (canEdit && issue.actions.length) card.append(h('div', { class: 'choices' }, ordered.map(a => h('button', {
