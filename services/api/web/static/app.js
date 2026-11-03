@@ -465,8 +465,17 @@ function showProcessing(encounter, run) {
 // ---------- Review ----------
 
 const ACTION_TEXT = { choose_product: 'Choose product', set_dose: 'Set dose', set_timing: 'Set timing', set_food: 'Set food',
-  set_duration: 'Set duration', remove_medicine: 'Remove medicine', confirm_order: 'Confirm I said it', acknowledge: 'Acknowledge',
+  set_duration: 'Set duration', remove_medicine: 'Remove medicine', confirm_order: 'Accept', acknowledge: 'Accept',
   edit_line: 'Edit line', remove_line: 'Remove line', add_line: 'Add a line', dismiss_item: 'Rule out finding' };
+// The signed-in doctor is recorded with every change, so nothing asks for a typed reason: confirmations save in
+// one click, edits save from their fields, and the audit keeps one of these plain reasons.
+const DONE_REASON = { choose_product: 'Product chosen by the doctor.', set_dose: 'Dose set by the doctor.',
+  set_timing: 'Timing set by the doctor.', set_food: 'Food timing set by the doctor.', set_duration: 'Duration set by the doctor.',
+  remove_medicine: 'Removed by the doctor.', confirm_order: 'Confirmed by the doctor as their own order.',
+  acknowledge: 'Reviewed and accepted by the doctor.', edit_line: 'Edited by the doctor.', remove_line: 'Removed by the doctor.',
+  add_line: 'Written by the doctor.', dismiss_item: 'Ruled out by the doctor.' };
+const ONE_CLICK = ['confirm_order', 'acknowledge'];
+const CONFIRM_TEXT = { remove_medicine: 'Yes, remove', remove_line: 'Yes, remove', dismiss_item: 'Yes, rule out' };
 const TIER_TEXT = { formulary: 'In formulary', indian: 'Indian list · unverified', clinic: 'Clinic list · pending review' };
 const PRODUCT_CODES = ['unmatched_product', 'ambiguous_product', 'fuzzy_product_match', 'allergy_conflict'];
 const SOURCE_TEXT = { openfda_label: 'US label (openFDA)', nlem_2022: 'NLEM 2022', jan_aushadhi: 'Jan Aushadhi' };
@@ -536,10 +545,10 @@ async function showReview(encounter, view) {
     return 'Whole report';
   };
 
-  // One editor at a time; every correction carries the doctor's reason (DESIGN.md section 7).
+  // One editor at a time. Every correction carries a reason (DESIGN.md section 7), supplied here from context.
   function openEditor(action, target, host, issue, preset) {
     host.querySelector('.editor')?.remove();
-    const reason = h('input', { class: 'input', placeholder: 'Why? For example: confirmed with the patient', required: true });
+    let reason = DONE_REASON[action];
     const fields = h('div');
     let value = () => ({});
     const med = medById[target];
@@ -582,7 +591,7 @@ async function showReview(encounter, view) {
           } catch (e) { fail(e); }
         } }, 'Add and select'));
       fields.append(h('label', { class: 'field' }, h('span', { text: 'Product' }), s), search, found, add);
-      if (preset && med) reason.value = `Heard “${med.spoken_name}”; meant ${preset.label}.`;
+      if (preset && med) reason = `Heard “${med.spoken_name}”; meant ${preset.label}.`;
       value = () => ({ product_id: s.value });
     } else if (action === 'set_dose') {
       const amount = h('input', { class: 'input', inputmode: 'decimal', value: med?.dose?.amount || '1' });
@@ -631,15 +640,19 @@ async function showReview(encounter, view) {
       value = () => ({ code: issue.code });
     }
     const editor = h('div', { class: 'editor' }, h('b', { text: ACTION_TEXT[action] }), fields,
-      h('label', { class: 'field' }, h('span', { text: 'Reason' }), reason),
       h('div', { class: 'row' },
-        h('button', { class: 'btn btn-dark btn-sm', type: 'button', onclick: () => {
-          if (!reason.value.trim()) { reason.focus(); return toast('Add a short reason for this correction.', true); }
-          submit([{ action, target: fields._target ? fields._target() : target, value: value(), reason: reason.value.trim() }]);
-        } }, 'Save correction'),
+        h('button', { class: 'btn btn-dark btn-sm', type: 'button', onclick: () =>
+          submit([{ action, target: fields._target ? fields._target() : target, value: value(), reason }]) },
+          CONFIRM_TEXT[action] || 'Save'),
         h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => editor.remove() }, 'Cancel')));
     host.append(editor);
     editor.querySelector('input, select, textarea')?.focus();
+  }
+
+  // Accept saves at once; anything else opens its short form.
+  function act(action, target, host, issue) {
+    if (!ONE_CLICK.includes(action)) return openEditor(action, target, host, issue);
+    submit([{ action, target, value: action === 'acknowledge' ? { code: issue.code } : {}, reason: DONE_REASON[action] }]);
   }
 
   // What was heard and what it may have been (spec 2026-11-03, part B). Never applied without a click.
@@ -738,7 +751,7 @@ async function showReview(encounter, view) {
           h('div', { class: 'acts' },
             canEdit ? ['choose_product', 'set_dose', 'set_timing', 'set_food', 'set_duration', ...(m.speaker_unclear ? ['confirm_order'] : []), 'remove_medicine']
               .filter(a => a !== 'choose_product' || m.match !== 'exact' || m.candidates.length > 1)
-              .map(a => h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => openEditor(a, m.id, cell) }, ACTION_TEXT[a])) : '',
+              .map(a => h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => act(a, m.id, cell) }, ACTION_TEXT[a])) : '',
             view.capabilities.knowledge && (m.product_id || m.candidates.length) ? h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => openReference({ encounter, med: m }) }, 'Reference') : ''));
         return h('tr', {}, cell, m.row.grid.map(v => h('td', { class: 's' }, slot(v))));
       })))) : '');
@@ -758,10 +771,13 @@ async function showReview(encounter, view) {
         issue.title !== issue.message && !issue.message.startsWith(issue.code.replaceAll('_', ' ')) ? h('p', { class: 'where', text: issue.message }) : '');
       const med = issue.target_kind === 'medicine' ? medById[issue.target] : null;
       if (canEdit && med?.suggestions?.length && PRODUCT_CODES.includes(issue.code)) card.append(suggestionList(med, card, issue));
-      if (canEdit && issue.actions.length) card.append(h('div', { class: 'choices' }, issue.actions.map(a => h('button', { class: 'btn btn-line btn-sm', type: 'button',
+      // Accept leads; the rest are ways to edit.
+      const ordered = [...issue.actions.filter(a => ONE_CLICK.includes(a)), ...issue.actions.filter(a => !ONE_CLICK.includes(a))];
+      if (canEdit && issue.actions.length) card.append(h('div', { class: 'choices' }, ordered.map(a => h('button', {
+        class: 'btn btn-sm ' + (ONE_CLICK.includes(a) ? 'btn-dark' : 'btn-line'), type: 'button',
         onclick: () => (a === 'edit_line' || a === 'remove_line') && issue.target_kind === 'finding'
           ? (issue.lines[0] ? (showLine(issue.lines[0]), openEditor(a, issue.lines[0], evidence)) : null)
-          : openEditor(a, issue.target, card, issue) }, ACTION_TEXT[a]))));
+          : act(a, issue.target, card, issue) }, ACTION_TEXT[a]))));
       else if (issue.target_kind === 'line') card.append(h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => showLine(issue.target) }, 'Show line'));
       return card;
     }));
