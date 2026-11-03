@@ -523,11 +523,12 @@ class Talk:
     def __init__(self, tmp_path):
         self.graph, self.clock, self.speech = FakeGraph(), Clock(), FakeSpeech()
         self.memory = LocalMemoryStore(tmp_path / "memory")
-        self.reading = None
+        self.reading, self.reader = None, None
         channel = WhatsAppChannel(CONFIG, GraphClient(CONFIG, transport=self.graph), now=self.clock,
                                   hash_key=HASH_KEY)
         self.client = TestClient(create_app(tmp_path, speech=self.speech, whatsapp=channel, memory=self.memory,
-                                            nlu=lambda conv, text: self.reading))
+                                            nlu=lambda conv, text: self.reading,
+                                            reader=lambda data, mime: self.reader(data, mime)))
         self.patient_key = patient_key_for_number(PHONE, HASH_KEY)
 
     def reads(self, **fields):
@@ -605,3 +606,29 @@ def test_images_and_documents_are_parsed_with_their_type():
     image, document = parse_webhook(payload)[0]
     assert (image.kind, image.media_id, image.mime) == ("image", "media-img", "image/jpeg")
     assert (document.kind, document.media_id, document.mime) == ("document", "media-doc", "application/pdf")
+
+
+
+def test_a_report_pdf_is_read_saved_and_sent_to_the_doctor(talk, tmp_path):
+    from voicerx.contracts.documents import ReportFinding, ReportReading
+    join(talk.client, "fam-001-a", choose="en-IN")
+    talk.graph.media = b"%PDF-1.4 synthetic report"
+    seen = []
+
+    def reader(data, mime):
+        seen.append((data, mime))
+        return (ReportReading(is_medical_report=True, report_type="Complete blood count", report_date=None,
+                              transcription="Hb 10.2 g/dL", medicines_named=[],
+                              findings=[ReportFinding(name="Hb", value="10.2", unit="g/dL", reference_range=None,
+                                                      flag="low", quote="Hb 10.2")]), "gemini_vision", 1)
+
+    talk.reader = reader
+    doc = message(kind="document")
+    doc["messages"][0]["document"] = {"id": "media-in-1", "mime_type": "application/pdf", "filename": "cbc.pdf"}
+    post(talk.client, doc)
+    assert seen == [(b"%PDF-1.4 synthetic report", "application/pdf")]
+    assert "document" in talk.tasks() and "Complete blood count" in talk.graph.texts()[-1]
+    memory = talk.client.get(f"/patients/{talk.patient_key}/memory").json()
+    assert memory["documents"][0]["reading"]["findings"][0]["flag"] == "low"
+    assert [i["kind"] for i in memory["items"]].count("document_fact") == 1
+    assert not any(p.suffix == ".pdf" for p in tmp_path.rglob("*") if "visits" not in p.parts)   # file never kept

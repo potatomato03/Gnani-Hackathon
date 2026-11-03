@@ -107,14 +107,20 @@ class ModelClient:
         else:
             self.resting[index] = self.clock() + self.cooldown
 
-    def generate(self, system, user, schema, prompt_version):
+    def generate(self, system, user, schema, prompt_version, attachments=()):
+        """attachments: (mime type, bytes) pairs, e.g. a report photo (D-119); only adapters that declare
+        supports_attachments take them."""
+        if attachments and not getattr(self.adapter, 'supports_attachments', False):
+            raise QuotaExhausted(f'{self.adapter.name}: cannot read attachments')
         if self.adapter.name == 'ollama':
             with _LOCAL_LOCK:
-                return self._generate(system, user, schema, prompt_version)
-        return self._generate(system, user, schema, prompt_version)
+                return self._generate(system, user, schema, prompt_version, attachments)
+        return self._generate(system, user, schema, prompt_version, attachments)
 
-    def _generate(self, system, user, schema, prompt_version):
-        fingerprint = json.dumps([self.adapter.name, self.adapter.model, prompt_version, system, user], ensure_ascii=False)
+    def _generate(self, system, user, schema, prompt_version, attachments=()):
+        attached = [[mime, sha256(data).hexdigest()] for mime, data in attachments]
+        fingerprint = json.dumps([self.adapter.name, self.adapter.model, prompt_version, system, user, *attached],
+                                 ensure_ascii=False)
         cache_key = sha256(fingerprint.encode('utf-8')).hexdigest()
         path = self.cache_dir / (cache_key + '.json')
         if path.exists():
@@ -133,7 +139,8 @@ class ModelClient:
                 continue
             transient = 0
             while transient < self.max_transient:
-                url, headers, body = self.adapter.build(system, request_user, json_schema_for(schema), key)
+                extra = {'attachments': attachments} if attachments else {}
+                url, headers, body = self.adapter.build(system, request_user, json_schema_for(schema), key, **extra)
                 status, response_headers, text = self.transport(url, headers, body)
                 attempts += 1
                 if self.adapter.is_quota_exhausted(status, response_headers, text):
@@ -187,16 +194,18 @@ class FallbackClient:
     def __init__(self, clients):
         self.clients = clients
 
-    def generate(self, system, user, schema, prompt_version):
+    def generate(self, system, user, schema, prompt_version, attachments=()):
         for client in self.clients:
+            if attachments and not getattr(client.adapter, 'supports_attachments', False):
+                continue
             try:
-                return client.generate(system, user, schema, prompt_version)
+                return client.generate(system, user, schema, prompt_version, attachments)
             except QuotaExhausted:
                 continue
         raise QuotaExhausted('all configured providers unavailable')
 
 
-def build_client(env_path: Path, cache_dir: Path, only=None, quick=False):
+def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeout=None):
     """quick=True is for chat messages: one try per key, a 15 s timeout, no waiting, and a second Gemini
     model when the first is busy (gemini-3.8-flash returned 503 "high demand" on 4 Nov)."""
     from .gemini import DEFAULT_MODEL, GeminiAdapter
@@ -207,7 +216,8 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False):
         if line.strip() and not line.lstrip().startswith('#') and '=' in line:
             key, value = line.split('=', 1)
             settings[key.strip()] = value.strip().strip('\"\'')
-    options = {'max_transient': 1, 'timeout': 15, 'cooldown': 60, 'sleep': lambda seconds: None} if quick else {}
+    options = ({'max_transient': 1, 'timeout': timeout or 15, 'cooldown': 60, 'sleep': lambda seconds: None}
+               if quick else {})
     clients = []
     keys = [settings[k] for k in ('GEMINI_API_KEY', 'GEMINI_API_KEY_2') if settings.get(k)]
     if keys and only in (None, 'gemini'):

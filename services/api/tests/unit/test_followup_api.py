@@ -189,3 +189,19 @@ def test_patient_memory_is_listed_locally_and_hidden_from_the_tunnel(client):
     assert "request" in [i["kind"] for i in memory["items"]] and memory["documents"] == []
     assert client.get(f"/patients/{key}/memory", headers={"cf-ray": "x"}).status_code == 403
     assert client.get("/patients/..%2Fescape/memory").status_code in (404, 422)
+
+
+
+def test_web_upload_reads_a_report_for_the_doctor(tmp_path):
+    from voicerx.contracts.documents import ReportReading
+    reading = ReportReading(is_medical_report=True, report_type="X-ray report", report_date="2026-10-02",
+                            transcription="", findings=[], medicines_named=[])
+    client = TestClient(create_app(tmp_path, reader=lambda data, mime: (reading, "pdf_text", 1)))
+    conv = client.post("/demo/visits/fam-004-a/start").json()
+    done = client.post(f"/conversations/{conv['id']}/documents", content=b"%PDF-1.4 x",
+                       headers={"Content-Type": "application/pdf"}).json()
+    assert done["tasks"][-1]["kind"] == "document" and "X-ray report" in done["messages"][-1]["text"]
+    assert client.post(f"/conversations/{conv['id']}/documents", content=b"x" * 10_000_001,
+                       headers={"Content-Type": "application/pdf"}).status_code == 413
+    memory = client.get(f"/patients/sim-{conv['patient_id']}/memory").json()
+    assert memory["documents"][0]["reading"]["report_type"] == "X-ray report"

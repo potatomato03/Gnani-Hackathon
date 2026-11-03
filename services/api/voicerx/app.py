@@ -26,6 +26,7 @@ from .agent.gate import CONSENT, GateRefused
 from .agent.voice import (MAX_BYTES, VoiceRefused, synthetic_voice_note, transcribe_ogg_voice_note,
                           transcribe_voice_note, voice_message)
 from .agent.call import call_turn, run_call
+from .agent.documents import MAX_BYTES as DOCUMENT_BYTES, items_from_document, read_document, receive_document
 from .agent.memory import (PLAIN_KEY, LocalMemoryStore, items_from_record, memory_from_env,
                            patient_key_for_simulated)
 from .agent.understand import make_nlu
@@ -77,8 +78,18 @@ def default_nlu(state_dir: Path, memory):
     return make_nlu(client, memory)
 
 
+def default_reader(state_dir: Path):
+    """Reads a report the patient sends (D-119): one try per model, 60 s each (a photo takes longer than a
+    chat message). None when no provider is configured."""
+    try:
+        client = build_client(ENV_FILE, state_dir / 'llm-cache', quick=True, timeout=60)
+    except (ValueError, OSError):
+        return None
+    return lambda data, mime: read_document(data, mime, client)
+
+
 def create_app(state_dir: Path | None = None, runs_root: Path | None = None, speech=AUTO,
-               whatsapp=AUTO, call_media=None, memory=AUTO, nlu=AUTO) -> FastAPI:
+               whatsapp=AUTO, call_media=None, memory=AUTO, nlu=AUTO, reader=AUTO) -> FastAPI:
     # By default the app reads runs/ and keeps its state in runs/followup-demo/. Given only a state dir (tests),
     # it reads nothing outside it: real WhatsApp, Supabase memory and the model stay off unless passed in.
     real = state_dir is None
@@ -90,6 +101,8 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
         memory = memory_from_env(state_dir) if real else LocalMemoryStore(state_dir / 'memory')
     if nlu is AUTO:
         nlu = default_nlu(state_dir, memory) if real else None
+    if reader is AUTO:
+        reader = default_reader(state_dir) if real else None
     audio_dir = state_dir / 'audio'
     speech = default_speech() if speech is AUTO else speech
     lock = threading.RLock()
@@ -142,6 +155,16 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             conv.remembered = len(conv.records)
         except Exception as error:   # the local store failing too: keep going, retry on the next save
             log.warning('patient memory not written: %s', type(error).__name__)
+
+    def keep_document(conv, data, mime):
+        """Read a report and store the reading (never the file) in patient memory."""
+        _, doc = receive_document(conv, data, mime, reader)
+        if doc is not None:
+            try:
+                if memory.add_document(doc):
+                    memory.add(items_from_document(doc))
+            except Exception as error:
+                log.warning('patient document not stored: %s', type(error).__name__)
 
     def view(conv, **extra):
         remember(conv)
@@ -316,6 +339,21 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
                 raise HTTPException(422, str(refusal)) from None
             except SpeechError as error:
                 raise HTTPException(502, str(error)) from None
+            except GateRefused as refusal:
+                raise HTTPException(409, f'not sent: {refusal}') from None
+            return view(conv)
+
+    @app.post('/conversations/{conversation_id}/documents')
+    async def upload_document(conversation_id: str, request: Request):
+        """A report from the chat demo: the raw file as the body, its type in Content-Type (D-119)."""
+        if int(request.headers.get('content-length') or 0) > DOCUMENT_BYTES:
+            raise HTTPException(413, 'the file is larger than 10 MB')
+        data = await request.body()   # held in memory only; never written to disk
+        with lock:
+            conv = conversation(conversation_id)
+            typed_here(conv)
+            try:
+                keep_document(conv, data, request.headers.get('content-type', ''))
             except GateRefused as refusal:
                 raise HTTPException(409, f'not sent: {refusal}') from None
             return view(conv)
@@ -512,6 +550,8 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
                             transcribe_ogg_voice_note(conv, clip, speech, nlu)
                         except SpeechError:
                             chat.voice_not_used(conv)
+                elif item.kind in ('image', 'document'):
+                    keep_document(conv, channel.graph.download_media(item.media_id), item.mime or '')
                 else:
                     log.info('ignored a WhatsApp %s message', item.kind)
             except GateRefused:

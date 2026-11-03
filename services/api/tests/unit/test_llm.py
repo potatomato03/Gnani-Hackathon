@@ -251,3 +251,34 @@ def test_build_client_uses_both_groq_keys_in_order(tmp_path):
     env = tmp_path / ".env"
     env.write_text("GROQ_API_KEY=q1\nGROQ_API_KEY_2=q2\n", encoding="utf-8")
     assert build_client(env, tmp_path, only="groq").clients[0].keys == ["q1", "q2"]
+
+
+# Attachments: report photos and scanned PDFs go to Gemini as inline parts (runbook D-119)
+
+def test_gemini_adapter_adds_inline_parts():
+    url, headers, body = GeminiAdapter().build("s", "u", {}, "k", attachments=[("image/png", b"\x89PNG"),
+                                                                              ("application/pdf", b"%PDF")])
+    parts = body["input"][0]["content"]
+    assert parts[0]["type"] == "text"
+    assert parts[1] == {"type": "image", "data": "iVBORw==", "mime_type": "image/png"}
+    assert parts[2] == {"type": "document", "data": "JVBERg==", "mime_type": "application/pdf"}
+
+
+def test_attachments_change_the_cache_key_and_skip_text_only_providers(tmp_path):
+    client, transport = gemini(tmp_path, [gemini_reply({"word": "a"}), gemini_reply({"word": "b"})])
+    assert client.generate("s", "u", Inner, "v", attachments=[("image/png", b"one")])[0].word == "a"
+    assert client.generate("s", "u", Inner, "v", attachments=[("image/png", b"two")])[0].word == "b"
+    assert client.generate("s", "u", Inner, "v", attachments=[("image/png", b"one")])[1].cached is True
+    local, local_transport = ollama(tmp_path, [])
+    both = FallbackClient([local, client])
+    assert both.generate("s", "u", Inner, "v", attachments=[("image/png", b"one")])[0].word == "a"
+    assert local_transport.calls == []
+    with pytest.raises(QuotaExhausted):
+        FallbackClient([local]).generate("s", "u", Inner, "v", attachments=[("image/png", b"one")])
+
+
+def test_document_reads_get_a_longer_quick_timeout(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("GEMINI_API_KEY=k\n", encoding="utf-8")
+    assert {c.timeout for c in build_client(env, tmp_path, quick=True, timeout=60).clients} == {60}
+    assert {c.timeout for c in build_client(env, tmp_path, quick=True).clients} == {15}
