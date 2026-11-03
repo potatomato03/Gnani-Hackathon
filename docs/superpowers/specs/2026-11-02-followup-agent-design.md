@@ -241,6 +241,16 @@ Recorded in `runbook.md` when the demo was built. The IDs first proposed here (D
 - Not run against Meta yet. The setup is in `docs/whatsapp-testing.md`.
 - **Calls (D-114):** the patient calls the clinic's WhatsApp number. `agent/webrtc_call.py` answers Meta's SDP offer with aiortc (`pre_accept`, then `accept`). `agent/call.py` greets with fixed text, then takes half-duplex turns: VAD cuts an utterance, Prisma REST transcribes it, `receive(source='call')` routes it, and Timbre speaks the gated replies, which also go to the chat. It ends after a warning sign, STOP, DOCTOR or a limit. The clinic calling the patient isn't built: it isn't available from the US test number.
 
+## Conversational bot (as built, D-115 to D-119)
+
+Plan: `docs/superpowers/plans/2026-11-04-functional-whatsapp-bot.md`.
+
+- **The model reads, code speaks (D-115).** `agent/understand.py` sends each free-text message or transcript to a model (Gemini, then the configured fallbacks) with the conversation's awaited question, its allowed answers, the approved medicines, the warning-sign ids and the last 20 memory items. The model returns a fixed `Understanding`: intent, check-in answer, medicine id, language, warning signs, and a quote that must be in the message. Code drops every value the conversation doesn't allow. Rules still run first; a model warning sign can only raise urgency; replies stay fixed templates through the gate. This is the `agent/route.py` model step the Units table planned.
+- **Language first (D-116)** and **a quick menu (D-117)**: a bilingual first message offers the visit's language or English; the summary, the greeting and "didn't understand" carry a five-item menu, sent on WhatsApp as a list.
+- **Patient memory (D-118)** in Supabase (`patient_memory`, `patient_documents`) with a local JSONL fallback; keyed by a hash of the number with `PATIENT_HASH_KEY`, never the number.
+- **Reports (D-119)**: PDFs are read with pypdf, photos and scanned PDFs by Gemini as inline parts; findings must quote the transcription; the doctor gets a `document` task; the patient gets fixed text and no interpretation; the file is never stored.
+- Chat calls to the model fail fast (one try, 15 s, a busy model rests 60 s); document reads get 60 s. Without a model the agent behaves exactly as before.
+
 ## Out of scope
 
 - Real WhatsApp numbers, real outbound calls, payments, medicine orders
