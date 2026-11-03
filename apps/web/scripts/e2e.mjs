@@ -26,12 +26,20 @@ async function run(viewport, label) {
   const page = await browser.newPage({ viewport });
   await page.goto(WEB);
   const chat = page.locator(".chat");
-  await chat.locator(".bubble.summary").waitFor();
+  // A Hindi visit starts by asking for the language (D-116); pick Hindi to get the summary.
+  const chooseHindi = async () => {
+    await page.locator(".quick button", { hasText: "हिंदी" }).click();
+    await chat.locator(".bubble.summary").last().waitFor();
+  };
+  await page.locator(".quick button", { hasText: "English" }).waitFor();
   await page.getByRole("button", { name: "Reset demo" }).click();
   await page.locator(".empty", { hasText: "Nothing needs the doctor yet." }).waitFor();
-  await chat.locator(".bubble.summary").waitFor();
-  check(`${label}: summary discloses AI and shows the approved medicine`,
-    /AI/.test(await chat.innerText()) && /DOLO 650/.test(await chat.innerText()));
+  await page.locator(".quick button", { hasText: "English" }).waitFor();
+  check(`${label}: first message discloses AI and offers Hindi or English`,
+    /AI/.test(await chat.innerText()) && (await page.locator(".quick button").count()) === 2);
+  await chooseHindi();
+  check(`${label}: summary shows the approved medicine`, /DOLO 650/.test(await chat.innerText()));
+  check(`${label}: summary offers the five-button quick menu`, (await page.locator(".quick button").count()) === 5);
   check(`${label}: synthetic banner is shown`, await page.getByText("SYNTHETIC DATA").isVisible());
   if (shots) await page.screenshot({ path: `${shots}/${label}-1-summary.png`, fullPage: true });
 
@@ -62,6 +70,7 @@ async function run(viewport, label) {
   const asthma = await page.$$eval("select option", (options) =>
     options.find((o) => o.textContent.includes("Wysolone"))?.value);
   await page.selectOption("select", asthma);
+  await chooseHindi();
   await chat.locator(".bubble.summary", { hasText: "WYSOLONE" }).waitFor();
   await page.getByLabel("Message", { exact: true }).fill("Inhaler दिन में कितनी बार ले सकते हैं?");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -72,6 +81,11 @@ async function run(viewport, label) {
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await page.locator(".task.question").first().waitFor();
   check(`${label}: request to stop a medicine goes to the doctor`, await page.locator(".task.question").count() >= 1);
+
+  const uploaded = page.waitForResponse((r) => r.url().endsWith("/documents") && r.request().method() === "POST");
+  await page.setInputFiles('input[type="file"]', "runs/followup-demo/visits/fam-001-a/report.pdf");
+  await chat.locator(".bubble.patient", { hasText: "Sent a PDF" }).waitFor();
+  check(`${label}: a report PDF is accepted and answered with fixed text`, (await uploaded).ok());
 
   const voiceOn = (await (await fetch(API + "/health")).json()).speech !== "off";
   if (voiceOn) {

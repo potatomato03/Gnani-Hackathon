@@ -30,7 +30,7 @@ export type FollowUpRecord = {
   id: string;
   received_at: string;
   raw_text: string;
-  transcript_source: "typed" | "prisma" | "button" | null;
+  transcript_source: "typed" | "prisma" | "button" | "document" | null;
   answers: Answer[];
   red_flags: string[];
   action: "recorded" | "answered" | "clarified" | "escalated" | "urgent" | "stopped";
@@ -58,6 +58,8 @@ export type Conversation = {
   doctor_name: string;
   clinic_name: string;
   language: string;
+  // False while the first-message language question is open (runbook D-116).
+  language_chosen: boolean;
   visit_date: string;
   clock: string;
   plan: { channel: "simulated" | "whatsapp" | "voice"; touches: Touch[] };
@@ -96,7 +98,10 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
   const raw = body instanceof Blob;
   const response = await fetch(API + path, {
     method: body === undefined ? "GET" : "POST",
-    headers: body === undefined || body === null ? undefined : { "Content-Type": raw ? "audio/wav" : "application/json" },
+    headers:
+      body === undefined || body === null
+        ? undefined
+        : { "Content-Type": raw ? (body as Blob).type || "audio/wav" : "application/json" },
     body: body === undefined || body === null ? undefined : raw ? (body as Blob) : JSON.stringify(body),
   });
   if (!response.ok) {
@@ -109,8 +114,9 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 export const api = {
   health: () => call<Health>("/health"),
   visits: () => call<Visit[]>("/visits"),
+  // The demo asks for the patient's language first (D-116).
   start: (visitId: string, restart = false) =>
-    call<Conversation>(`/visits/${visitId}/start${restart ? "?restart=true" : ""}`, null),
+    call<Conversation>(`/visits/${visitId}/start?ask_language=true${restart ? "&restart=true" : ""}`, null),
   send: (id: string, body: { text: string } | { button: string }) =>
     call<Conversation>(`/conversations/${id}/messages`, body),
   advance: (id: string) => call<Conversation>(`/conversations/${id}/advance`, null),
@@ -123,4 +129,6 @@ export const api = {
   voiceNote: (id: string, wav: Blob) => call<Conversation>(`/conversations/${id}/voice`, wav),
   syntheticVoice: (id: string, text: string) => call<Conversation>(`/conversations/${id}/voice/synthetic`, { text }),
   audioUrl: (audioId: string) => `${API}/audio/${audioId}.mp3`,
+  // A report (PDF or photo) for the doctor (D-119). The file is read in memory and never stored.
+  uploadDocument: (id: string, file: File) => call<Conversation>(`/conversations/${id}/documents`, file),
 };

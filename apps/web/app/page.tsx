@@ -18,6 +18,7 @@ const TASK_LABEL: Record<string, string> = {
   question: "Question",
   callback: "Wants a call",
   consult_request: "Appointment",
+  document: "Report sent",
   no_response: "No response",
 };
 const TOUCH_LABEL: Record<string, string> = {
@@ -43,6 +44,7 @@ export default function Page() {
   const [recording, setRecording] = useState<number | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
+  const filePicker = useRef<HTMLInputElement>(null);
   const player = useRef<HTMLAudioElement | null>(null);
 
   const voiceOn = health !== null && health.speech !== "off";
@@ -111,7 +113,8 @@ export default function Page() {
     [conv],
   );
   const lastClinic = conv ? [...conv.messages].reverse().find((m) => m.sender === "clinic") : undefined;
-  const openButtons = lastClinic && conv?.awaiting && lastClinic.buttons.length ? lastClinic.buttons : [];
+  // The last clinic message's buttons: a check-in's answers, the language choice, or the quick menu (D-117).
+  const openButtons = lastClinic && !conv?.stopped && lastClinic.buttons.length ? lastClinic.buttons : [];
   const visit = visits.find((v) => v.visit_id === visitId);
 
   const send = (body: { text: string } | { button: string }) => {
@@ -187,6 +190,12 @@ export default function Page() {
       run(async () => api.voiceNote(conversationId, await toWav16k(new Blob(chunks, { type: rec.mimeType }))));
     };
     rec.start();
+  };
+
+  const sendReport = (file: File | undefined) => {
+    if (!conv || !file) return;
+    const conversationId = conv.id;
+    run(() => api.uploadDocument(conversationId, file));
   };
 
   const sendSynthetic = () => {
@@ -316,6 +325,28 @@ export default function Page() {
                   disabled={busy || !conv}
                 />
               )}
+              <input
+                ref={filePicker}
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                hidden
+                onChange={(e) => {
+                  sendReport(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              {recording === null && !draft.trim() && (
+                <button
+                  type="button"
+                  className="round alt"
+                  onClick={() => filePicker.current?.click()}
+                  disabled={busy || !conv || conv.stopped}
+                  aria-label="Send a report"
+                  title="Send a report (PDF or photo) for the doctor. Synthetic reports only."
+                >
+                  📎
+                </button>
+              )}
               {draft.trim() && recording === null ? (
                 <>
                   <button
@@ -353,7 +384,8 @@ export default function Page() {
               )}
               <br />
               Try: <code>seene mein dard ho raha hai</code> · <code>Inhaler दिन में कितनी बार ले सकते हैं?</code> ·{" "}
-              <code>Wysolone अभी बंद कर दूँ?</code> · <code>DOCTOR</code> · <code>STOP</code>
+              <code>Wysolone अभी बंद कर दूँ?</code> · <code>DOCTOR</code> · <code>STOP</code> · 📎 a synthetic
+              report PDF
             </div>
             </>
           )}
@@ -395,7 +427,11 @@ export default function Page() {
                     <span className={`act ${r.action}`}>{r.action}</span>
                     <small>
                       {day(r.received_at)} {time(r.received_at)} ·{" "}
-                      {r.transcript_source === "prisma" ? "voice note (Prisma)" : r.transcript_source}
+                      {r.transcript_source === "prisma"
+                        ? "voice note (Prisma)"
+                        : r.transcript_source === "document"
+                          ? "report upload"
+                          : r.transcript_source}
                     </small>
                   </div>
                   <p className="quote">«{r.raw_text || "no speech heard"}»</p>
