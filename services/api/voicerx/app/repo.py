@@ -25,18 +25,26 @@ def patient_summary(row):
             'language_pref': row['language_pref'], 'allergy_status': row['allergy_status'],
             'allergies': list(row['allergies']), 'consents': list(row['consents']), 'synthetic': row['synthetic'],
             'last_visit': row.get('last_visit').isoformat() if row.get('last_visit') else None,
-            'open_state': row.get('open_state')}
+            'open_state': row.get('open_state'), 'open_blocking': row.get('open_blocking')}
 
 
 def list_patients(conn, organisation_id, query, today_only, today):
     pattern = '%' + query.strip().lower() + '%' if query else None
+    # open_blocking counts the open visit's blocking issues in its latest report, as patient_detail does; null without one.
     return all_rows(conn, '''
-        select p.*, last.visit_date as last_visit, open.state as open_state
+        select p.*, last.visit_date as last_visit, open.state as open_state, open.blocking as open_blocking
         from app.patients p
         left join lateral (select visit_date from app.encounters e where e.patient_id = p.id
                            order by visit_date desc, created_at desc limit 1) last on true
-        left join lateral (select state from app.encounters e where e.patient_id = p.id and e.state <> 'approved'
-                           order by created_at desc limit 1) open on true
+        left join lateral (select e.state,
+                                  case when rv.report is not null then
+                                    (select count(*)::int from jsonb_array_elements(rv.report->'issues') i
+                                     where i->>'severity' = 'block') end as blocking
+                           from app.encounters e
+                           left join lateral (select report from app.report_versions where encounter_id = e.id
+                                              order by version desc, (status = 'approved') desc limit 1) rv on true
+                           where e.patient_id = p.id and e.state <> 'approved'
+                           order by e.created_at desc limit 1) open on true
         where p.organisation_id = %(org)s
           and (%(pattern)s::text is null or lower(p.name) like %(pattern)s or lower(p.mrn) like %(pattern)s
                or lower(p.id) like %(pattern)s)

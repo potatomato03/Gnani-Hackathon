@@ -102,12 +102,15 @@ async function renderLogin() {
   root.replaceChildren();
   const card = h('div', { class: 'auth' }, h('p', { class: 'muted', text: 'Loading…' }));
   root.append(h('section', { class: 'login', 'aria-label': 'Sign in' },
-    h('div', { class: 'sky', 'aria-hidden': 'true' }),
     h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'VoiceRx'),
-    h('div', { class: 'pitch' },
-      h('h1', { text: 'Speak the visit. Check the report. Approve.' }),
-      h('p', { class: 'lede', text: 'VoiceRx drafts the visit note and prescription from what was said, shows you every source quote, and flags anything it is unsure of. Nothing reaches a patient until you approve it.' })),
-    card));
+    h('div', { class: 'login-body' },
+      h('div', { class: 'pitch' },
+        h('h1', { text: 'Speak the visit. Check the report. Approve.' }),
+        h('p', { class: 'lede', text: 'VoiceRx drafts the visit note and prescription from what was said, shows you every source quote, and flags anything it is unsure of. Nothing reaches a patient until you approve it.' }),
+        h('dl', {}, [['Languages offered', 'Hinglish, Hindi, English, Tamil, Telugu'],['Every line', 'Has a source'], ['Sent to patient', 'Only after approval']]
+          .map(([term, value]) => h('div', {}, h('dt', { text: term }), h('dd', { text: value }))))),
+      card),
+    h('div')));
   try {
     const options = await api('/auth/options');
     if (!options.dev_login) {
@@ -118,7 +121,7 @@ async function renderLogin() {
     const { users } = await api('/auth/dev-users');
     const err = h('p', { class: 'err', role: 'alert' });
     card.replaceChildren(
-      h('h2', { text: 'Welcome back' }),
+      h('h2', { text: 'Sign in' }),
       h('p', { class: 'sub', text: 'Development sign-in: choose a synthetic doctor. No real patients or credentials.' }),
       h('div', { class: 'doc-pick' }, users.map(u => h('button', { type: 'button', onclick: async () => {
         try { session = await api('/auth/dev-login', { method: 'POST', body: { user_id: u.id } }); startApp(); }
@@ -176,10 +179,9 @@ async function loadPatients() {
     const data = await api(`/patients?list=${ui.list}&q=${encodeURIComponent(ui.q)}`);
     list.replaceChildren(...(data.items.length ? data.items.map(p => h('li', {},
       h('button', { class: 'pitem', type: 'button', 'aria-current': String(p.id === ui.patientId), onclick: () => { location.hash = '#/patients/' + p.id; } },
-        h('span', { class: 'avatar', text: initials(p.name) }),
-        h('span', {}, h('span', { class: 'name', text: p.name }),
+        h('span', {},h('span', { class: 'name', text: p.name }),
           h('span', { class: 'why', text: `${p.mrn} · ${p.last_visit ? 'last visit ' + fmtDate(p.last_visit) : 'no visits yet'}` })),
-        p.open_state ? stateChip(p.open_state) : ''))) :
+        p.open_state ? stateChip(p.open_state, p.open_blocking) : ''))) :
       [h('li', { class: 'empty-list', text: ui.list === 'today' ? 'No visits started today yet. Open a patient from All patients.' : 'No patients match.' })]));
   } catch (e) { fail(e); }
 }
@@ -208,10 +210,10 @@ async function showPatient(id) {
     const { patient, encounters } = await api('/patients/' + id);
     const age = new Date().getFullYear() - patient.birth_year;
     main().replaceChildren(
-      h('div', { class: 'phead' }, h('span', { class: 'avatar', text: initials(patient.name) }),
+      h('div', { class: 'phead' },
         h('div', {}, h('h2', { text: patient.name }), h('ul', { class: 'facts' },
           h('li', { text: `About ${age} years · ${patient.sex === 'F' ? 'Female' : patient.sex === 'M' ? 'Male' : patient.sex}` }),
-          h('li', { text: patient.mrn }), h('li', { text: 'Speaks ' + (LANG[patient.language_pref] || patient.language_pref) }),
+          h('li', { class: 'mono', text: patient.mrn }), h('li', { text: 'Speaks ' + (LANG[patient.language_pref] || patient.language_pref) }),
           h('li', {}, allergyChip(patient)))),
         h('div', { class: 'actions' }, session.capabilities.capture ?
           h('button', { class: 'btn btn-dark', type: 'button', onclick: () => startVisit(id) }, 'Start a visit') : '')),
@@ -250,10 +252,10 @@ async function showEncounter(id) {
 function header(encounter, extra) {
   return [
     h('div', { class: 'crumb' }, h('button', { type: 'button', onclick: () => { location.hash = '#/patients/' + encounter.patient.id; } }, '← ' + encounter.patient.name)),
-    h('div', { class: 'phead' }, h('span', { class: 'avatar', text: initials(encounter.patient.name) }),
+    h('div', { class: 'phead' },
       h('div', {}, h('h2', { text: encounter.patient.name }), h('ul', { class: 'facts' },
         h('li', { text: 'Visit ' + fmtDate(encounter.visit_date) }), h('li', { text: encounter.clinician_name }),
-        h('li', { text: encounter.patient.mrn }), h('li', {}, allergyChip(encounter.patient)), extra ? h('li', {}, extra) : ''))),
+        h('li', { class: 'mono', text: encounter.patient.mrn }), h('li', {}, allergyChip(encounter.patient)), extra ? h('li', {}, extra) : ''))),
   ];
 }
 
