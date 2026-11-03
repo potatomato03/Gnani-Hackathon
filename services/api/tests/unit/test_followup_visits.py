@@ -38,7 +38,7 @@ def test_approval_with_followup_starts_exactly_one_conversation(tmp_path, state,
     assert len(conversations) == 1
     conv = conversations[0]
     assert conv.messages[0].kind == "summary" and conv.case_id == "fam-010-a"
-    review = json.loads((folder / "followup.json").read_text())
+    review = json.loads((folder / "followup.json").read_text(encoding="utf-8"))
     assert review["review_date"] == "2026-10-26" and review["confirmed_by"] == "Dr Lavanya Deshpande"
     assert any(t.kind == "review" for t in conv.plan.touches)
     visit = load_visit(folder / "approved_report.json")
@@ -56,7 +56,7 @@ def test_approval_without_followup_starts_nothing(tmp_path, state):
 
 def test_followup_is_refused_when_the_frozen_record_has_no_consent(tmp_path, state, capsys):
     folder = draft_run(tmp_path / "runs")
-    draft = json.loads((folder / "draft_report.json").read_text())
+    draft = json.loads((folder / "draft_report.json").read_text(encoding="utf-8"))
     draft["record_snapshot"]["patient"]["consents"] = ["recording", "ai_processing", "call"]
     from voicerx.contracts.report import DraftReport
     from voicerx.pipeline.assemble import content_hash
@@ -75,12 +75,12 @@ def test_scan_finds_demo_and_real_approvals_and_skips_the_rest(tmp_path):
     approve_cli.main([str(folder), "--by", "Dr Lavanya Deshpande"])
     old = runs / "typed-demo" / "fam-010-a" / "superseded-20261019T000000Z"
     old.mkdir()
-    (old / "approved_report.json").write_text((folder / "approved_report.json").read_text())
+    (old / "approved_report.json").write_text((folder / "approved_report.json").read_text(encoding="utf-8"), encoding="utf-8")
     tampered = runs / "typed-demo" / "fam-010-b"
     tampered.mkdir()
-    report = json.loads((folder / "approved_report.json").read_text())
+    report = json.loads((folder / "approved_report.json").read_text(encoding="utf-8"))
     report["medicines"][0]["detail"] = "4 tablets"            # changed after approval
-    (tampered / "approved_report.json").write_text(json.dumps(report))
+    (tampered / "approved_report.json").write_text(json.dumps(report), encoding="utf-8")
     found, problems = find_approved_visits(runs)
     assert sorted((v.source, v.case_id) for v in found) == [("demo", "fam-001-a"), ("run", "fam-010-a")]
     assert len({v.visit_id for v in found}) == 2
