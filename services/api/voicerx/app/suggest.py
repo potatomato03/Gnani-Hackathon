@@ -13,11 +13,11 @@ from pydantic import Field
 from ..contracts.medication import Strict
 from ..pipeline.assemble import product_label
 from . import knowledge
-from .catalog import (LISTED_BONUS, Candidate, CatalogEntry, NameIndex, brand_stem, product_from_row, similarity,
+from .catalog import (Candidate, CatalogEntry, NameIndex, brand_stem, product_from_row, similarity, standing,
                       strengths)
 
 log = logging.getLogger('voicerx.suggest')
-PROMPT_VERSION = 'suggest-v2'
+PROMPT_VERSION = 'suggest-v3'
 MAX_CANDIDATES = 8
 MAX_SUGGESTIONS = 5
 PRIOR_BONUS = 0.3
@@ -29,6 +29,8 @@ MISMATCH_PENALTY = 0.1
 CONFIDENT_SOUND = 0.8
 # ...and no other suggestion sounds almost as close (several LC brands can sound equally close).
 CONFIDENT_MARGIN = 0.05
+# A brand this high in the dataset's sales order is told to the model as widely sold.
+WIDELY_SOLD = 0.6
 FIT_SECTIONS = ['Uses', 'Purpose', 'Essential medicine listing', 'Therapeutic group']
 SYSTEM = (
     "A speech recogniser may have misheard a medicine name in a doctor's consultation. You get the words it "
@@ -73,9 +75,10 @@ def shared_index(conn, formulary):
         if _index is None:
             entries = [CatalogEntry(p.id, f'{name} {p.form}', composition_text(p), 'formulary', p.manufacturer)
                        for p in formulary.values() for name in [p.brand, *p.aliases]]
-            rows = conn.execute('select id, name, composition, manufacturer from public.indian_products').fetchall()
-            entries += [CatalogEntry(f"in-{r['id']}", r['name'], r['composition'], 'indian', r['manufacturer'] or '')
-                        for r in rows]
+            rows = conn.execute('select id, name, composition, manufacturer, coalesce(popularity, 0) as popularity '
+                                'from public.indian_products').fetchall()
+            entries += [CatalogEntry(f"in-{r['id']}", r['name'], r['composition'], 'indian', r['manufacturer'] or '',
+                                     float(r['popularity'])) for r in rows]
             _index = NameIndex(entries)
     return _index
 
@@ -154,9 +157,9 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, f
     priors = {r['product_id']: r['times'] for r in conn.execute(
         'select product_id, times from app.medicine_aliases where organisation_id = %s and doctor_id = %s and heard_key = %s',
         (organisation_id, doctor_id, heard_key(heard))).fetchall()}
-    listed = lambda c: c.score + (LISTED_BONUS if c.entry.tier in ('formulary', 'clinic') else 0)
     ordered = sorted(found.values(), key=lambda c: (c.entry.id in priors, c.entry.id in rx.candidate_ids,
-                                                    c.strength_match is not False, listed(c)), reverse=True)
+                                                    c.strength_match is not False, c.score + standing(c.entry)),
+                     reverse=True)
     picked = []
     for candidate in ordered[:MAX_CANDIDATES]:
         product = catalog_product(conn, organisation_id, candidate.entry.id, formulary)
@@ -168,7 +171,8 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, f
         product = catalog_product(conn, organisation_id, pid, formulary) if pid not in known else None
         if product:
             tier = 'formulary' if pid in formulary else 'clinic' if pid.startswith('cp-') else 'indian'
-            entry = CatalogEntry(pid, f'{product.brand} {product.form}', composition_text(product), tier)
+            entry = pools[0].by_id.get(pid) or CatalogEntry(pid, f'{product.brand} {product.form}',
+                                                            composition_text(product), tier)
             # Scored like any other candidate, so a past choice that sounds less alike still gets its due.
             picked.append((Candidate(entry, round(similarity(heard, entry), 3),
                                      bool(numbers & entry.numbers) if numbers else None), product))
@@ -183,7 +187,8 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, f
     lines = []
     for candidate, product in picked:
         fact = facts[candidate.entry.id]
-        listed_note = '; in the clinic list' if candidate.entry.tier in ('formulary', 'clinic') else ''
+        listed_note = ('; in the clinic list' if candidate.entry.tier in ('formulary', 'clinic')
+                       else '; widely sold' if candidate.entry.popularity >= WIDELY_SOLD else '')
         lines.append(f'- id {candidate.entry.id}: {product_label(product)}; form {product.form}; contains '
                      f'{composition_text(product)}; class {fact["class"] or "unknown"}; '
                      f'listed as {fact["category"] or "unknown"}{listed_note}; '
@@ -204,10 +209,11 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, f
     middle = fits[len(fits) // 2] if fits else 0
 
     def blended(candidate):
-        # The code decides the order; the model's rank is one input among sound, listing, history and fit.
+        # The code decides the order; the model's rank is one input among sound, listing or popularity,
+        # history and fit.
         pid = candidate.entry.id
         fit = facts[pid]['fit']
-        return (candidate.score + (LISTED_BONUS if candidate.entry.tier in ('formulary', 'clinic') else 0)
+        return (candidate.score + standing(candidate.entry)
                 + (PRIOR_BONUS if pid in priors else 0)
                 + (MODEL_BONUS[rank_of[pid]] if rank_of.get(pid, 9) < len(MODEL_BONUS) else 0)
                 + (FIT_WEIGHT * (fit - middle) if fit is not None else 0)

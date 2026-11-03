@@ -2,13 +2,16 @@
 
     python tools/knowledge/upload_supabase.py
     python tools/knowledge/upload_supabase.py --schema-only
+    python tools/knowledge/upload_supabase.py --popularity-only
 
 Uses SUPABASE_DB_URL from the repo's .env. Each run replaces the tables' contents, so
 it can be rerun after the chunks or vectors change. Only the brand list's identity
 columns are loaded, never its description, side-effect or interaction text (D-95).
+--popularity-only fills just the products' popularity, without reloading anything.
 """
 import csv
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -20,7 +23,8 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 CHUNK_COLUMNS = ('id', 'source', 'label_id', 'title', 'section', 'part', 'parts', 'ingredients', 'route',
                  'classes', 'content', 'url', 'date', 'licence', 'note', 'embedding')
-PRODUCT_COLUMNS = ('id', 'name', 'manufacturer', 'pack', 'composition', 'ingredients')
+PRODUCT_COLUMNS = ('id', 'name', 'manufacturer', 'pack', 'composition', 'ingredients', 'popularity')
+PRODUCTS = DATA_DIR / 'formulary/indian_medicine_dataset/updated_indian_medicine_data.csv'
 
 
 def vector_literal(vector):
@@ -44,13 +48,30 @@ def chunk_rows(chunks, ids, vectors):
                chunk.get('url'), chunk.get('date'), chunk.get('licence'), chunk.get('note'), vector_literal(vector))
 
 
+def popularity(rows):
+    """0 to 1 per product id from the list's order. Each first letter's products are listed best-selling
+    first (PAN 40 2nd and Pan-D 3rd of 9,258 under "P"; runbook C-66), so the first gets 1 and the rest fall
+    off with the log of their rank. Discontinued products keep their place but get 0. Inferred from the
+    order, not stated by the dataset."""
+    ranks, totals = {}, {}
+    for row in rows:
+        letter = row['name'].strip()[:1].lower()
+        totals[letter] = totals.get(letter, 0) + 1
+        ranks[int(row['id'])] = (letter, totals[letter], row['Is_discontinued'] == 'TRUE')
+    return {pid: 0.0 if gone else round(1 - math.log(rank) / math.log(totals[letter] + 1), 3)
+            for pid, (letter, rank, gone) in ranks.items()}
+
+
 def product_rows(rows):
+    rows = list(rows)
+    scores = popularity(rows)
     for row in rows:
         if row['Is_discontinued'] == 'TRUE' or row['type'] != 'allopathy':
             continue
         composition = product_composition(row)
         yield (int(row['id']), row['name'].strip(), row['manufacturer_name'].strip() or None,
-               row['pack_size_label'].strip() or None, composition, sorted(ingredients_of(composition)))
+               row['pack_size_label'].strip() or None, composition, sorted(ingredients_of(composition)),
+               scores[int(row['id'])])
 
 
 def read_env(path):
@@ -71,6 +92,8 @@ def main():
     sys.stdout.reconfigure(encoding='utf-8')
     import psycopg
     url = read_env(REPO_ROOT / '.env')['SUPABASE_DB_URL']
+    if '--popularity-only' in sys.argv[1:]:
+        return fill_popularity(psycopg, url)
     ids, vectors, meta = load_embeddings(DATA_DIR / 'knowledge/embeddings' / MODEL.split('/')[-1])
     chunks = [json.loads(line) for name in CHUNK_FILES
               for line in (DATA_DIR / 'knowledge/chunks' / name).open(encoding='utf-8')]
@@ -95,8 +118,7 @@ def main():
         started = time.time()
         count = copy(conn, 'knowledge_chunks', CHUNK_COLUMNS, chunk_rows(chunks, ids, vectors))
         print(f'knowledge_chunks: {count} rows in {time.time() - started:.0f}s', flush=True)
-        products = DATA_DIR / 'formulary/indian_medicine_dataset/updated_indian_medicine_data.csv'
-        with products.open(encoding='utf-8') as handle:
+        with PRODUCTS.open(encoding='utf-8') as handle:
             started = time.time()
             count = copy(conn, 'indian_products', PRODUCT_COLUMNS, product_rows(csv.DictReader(handle)))
         print(f'indian_products: {count} rows in {time.time() - started:.0f}s', flush=True)
@@ -108,6 +130,22 @@ def main():
             size = conn.execute(f"select pg_size_pretty(pg_total_relation_size('public.{table}'))").fetchone()[0]
             print(f'{table}: {size} with indexes', flush=True)
         print('database:', conn.execute('select pg_size_pretty(pg_database_size(current_database()))').fetchone()[0])
+    return 0
+
+
+def fill_popularity(psycopg, url):
+    with PRODUCTS.open(encoding='utf-8') as handle:
+        scores = popularity(csv.DictReader(handle))
+    with psycopg.connect(url, connect_timeout=30) as conn:
+        conn.execute('alter table public.indian_products add column if not exists popularity real')
+        conn.execute('create temporary table ranked (id int primary key, popularity real) on commit drop')
+        with conn.cursor().copy('copy ranked (id, popularity) from stdin') as writer:
+            for row in scores.items():
+                writer.write_row(row)
+        count = conn.execute('update public.indian_products p set popularity = r.popularity from ranked r '
+                             'where r.id = p.id').rowcount
+        conn.commit()
+    print(f'popularity set on {count} products')
     return 0
 
 

@@ -64,3 +64,40 @@ def test_a_stated_strength_that_no_candidate_has_leaves_strength_unconfirmed_not
 def test_the_sibling_product_is_offered_beside_the_bare_name():
     found = [c.entry.id for c in INDEX.candidates('Pan')]
     assert {'in-1', 'in-2'} <= set(found)
+
+
+def test_brands_ending_in_letters_also_match_the_letters_spoken():
+    from voicerx.app.catalog import spoken_forms
+    assert spoken_forms('pan d') == ['pan di', 'pandi']
+    assert spoken_forms('montair lc') == ['montair elsi', 'montairelsi']
+    assert spoken_forms('taxim o') == ['taxim o', 'taximo']
+    # Only a short consonant word after the brand is read as letters; whole words and Hindi stay as they are.
+    assert spoken_forms('combiflam') == spoken_forms('dolo') == spoken_forms('pan') == []
+    assert spoken_forms('telma plus') == []
+
+
+def test_a_spoken_letter_written_as_one_word_finds_its_brand():
+    from voicerx.app.catalog import similarity
+    pan_d = CatalogEntry('in-2', 'Pan-D Capsule PR', 'Domperidone (30mg) + Pantoprazole (40mg)', 'indian')
+    lookalike = CatalogEntry('in-8', 'Panday 40mg Tablet', 'Pantoprazole (40mg)', 'indian')
+    assert similarity('Pandie', pan_d) >= similarity('Pandie', lookalike)
+    assert similarity('Pandee', pan_d) >= 0.95 and similarity('Pan Dee', pan_d) >= 0.95
+    # A different ending is not the letter: "Panto" still sounds more like Pantop than Pan-D.
+    pantop = CatalogEntry('in-3', 'Pantop 40 Tablet', 'Pantoprazole (40mg)', 'indian')
+    assert similarity('Panto', pantop) > similarity('Panto', pan_d)
+
+
+def test_a_widely_sold_brand_leads_an_obscure_one_that_sounds_as_close():
+    index = NameIndex([
+        CatalogEntry('in-2', 'Pan-D Capsule PR', 'Domperidone (30mg) + Pantoprazole (40mg)', 'indian', popularity=0.88),
+        CatalogEntry('in-8', 'Panday 40mg Tablet', 'Pantoprazole (40mg)', 'indian', popularity=0.2),
+        CatalogEntry('in-9', 'Pandu 40mg Tablet', 'Pantoprazole (40mg)', 'indian', popularity=0.11),
+    ])
+    assert [c.entry.id for c in index.candidates('Pandie')][0] == 'in-2'
+
+
+def test_popularity_counts_less_than_a_clinic_listing():
+    from voicerx.app.catalog import LISTED_BONUS, standing
+    assert standing(CatalogEntry('p-1', 'Pan 40 tablet', 'Pantoprazole (40mg)', 'formulary')) == LISTED_BONUS
+    assert 0 < standing(CatalogEntry('in-1', 'PAN 40 Tablet', 'Pantoprazole (40mg)', 'indian', popularity=1.0)) <= LISTED_BONUS
+    assert standing(CatalogEntry('in-5', 'Rare Tablet', 'X (1mg)', 'indian')) == 0

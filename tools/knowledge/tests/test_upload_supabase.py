@@ -1,7 +1,7 @@
 import numpy
 import pytest
 
-from upload_supabase import chunk_rows, label_id, product_rows, vector_literal
+from upload_supabase import chunk_rows, label_id, popularity, product_rows, vector_literal
 
 
 def chunk(id, source='openfda_label', title='Telmisartan', **extra):
@@ -42,7 +42,7 @@ def test_products_keep_current_allopathic_rows_with_normalised_ingredients():
     rows = [product('1', 'Dolo 650 Tablet', salt='Paracetamol (650mg)'),
             product('2', 'Old Tablet', salt='Paracetamol (500mg)', discontinued='TRUE'),
             product('3', 'Herbal Syrup', salt='Tulsi', kind='ayurvedic')]
-    assert list(product_rows(rows)) == [(1, 'Dolo 650 Tablet', 'M', 'strip of 15 tablets', 'Paracetamol (650mg)', ['acetaminophen'])]
+    assert list(product_rows(rows)) == [(1, 'Dolo 650 Tablet', 'M', 'strip of 15 tablets', 'Paracetamol (650mg)', ['acetaminophen'], 1.0)]
 
 
 def test_most_products_have_only_the_short_composition_columns():
@@ -52,3 +52,19 @@ def test_most_products_have_only_the_short_composition_columns():
     assert [(r[4], r[5]) for r in product_rows(rows)] == [
         ('Telmisartan (40mg)', ['telmisartan']),
         ('Amoxycillin (500mg) + Clavulanic Acid (125mg)', ['amoxicillin', 'clavulanic acid'])]
+
+
+def test_popularity_follows_the_lists_order_within_each_letter():
+    # The dataset lists each letter's products best-selling first: PAN 40 2nd and Pan-D 3rd of 9,258 under "P",
+    # an obscure sound-alike 1,521st (runbook C-66). The first gets 1, the rest fall off with the log of rank.
+    rows = [product('1', 'Primolut-N Tablet'), product('2', 'PAN 40 Tablet'), product('3', 'Augmentin 625 Duo Tablet'),
+            product('4', 'Pan-D Capsule PR'), product('5', 'Panday 40mg Tablet')]
+    scores = popularity(rows)
+    assert scores[1] == scores[3] == 1.0
+    assert scores[2] > scores[4] > scores[5] > 0
+
+
+def test_discontinued_products_keep_their_place_but_get_no_popularity():
+    rows = [product('1', 'Old Tablet', discontinued='TRUE'), product('2', 'Ok Tablet')]
+    scores = popularity(rows)
+    assert scores[1] == 0 and 0 < scores[2] < 1

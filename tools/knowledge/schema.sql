@@ -29,8 +29,11 @@ create table if not exists public.indian_products (
   pack text,
   composition text not null,
   -- Normalised keys, so a brand joins to its label chunks: 'Paracetamol' is stored as 'acetaminophen'.
-  ingredients text[] not null
+  ingredients text[] not null,
+  -- 0 to 1 from the list's own order, best-selling first within each letter (runbook C-66).
+  popularity real
 );
+alter table public.indian_products add column if not exists popularity real;
 
 -- How many chunks hold each word, filled after each load by indexes.sql. Postgres ranks text without
 -- weighing how rare a word is, so keyword search weighs each word itself: "domperidone" counts for much,

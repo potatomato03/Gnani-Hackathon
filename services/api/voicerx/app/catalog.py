@@ -23,10 +23,19 @@ RELEASE = {'sr', 'er', 'xr', 'cr', 'mr', 'pr', 'dt', 'ir'}
 # The clinic's reviewed formulary and its own products are what this doctor is likely to prescribe; among
 # near-identical sound-alikes in a 246,000-product list they lead (first measurement, 3 Nov).
 LISTED_BONUS = 0.15
+# Among the rest, a widely sold brand leads an obscure one that sounds as close (Pan-D over a little-known
+# sound-alike); popularity runs 0 to 1 from the dataset's own order (runbook C-66) and never outweighs a listing.
+POPULAR_BONUS = 0.15
 UNITS = r'(?:mg|mcg|g|ml|iu|%)'
 SOUND = [('ph', 'f'), ('ck', 'k'), ('x', 'ks')]
 LETTERS = str.maketrans({'b': 'p', 'm': 'p', 'c': 'k', 'q': 'k', 'g': 'k', 'd': 't', 'z': 's', 'j': 's', 'v': 'f',
                          'w': 'f'})
+# How a letter sounds when a doctor says a brand's suffix: "Pan-D" is said "pan dee", and speech recognition
+# writes it as one word. Endings that sound like "ee" are written 'i' on both sides of a comparison.
+LETTER_SOUNDS = {'a': 'e', 'b': 'bi', 'c': 'si', 'd': 'di', 'e': 'i', 'f': 'ef', 'g': 'ji', 'h': 'ech', 'i': 'ai',
+                 'j': 'je', 'k': 'ke', 'l': 'el', 'm': 'em', 'n': 'en', 'o': 'o', 'p': 'pi', 'q': 'kyu', 'r': 'ar',
+                 's': 'es', 't': 'ti', 'u': 'yu', 'v': 'vi', 'w': 'dablyu', 'x': 'eks', 'y': 'wai', 'z': 'zed'}
+EE_ENDING = re.compile(r'(?:ee|ie|ea|ey|i|y)\b')
 
 
 def parse_composition(text):
@@ -71,6 +80,22 @@ def sound_key(stem):
     return ' '.join(keys)
 
 
+def spoken_forms(stem):
+    """A stem whose later words are letters, as those letters are said, apart and joined: 'pan d' ->
+    ['pan di', 'pandi']. A short word with no vowel, or a single letter, after the brand counts as letters."""
+    words = stem.split()
+    letters = [len(w) == 1 or (len(w) <= 3 and not re.search('[aeiou]', w)) for w in words]
+    if len(words) < 2 or not any(letters[1:]) or not all(re.fullmatch('[a-z]+', w) for w in words[1:]):
+        return []
+    said = [words[0]] + [''.join(LETTER_SOUNDS[c] for c in w) if is_letters else w
+                         for w, is_letters in zip(words[1:], letters[1:])]
+    return [' '.join(said), ''.join(said)]
+
+
+def fold_endings(stem):
+    return EE_ENDING.sub('i', stem)
+
+
 def strengths(*texts):
     return {n.rstrip('0').rstrip('.') if '.' in n else n
             for text in texts for n in re.findall(r'\d+(?:\.\d+)?', words_to_digits((text or '').lower()))}
@@ -83,14 +108,22 @@ class CatalogEntry:
     composition: str
     tier: str
     manufacturer: str = ''
+    popularity: float = 0.0
     stem: str = field(init=False)
     key: str = field(init=False)
+    spoken: list = field(init=False)
     numbers: set = field(init=False)
 
     def __post_init__(self):
         self.stem = brand_stem(self.name)
         self.key = sound_key(self.stem)
+        self.spoken = [(form, sound_key(form)) for form in spoken_forms(self.stem)]
         self.numbers = strengths(self.name, self.composition)
+
+
+def standing(entry):
+    """What an entry's list adds to its sound score: a clinic listing, else how widely the brand sells."""
+    return LISTED_BONUS if entry.tier in ('formulary', 'clinic') else POPULAR_BONUS * entry.popularity
 
 
 @dataclass
@@ -103,7 +136,16 @@ class Candidate:
 def similarity(heard, entry):
     """How closely an entry's name matches heard words: spelling and sound, equally weighted, 0 to 1."""
     stem = brand_stem(heard)
-    return (fuzz.ratio(stem, entry.stem) + fuzz.ratio(sound_key(stem), entry.key)) / 200 if stem else 0.0
+    if not stem:
+        return 0.0
+    key = sound_key(stem)
+    score = (fuzz.ratio(stem, entry.stem) + fuzz.ratio(key, entry.key)) / 200
+    if entry.spoken:
+        # A spoken letter's spelling is a guess ("dee", "di", "y"), so "ee" endings are folded first.
+        folded = fold_endings(stem)
+        score = max(score, *((fuzz.ratio(folded, form) + fuzz.ratio(key, form_key)) / 200
+                             for form, form_key in entry.spoken))
+    return score
 
 
 class NameIndex:
@@ -117,8 +159,12 @@ class NameIndex:
             if entry.stem and marker not in seen:
                 seen.add(marker)
                 self.entries.append(entry)
-        self.stems = [e.stem for e in self.entries]
-        self.keys = [e.key for e in self.entries]
+        # Each name is searched as written and, for letter suffixes, as said; `owners` maps a row to its entry.
+        rows = [(i, stem, key) for i, e in enumerate(self.entries) for stem, key in [(e.stem, e.key), *e.spoken]]
+        self.owners = [i for i, _, _ in rows]
+        self.stems = [stem for _, stem, _ in rows]
+        self.keys = [key for _, _, key in rows]
+        self.by_id = {e.id: e for e in self.entries}
 
     def candidates(self, heard, limit=12):
         stem = brand_stem(heard)
@@ -126,8 +172,8 @@ class NameIndex:
             return []
         key, numbers = sound_key(stem), strengths(heard)
         indexes = set()
-        for query, choices in ((stem, self.stems), (key, self.keys)):
-            indexes |= {index for _, _, index in process.extract(query, choices, scorer=fuzz.ratio, limit=80)}
+        for query, choices in ((stem, self.stems), (fold_endings(stem), self.stems), (key, self.keys)):
+            indexes |= {self.owners[row] for _, _, row in process.extract(query, choices, scorer=fuzz.ratio, limit=80)}
         found = []
         for index in indexes:
             entry = self.entries[index]
@@ -138,7 +184,7 @@ class NameIndex:
             match = None if not numbers else bool(numbers & entry.numbers)
             found.append(Candidate(entry, round(score, 3), match))
         # A stated strength that agrees ranks first; a disagreeing one is kept, marked, and ranked after. The
-        # clinic's own lists lead here already, or dozens of near-identical names crowd them out of the limit.
-        found.sort(key=lambda c: (c.strength_match is not False,
-                                  c.score + (LISTED_BONUS if c.entry.tier in ('formulary', 'clinic') else 0)), reverse=True)
+        # clinic's own lists and well-known brands lead here already, or dozens of near-identical names crowd
+        # them out of the limit.
+        found.sort(key=lambda c: (c.strength_match is not False, c.score + standing(c.entry)), reverse=True)
         return found[:limit]
