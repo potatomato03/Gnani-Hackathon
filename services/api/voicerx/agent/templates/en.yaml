@@ -36,3 +36,4 @@ replies:
   clarify: 'Sorry, I did not understand. Please choose an option below, or reply DOCTOR.'
   not_heard: 'Sorry, I could not hear that clearly. Please type it or try again.'
   stop_confirmed: 'Okay, you will not get any more follow-up messages. Please contact the clinic directly if you need to.'
+  voice_failed: 'Sorry, I could not use that voice note. Please send one shorter than 30 seconds, or type your message.'

@@ -29,6 +29,7 @@ PATIENT_VOICE = 'Shubham'     # used only for synthetic patient voice notes
 MAX_SECONDS = 30
 RETRIES = 3
 _ONE_AT_A_TIME = threading.Lock()
+AUDIO_TYPES = {'wav': 'audio/wav', 'ogg': 'audio/ogg', 'mp3': 'audio/mpeg'}
 
 
 class SpeechError(Exception):
@@ -54,14 +55,18 @@ def tts_language(language_pref):
     return 'auto' if language_pref == 'hi-IN' else language_pref
 
 
-def http_transport(url, headers, body):
+def ssl_context():
     context = ssl.create_default_context()
     bundle = os.environ.get('SSL_CERT_FILE') or ('/root/.ccr/ca-bundle.crt' if Path('/root/.ccr/ca-bundle.crt').exists() else None)
     if bundle:
         context.load_verify_locations(bundle)
+    return context
+
+
+def http_transport(url, headers, body):
     request = urllib.request.Request(url, data=body, method='POST', headers={**headers, 'User-Agent': 'voicerx'})
     try:
-        with urllib.request.urlopen(request, timeout=60, context=context) as response:
+        with urllib.request.urlopen(request, timeout=60, context=ssl_context()) as response:
             return response.status, dict(response.headers), response.read()
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers or {}), error.read()
@@ -76,12 +81,14 @@ class GnaniSpeech:
     def __repr__(self):
         return 'GnaniSpeech(key=<hidden>)'
 
-    def transcribe(self, wav_bytes, language_code) -> Transcript:
+    def transcribe(self, audio_bytes, language_code, filename='voice-note.wav') -> Transcript:
+        """Prisma reads the format from the file name: wav, mp3, ogg, flac, aac or m4a."""
         boundary = uuid.uuid4().hex
         parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode('utf-8')
                  for name, value in (('model', STT_MODEL), ('language_code', language_code), ('format', 'codemix'))]
-        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="audio_file"; filename="voice-note.wav"\r\n'
-                     'Content-Type: audio/wav\r\n\r\n'.encode('utf-8') + wav_bytes + b'\r\n')
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="audio_file"; filename="{filename}"\r\n'
+                     f'Content-Type: {AUDIO_TYPES[filename.rsplit(".", 1)[-1]]}\r\n\r\n'.encode('utf-8')
+                     + audio_bytes + b'\r\n')
         parts.append(f'--{boundary}--\r\n'.encode('utf-8'))
         body = self._call(STT_URL, 'multipart/form-data; boundary=' + boundary, b''.join(parts))
         reply = json.loads(body.decode('utf-8'))
@@ -126,18 +133,26 @@ def _message(data):
     return reply.get('message') or str(detail or 'error')
 
 
-def read_key(env_path: Path):
-    key = os.environ.get('GNANI_API_KEY', '').strip()
-    if key:
-        return key
+ENV_FILE = Path(__file__).resolve().parents[4] / '.env'
+
+
+def read_env(name, env_path: Path = ENV_FILE):
+    """A setting from the environment, else from the repo's ignored .env file, else None."""
+    value = os.environ.get(name, '').strip()
+    if value:
+        return value
     if env_path.exists():
         for line in env_path.read_text(encoding='utf-8').splitlines():
-            if line.startswith('GNANI_API_KEY='):
+            if line.startswith(name + '='):
                 return line.split('=', 1)[1].strip() or None
     return None
 
 
-def speech_from_env(env_path: Path = Path(__file__).resolve().parents[4] / '.env'):
+def read_key(env_path: Path = ENV_FILE):
+    return read_env('GNANI_API_KEY', env_path)
+
+
+def speech_from_env(env_path: Path = ENV_FILE):
     """A client when a key is configured, else None (voice is off)."""
     key = read_key(env_path)
     return GnaniSpeech(key) if key else None

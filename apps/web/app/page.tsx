@@ -46,6 +46,8 @@ export default function Page() {
   const player = useRef<HTMLAudioElement | null>(null);
 
   const voiceOn = health !== null && health.speech !== "off";
+  // A conversation started from a real phone (private testing, runbook D-113): replies come only from the phone.
+  const onWhatsApp = conv?.plan.channel === "whatsapp";
 
   const run = useCallback(async (step: () => Promise<Conversation | void>) => {
     setBusy(true);
@@ -87,6 +89,22 @@ export default function Page() {
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [conv?.messages.length]);
+
+  // Messages from the phone arrive through the webhook, so a WhatsApp conversation is polled.
+  const conversationId = conv?.id;
+  useEffect(() => {
+    if (!onWhatsApp || !conversationId || busy) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const [next, open] = await Promise.all([api.conversation(conversationId), api.tasks()]);
+        setConv((current) => (current && current.id === next.id ? { ...next, delivery: current.delivery } : current));
+        setTasks(open);
+      } catch {
+        // the next poll tries again
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [onWhatsApp, conversationId, busy]);
 
   const nextTouch = useMemo(
     () => conv?.plan.touches.filter((t) => t.status === "planned").sort((a, b) => a.due_at.localeCompare(b.due_at))[0],
@@ -233,7 +251,9 @@ export default function Page() {
               <strong>{conv?.clinic_name ?? "Clinic"}</strong>
               <small>AI assistant · {conv ? `for ${conv.patient_name}` : "…"}</small>
             </div>
-            <span className="sim">{health?.speech === "fake" ? "Simulated · fake voice" : "Simulated"}</span>
+            <span className="sim">
+              {onWhatsApp ? "Real WhatsApp · private test" : health?.speech === "fake" ? "Simulated · fake voice" : "Simulated"}
+            </span>
           </div>
           <div className="chat" aria-live="polite">
             {conv?.messages.map((m, i) => {
@@ -253,9 +273,10 @@ export default function Page() {
               );
             })}
             {notice && <div className="day">{notice}</div>}
+            {onWhatsApp && conv?.delivery && <div className="day">Not sent yet: {conv.delivery}</div>}
             <div ref={chatEnd} />
           </div>
-          {openButtons.length > 0 && (
+          {!onWhatsApp && openButtons.length > 0 && (
             <div className="quick">
               {openButtons.map((b) => (
                 <button key={b.id} onClick={() => send({ button: b.id })} disabled={busy}>
@@ -264,69 +285,78 @@ export default function Page() {
               ))}
             </div>
           )}
-          <form
-            className="compose"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const text = draft.trim();
-              if (!text) return;
-              setDraft("");
-              send({ text });
-            }}
-          >
-            {recording !== null ? (
-              <div className="recording" role="status">
-                <span className="dot" aria-hidden /> Recording {recording}s / {MAX_SECONDS}s — tap ■ to send
-              </div>
-            ) : (
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={conv?.stopped ? "Messages stopped" : "Type a message"}
-                aria-label="Message"
-                maxLength={2000}
-                disabled={busy || !conv}
-              />
-            )}
-            {draft.trim() && recording === null ? (
-              <>
+          {onWhatsApp ? (
+            <div className="hints" role="note">
+              This chat runs on real WhatsApp. Replies come from the phone; <strong>Advance</strong> sends the next
+              check-in to it. Synthetic visits only, for private testing (see <code>docs/whatsapp-testing.md</code>).
+            </div>
+          ) : (
+            <>
+            <form
+              className="compose"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const text = draft.trim();
+                if (!text) return;
+                setDraft("");
+                send({ text });
+              }}
+            >
+              {recording !== null ? (
+                <div className="recording" role="status">
+                  <span className="dot" aria-hidden /> Recording {recording}s / {MAX_SECONDS}s — tap ■ to send
+                </div>
+              ) : (
+                <input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder={conv?.stopped ? "Messages stopped" : "Type a message"}
+                  aria-label="Message"
+                  maxLength={2000}
+                  disabled={busy || !conv}
+                />
+              )}
+              {draft.trim() && recording === null ? (
+                <>
+                  <button
+                    type="button"
+                    className="round alt"
+                    onClick={sendSynthetic}
+                    disabled={busy || !conv || !voiceOn || draft.trim().length > 300}
+                    aria-label="Send as synthetic voice note"
+                    title={voiceOn ? "Send as a synthetic voice note (Timbre voice, transcribed by Prisma)" : VOICE_OFF}
+                  >
+                    🔊
+                  </button>
+                  <button type="submit" className="round" disabled={busy || !conv} aria-label="Send">
+                    ➤
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  className="round alt"
-                  onClick={sendSynthetic}
-                  disabled={busy || !conv || !voiceOn || draft.trim().length > 300}
-                  aria-label="Send as synthetic voice note"
-                  title={voiceOn ? "Send as a synthetic voice note (Timbre voice, transcribed by Prisma)" : VOICE_OFF}
+                  className={`round ${recording !== null ? "stop" : ""}`}
+                  onClick={toggleRecording}
+                  disabled={busy || !conv || !voiceOn || conv.stopped}
+                  aria-label={recording !== null ? "Stop and send voice note" : "Record a voice note"}
+                  title={voiceOn ? "Record a voice note (up to 30 s). Only the transcript is kept." : VOICE_OFF}
                 >
-                  🔊
+                  {recording !== null ? "■" : "🎤"}
                 </button>
-                <button type="submit" className="round" disabled={busy || !conv} aria-label="Send">
-                  ➤
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className={`round ${recording !== null ? "stop" : ""}`}
-                onClick={toggleRecording}
-                disabled={busy || !conv || !voiceOn || conv.stopped}
-                aria-label={recording !== null ? "Stop and send voice note" : "Record a voice note"}
-                title={voiceOn ? "Record a voice note (up to 30 s). Only the transcript is kept." : VOICE_OFF}
-              >
-                {recording !== null ? "■" : "🎤"}
-              </button>
-            )}
-          </form>
-          <div className="hints">
-            {voiceOn ? (
-              <>Tap ▶ on a message to hear it (Gnani Timbre). Record 🎤, or type and tap 🔊 for a synthetic voice note.</>
-            ) : (
-              <>{VOICE_OFF}</>
-            )}
-            <br />
-            Try: <code>seene mein dard ho raha hai</code> · <code>Inhaler दिन में कितनी बार ले सकते हैं?</code> ·{" "}
-            <code>Wysolone अभी बंद कर दूँ?</code> · <code>DOCTOR</code> · <code>STOP</code>
-          </div>
+              )}
+            </form>
+            <div className="hints">
+              {voiceOn ? (
+                <>Tap ▶ on a message to hear it (Gnani Timbre). Record 🎤, or type and tap 🔊 for a synthetic voice note.</>
+              ) : (
+                <>{VOICE_OFF}</>
+              )}
+              <br />
+              Try: <code>seene mein dard ho raha hai</code> · <code>Inhaler दिन में कितनी बार ले सकते हैं?</code> ·{" "}
+              <code>Wysolone अभी बंद कर दूँ?</code> · <code>DOCTOR</code> · <code>STOP</code>
+            </div>
+            </>
+          )}
         </section>
 
         <section className="doctor" aria-label="What the doctor sees">

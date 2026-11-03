@@ -232,6 +232,14 @@ Recorded in `runbook.md` when the demo was built. The IDs first proposed here (D
 - **The client** (`ingest/gnani.py`) sends one request at a time, retries 429, and keeps the key out of errors. Tests and the offline browser check use a fake client.
 - **Approval starts follow-up.** Any approved report under `runs/` that matches its fingerprint is a visit. Consent is read from the frozen record snapshot. `voicerx.approve --review-date … --followup` records the doctor-confirmed review date in `followup.json` and sends the summary. The demo fixtures are ordinary approved visits marked `source: demo`.
 
+## Real WhatsApp for private testing (as built, D-113)
+
+- `agent/whatsapp.py` is the Cloud API adapter that the Channels table marked "not built". It's a delivery layer: the conversation core is unchanged, and after each action the clinic messages not yet delivered go to the bound phone. Messages with buttons go as reply buttons (3 at most, titles of 20 characters or less, body of 1024 or less), others as text. A reply to a voice note also goes as a Timbre Ogg Opus voice note.
+- Inbound: `JOIN <visit code>` starts a synthetic visit for that phone. Text, button taps and Ogg voice notes go to `receive`. Prisma takes the Ogg as it is. A webhook is accepted only with a valid `X-Hub-Signature-256`, and each message id is handled once.
+- Privacy: numbers come only from `WHATSAPP_TEST_NUMBERS`, live in memory, and are stored only as a keyed hash. After a restart, delivery waits for the phone's next message. Errors and logs scrub numbers and the token.
+- Free-form messages go only inside the 24-hour window, and template messages aren't built. Through a tunnel, the API answers only the webhook.
+- Not run against Meta yet. The setup is in `docs/whatsapp-testing.md`.
+
 ## Out of scope
 
 - Real WhatsApp numbers, real outbound calls, payments, medicine orders

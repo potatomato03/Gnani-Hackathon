@@ -123,5 +123,10 @@ class Conversation(Strict):
     awaiting: Awaiting | None = None
     unanswered: int = 0
     stopped: bool = False
+    # Real WhatsApp (private testing, runbook D-113). The phone number is never stored: only a keyed hash of it.
+    contact: str | None = None
+    delivered: int = 0                       # messages[:delivered] were handed to WhatsApp
+    last_inbound_at: datetime | None = None  # wall-clock time of the patient's last message (24-hour window)
+    last_inbound_voice: bool = False         # reply with a voice note too when the patient sent one
     # The visit (with its approved report) this conversation runs from; not stored with the conversation.
     _visit: Any = PrivateAttr(default=None)

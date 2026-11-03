@@ -60,13 +60,15 @@ export type Conversation = {
   language: string;
   visit_date: string;
   clock: string;
-  plan: { touches: Touch[] };
+  plan: { channel: "simulated" | "whatsapp" | "voice"; touches: Touch[] };
   messages: Message[];
   records: FollowUpRecord[];
   tasks: DoctorTask[];
   awaiting: { touch_id: string; question: string } | null;
   stopped: boolean;
   advanced?: boolean;
+  // Real WhatsApp only: why queued messages were not sent yet (24-hour window, or waiting for the phone).
+  delivery?: string;
 };
 
 export type Visit = {
@@ -86,7 +88,7 @@ export type Visit = {
   conversation_id: string | null;
 };
 
-export type Health = { ok: boolean; synthetic: true; speech: "gnani" | "fake" | "off" };
+export type Health = { ok: boolean; synthetic: true; speech: "gnani" | "fake" | "off"; whatsapp: "on" | "off" };
 
 export const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -112,6 +114,7 @@ export const api = {
   send: (id: string, body: { text: string } | { button: string }) =>
     call<Conversation>(`/conversations/${id}/messages`, body),
   advance: (id: string) => call<Conversation>(`/conversations/${id}/advance`, null),
+  conversation: (id: string) => call<Conversation>(`/conversations/${id}`),
   tasks: () => call<ClinicTask[]>("/clinic/tasks"),
   reset: () => call<{ reset: boolean }>("/demo/reset", null),
   // Voice (Gnani). Each call spends credits unless the audio is already cached.

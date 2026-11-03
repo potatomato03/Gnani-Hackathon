@@ -116,7 +116,8 @@ def advance(conv: Conversation) -> bool:
 
 def receive(conv: Conversation, text: str | None = None, button: str | None = None,
             source: str = 'typed') -> FollowUpRecord:
-    """source is 'typed', or 'prisma' for a voice note's transcript; both go through the same rules."""
+    """source is 'typed', 'prisma' for a voice note's transcript, or 'call' for speech on a WhatsApp call;
+    all go through the same rules."""
     conv.clock = conv.clock + STEP
     templates = load_templates(conv.language)
     replies = templates['replies']
@@ -129,7 +130,7 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
     text = (text or '').strip()
     conv.messages.append(Message(id=f'm{len(conv.messages) + 1}', sender='patient', text=text, at=conv.clock,
                                  touch_id=conv.awaiting.touch_id if conv.awaiting else None,
-                                 voice=source == 'prisma'))
+                                 voice=source in ('prisma', 'call')))
     said = _said(source)
     if not text:
         record = _record(conv, text, source, 'clarified', [])
@@ -185,6 +186,17 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
     record = _record(conv, text, source, 'escalated', [])
     _task(conv, 'question', record, f'Question the approved visit does not answer: «{text}».')
     _reply(conv, record, 'text', replies['escalated'].format(doctor=doctor))
+    return record
+
+
+def voice_not_used(conv: Conversation) -> FollowUpRecord:
+    """A voice note that can't be transcribed (too long, unreadable, or voice is off): say so in fixed text,
+    with no task for the doctor. Nothing of the audio is kept."""
+    conv.clock = conv.clock + STEP
+    conv.messages.append(Message(id=f'm{len(conv.messages) + 1}', sender='patient', text='', at=conv.clock,
+                                 touch_id=conv.awaiting.touch_id if conv.awaiting else None, voice=True))
+    record = _record(conv, '', None, 'clarified', [])
+    _reply(conv, record, 'text', load_templates(conv.language)['replies']['voice_failed'])
     return record
 
 
@@ -295,7 +307,8 @@ def _answer(conv, question, value, raw, source):
 
 
 def _said(source):
-    return 'Patient said in a voice note (Gnani Prisma transcript):' if source == 'prisma' else 'Patient wrote:'
+    return {'prisma': 'Patient said in a voice note (Gnani Prisma transcript):',
+            'call': 'Patient said on a WhatsApp call (Gnani Prisma transcript):'}.get(source, 'Patient wrote:')
 
 
 def _stop(conv, text, source='typed'):
@@ -313,7 +326,7 @@ def _record(conv, raw, source, action, answers, flags=()):
     record = FollowUpRecord(id=f'{conv.id}-r{len(conv.records) + 1}', clinic_id=conv.clinic_id,
                             patient_id=conv.patient_id, visit_ref=conv.case_id, report_hash=conv.report_hash,
                             touch_id=touch_id, channel=conv.plan.channel, received_at=conv.clock, raw_text=raw,
-                            transcript_source=source, answers=answers, red_flags=list(flags), action=action,
+                            transcript_source='prisma' if source == 'call' else source, answers=answers, red_flags=list(flags), action=action,
                             reply_text='')
     conv.records.append(record)
     return record

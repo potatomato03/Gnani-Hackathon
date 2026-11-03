@@ -91,7 +91,9 @@ def stored_conversations(state_dir: Path | None = None):
     folder = Path(state_dir or STATE) / 'conversations'
     if not folder.exists():
         return []
-    return [Conversation.model_validate_json(p.read_text(encoding='utf-8')) for p in sorted(folder.glob('*.json'))]
+    # Oldest first by last save, so the last one for a visit is the conversation most recently active.
+    paths = sorted(folder.glob('*.json'), key=lambda p: (p.stat().st_mtime_ns, p.name))
+    return [Conversation.model_validate_json(p.read_text(encoding='utf-8')) for p in paths]
 
 
 def start_followup(visit: Visit, state_dir: Path | None = None, restart=False) -> Conversation:
@@ -99,7 +101,7 @@ def start_followup(visit: Visit, state_dir: Path | None = None, restart=False) -
     from .conversation import attach, save, start
     state_dir = Path(state_dir or STATE)
     if not restart:
-        for conv in stored_conversations(state_dir):
+        for conv in reversed(stored_conversations(state_dir)):
             if conv.visit_id == visit.visit_id and conv.report_hash == visit.approved.content_hash:
                 return attach(conv, visit)
     conv = start(visit, uuid4().hex[:12])

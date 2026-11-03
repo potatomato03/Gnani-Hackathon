@@ -32,6 +32,6 @@ class FakeSpeech:
             self.transcript = text
         return silent_wav(rate=sample_rate)  # a WAV even when mp3 is asked for; served by its real type
 
-    def transcribe(self, wav_bytes, language_code):
+    def transcribe(self, wav_bytes, language_code, filename='voice-note.wav'):
         self.calls.append(('transcribe', language_code, len(wav_bytes)))
         return Transcript(text=self.transcript, detected_language=None, truncated=False)

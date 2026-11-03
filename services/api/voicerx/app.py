@@ -6,27 +6,36 @@ message is voiced when someone taps Listen (then cached), a patient voice note i
 Run from the repo root:
     PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000
 """
+import json
+import logging
 import os
 import re
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent import conversation as chat
 from .agent import visits as visit_store
 from .agent.demo import DEMO_VISITS, build_visit
 from .agent.gate import CONSENT, GateRefused
-from .agent.voice import MAX_BYTES, VoiceRefused, synthetic_voice_note, transcribe_voice_note, voice_message
+from .agent.voice import (MAX_BYTES, VoiceRefused, synthetic_voice_note, transcribe_ogg_voice_note,
+                          transcribe_voice_note, voice_message)
+from .agent.whatsapp import JOIN, DeliveryHeld, WhatsAppChannel, WhatsAppError, parse_webhook, scrub, verify_signature
 from .contracts.followup import TASK_ORDER, Conversation
 from .ingest.gnani import SpeechError, speech_from_env
 from .pipeline.assemble import table_medicines
 
 AUDIO_NAME = re.compile(r'[0-9a-f]{32}\.mp3')
 AUTO = object()
+WEBHOOK = '/whatsapp/webhook'
+# Headers a tunnel or proxy adds. A request carrying one came from outside this machine and may reach only the
+# WhatsApp webhook; the demo's controls (reset, advance, tasks) stay local.
+TUNNEL_HEADERS = ('cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'forwarded')
+log = logging.getLogger('voicerx.whatsapp')
 
 
 class Inbound(BaseModel):
@@ -53,15 +62,19 @@ def default_speech():
     return speech_from_env()
 
 
-def create_app(state_dir: Path | None = None, runs_root: Path | None = None, speech=AUTO) -> FastAPI:
+def create_app(state_dir: Path | None = None, runs_root: Path | None = None, speech=AUTO,
+               whatsapp=AUTO) -> FastAPI:
     # By default the app reads runs/ and keeps its state in runs/followup-demo/. Given only a state dir (tests),
-    # it reads nothing outside it.
+    # it reads nothing outside it, and real WhatsApp stays off unless a channel is passed in.
+    if whatsapp is AUTO:
+        whatsapp = WhatsAppChannel.from_env() if state_dir is None else None
     runs_root = Path(runs_root or (visit_store.RUNS if state_dir is None else state_dir))
     state_dir = Path(state_dir or visit_store.STATE)
     audio_dir = state_dir / 'audio'
     speech = default_speech() if speech is AUTO else speech
     lock = threading.RLock()
     conversations: dict[str, Conversation] = {}
+    bound: dict[str, str] = {}      # WhatsApp contact hash -> its current conversation id
     known: dict[str, visit_store.Visit] = {}
     demo_built = {}
 
@@ -96,8 +109,20 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
         return conversations[conversation_id]
 
     def view(conv, **extra):
+        if whatsapp is not None and conv.plan.channel == 'whatsapp':
+            try:
+                whatsapp.deliver(conv, speech, audio_dir)
+            except DeliveryHeld as held:
+                extra['delivery'] = str(held)
+            except WhatsAppError as error:
+                extra['delivery'] = str(error)
+                log.warning('delivery failed: %s', error)
         chat.save(conv, state_dir / 'conversations')
         return {**conv.model_dump(mode='json'), **extra}
+
+    def typed_here(conv):
+        if conv.plan.channel == 'whatsapp':
+            raise HTTPException(409, 'this conversation runs on WhatsApp: replies come from the phone')
 
     def need_speech():
         if speech is None:
@@ -126,6 +151,13 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
                 'conversation_id': running[-1].id if running else None}
 
     app = FastAPI(title='VoiceRx follow-up (synthetic data)')
+
+    @app.middleware('http')
+    async def tunnel_guard(request: Request, call_next):
+        if request.url.path != WEBHOOK and any(h in request.headers for h in TUNNEL_HEADERS):
+            return JSONResponse({'detail': 'only the WhatsApp webhook is reachable from outside'}, status_code=403)
+        return await call_next(request)
+
     origins = os.environ.get('VOICERX_WEB_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000').split(',')
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST'],
                        allow_headers=['Content-Type'])
@@ -133,7 +165,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
     @app.get('/health')
     def health():
         mode = 'off' if speech is None else getattr(speech, 'name', 'gnani')
-        return {'ok': True, 'synthetic': True, 'speech': mode}
+        return {'ok': True, 'synthetic': True, 'speech': mode, 'whatsapp': 'off' if whatsapp is None else 'on'}
 
     @app.get('/visits')
     def list_visits():
@@ -180,6 +212,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
     def post_message(conversation_id: str, inbound: Inbound):
         with lock:
             conv = conversation(conversation_id)
+            typed_here(conv)
             try:
                 chat.receive(conv, text=inbound.text, button=inbound.button)
             except GateRefused as refusal:
@@ -225,6 +258,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
         clip = await request.body()   # held in memory only; never written to disk
         with lock:
             conv = conversation(conversation_id)
+            typed_here(conv)
             try:
                 transcribe_voice_note(conv, clip, need_speech())
             except VoiceRefused as refusal:
@@ -239,6 +273,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
     def voice_synthetic(conversation_id: str, body: SyntheticVoice):
         with lock:
             conv = conversation(conversation_id)
+            typed_here(conv)
             try:
                 synthetic_voice_note(conv, body.text, need_speech(), audio_dir)
             except VoiceRefused as refusal:
@@ -264,6 +299,108 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             tasks.sort(key=lambda t: t['created_at'], reverse=True)
             tasks.sort(key=lambda t: TASK_ORDER.index(t['kind']))
             return tasks
+
+    # Real WhatsApp, private testing only (runbook D-113): the webhook Meta calls through the tunnel.
+
+    def need_whatsapp():
+        if whatsapp is None:
+            raise HTTPException(404, 'WhatsApp is off: its settings are not in .env')
+        return whatsapp
+
+    @app.get(WEBHOOK)
+    def whatsapp_verify(request: Request):
+        params = request.query_params
+        if params.get('hub.verify_token') != need_whatsapp().config.verify_token:
+            raise HTTPException(403, 'wrong verify token')
+        return PlainTextResponse(params.get('hub.challenge', ''))
+
+    @app.post(WEBHOOK)
+    async def whatsapp_webhook(request: Request, background: BackgroundTasks):
+        channel = need_whatsapp()
+        body = await request.body()
+        if not verify_signature(body, request.headers.get('x-hub-signature-256'), channel.config.app_secret):
+            raise HTTPException(401, 'bad signature')
+        try:
+            messages, _calls = parse_webhook(json.loads(body))
+        except (ValueError, AttributeError, TypeError):
+            raise HTTPException(400, 'not a WhatsApp webhook') from None
+        background.add_task(whatsapp_messages, messages)
+        return {'ok': True}   # answer Meta at once; the messages are handled after
+
+    def whatsapp_messages(messages):
+        for item in messages:
+            try:
+                whatsapp_message(item)
+            except Exception as error:   # one bad message must not stop the rest; never log the number
+                log.warning('WhatsApp message not handled: %s: %s', type(error).__name__,
+                            scrub(str(error), [whatsapp.config.token, whatsapp.config.app_secret]))
+
+    def visit_codes(visits):
+        demo = [v.case_id for v in visits if v.source == 'demo']
+        return (demo + [v.visit_id for v in visits if v.source != 'demo'])[:10]
+
+    def conversation_for(contact):
+        if contact in bound:
+            try:
+                return conversation(bound[contact])
+            except HTTPException:
+                del bound[contact]
+        folder = state_dir / 'conversations'
+        for path in sorted(folder.glob('*.json') if folder.exists() else [], key=lambda p: p.stat().st_mtime,
+                           reverse=True):
+            if f'"contact": "{contact}"' in path.read_text(encoding='utf-8'):
+                try:
+                    conv = conversation(path.stem)
+                except HTTPException:
+                    continue
+                bound[contact] = conv.id
+                return conv
+        return None
+
+    def whatsapp_message(item):
+        channel = whatsapp
+        if not channel.allowed(item.sender) or not channel.first_time(item.message_id):
+            return
+        contact = channel.contact(item.sender)
+        with lock:
+            join = JOIN.match(item.text or '') if item.kind == 'text' else None
+            if join:
+                code, visits = join.group(1), all_visits()
+                visit = next((v for v in visits if v.visit_id == code), None) or next(
+                    (v for v in sorted(visits, key=lambda v: v.source != 'demo') if v.case_id == code), None)
+                if visit is None:
+                    channel.send_help(item.sender, visit_codes(visits))
+                    return
+                conv = visit_store.start_followup(visit, state_dir, restart=True)
+                conv.plan.channel, conv.contact, conv.delivered = 'whatsapp', contact, 0
+                conv.last_inbound_at, conv.last_inbound_voice = channel.now(), False
+                conversations[conv.id], bound[contact] = conv, conv.id
+                view(conv)
+                return
+            conv = conversation_for(contact)
+            if conv is None:
+                channel.send_help(item.sender, visit_codes(all_visits()))
+                return
+            conv.last_inbound_at, conv.last_inbound_voice = channel.now(), item.kind == 'audio'
+            try:
+                if item.kind == 'text':
+                    chat.receive(conv, text=(item.text or '')[:2000])
+                elif item.kind == 'button':
+                    chat.receive(conv, button=item.button)
+                elif item.kind == 'audio':
+                    if speech is None:
+                        chat.voice_not_used(conv)
+                    else:
+                        clip = channel.graph.download_media(item.media_id)   # memory only, never saved
+                        try:
+                            transcribe_ogg_voice_note(conv, clip, speech)
+                        except SpeechError:
+                            chat.voice_not_used(conv)
+                else:
+                    log.info('ignored a WhatsApp %s message', item.kind)
+            except GateRefused:
+                pass   # e.g. after STOP: nothing more is sent
+            view(conv)
 
     return app
 

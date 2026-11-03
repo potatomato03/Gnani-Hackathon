@@ -74,6 +74,10 @@ Voice is off until the API has a Gnani key: set `GNANI_API_KEY` in `.env` (or as
 
 Every Gnani call spends credits, so nothing is voiced or transcribed until someone asks.
 
+### Real WhatsApp (private testing only)
+
+The same agent can run on WhatsApp through Meta's Cloud API test number, on the team's own phones. Every visit is still synthetic, and the submitted demo stays on the simulated chat. See [docs/whatsapp-testing.md](docs/whatsapp-testing.md) for the Meta setup, the `.env` settings and the tunnel. WhatsApp stays off until those settings exist.
+
 ### Starting follow-up from a real approval
 
 Any `approved_report.json` under `runs/` shows up in the app's visit list. To start the follow-up when the doctor approves:
@@ -90,6 +94,7 @@ PYTHONPATH=services/api .venv/bin/python -m voicerx.approve runs/<run>/<case> --
 
 - [Runbook](runbook.md): status, decisions and everything done so far
 - [Follow-up agent research](docs/research/followup-agent.md) and [design](docs/superpowers/specs/2026-11-02-followup-agent-design.md)
+- [Testing on real WhatsApp](docs/whatsapp-testing.md)
 - [Decisions](docs/DECISIONS.md)
 - [Evals](docs/EVALS.md)
 - [Contributions](docs/CONTRIBUTIONS.md)

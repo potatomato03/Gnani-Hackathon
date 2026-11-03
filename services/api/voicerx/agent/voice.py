@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..contracts.followup import Conversation, FollowUpRecord
 from ..ingest.gnani import CLINIC_VOICE, MAX_SECONDS, PATIENT_VOICE, TTS_MODEL, stt_languages, tts_language
-from .conversation import receive
+from .conversation import receive, voice_not_used
 
 MAX_BYTES = 3_000_000
 MAX_SYNTHETIC_CHARS = 300
@@ -92,6 +92,32 @@ def transcribe_voice_note(conv: Conversation, wav_bytes: bytes, speech) -> Follo
     wav_bytes = repair_wav_sizes(wav_bytes)
     check_wav(wav_bytes)
     transcript = speech.transcribe(wav_bytes, stt_languages(conv.language))
+    return receive(conv, text=transcript.text, source='prisma')
+
+
+def ogg_opus_seconds(data: bytes) -> float:
+    """Length of an Ogg Opus clip (a WhatsApp voice note): the last page's granule position, less the pre-skip
+    in the OpusHead packet, at Opus's fixed 48 kHz granule rate. Raises ValueError for anything else."""
+    head = data.find(b'OpusHead')
+    last = data.rfind(b'OggS')
+    if not data.startswith(b'OggS') or head < 0 or last < 0 or len(data) < last + 14 or len(data) < head + 12:
+        raise ValueError('not an Ogg Opus file')
+    pre_skip = int.from_bytes(data[head + 10:head + 12], 'little')
+    granule = int.from_bytes(data[last + 6:last + 14], 'little', signed=True)
+    return max(granule - pre_skip, 0) / 48000
+
+
+def transcribe_ogg_voice_note(conv: Conversation, ogg_bytes: bytes, speech) -> FollowUpRecord:
+    """A WhatsApp voice note (Ogg Opus) goes to Prisma as it is; Prisma reads ogg from the file name.
+    A clip that is too long or not Ogg Opus gets a fixed reply and costs no Prisma call."""
+    try:
+        if len(ogg_bytes) > MAX_BYTES:
+            raise VoiceRefused('voice note is too large')
+        if ogg_opus_seconds(ogg_bytes) > MAX_SECONDS + 0.5:
+            raise VoiceRefused(f'voice note is longer than {MAX_SECONDS} seconds')
+    except (ValueError, VoiceRefused):
+        return voice_not_used(conv)
+    transcript = speech.transcribe(ogg_bytes, stt_languages(conv.language), filename='voice-note.ogg')
     return receive(conv, text=transcript.text, source='prisma')
 
 
