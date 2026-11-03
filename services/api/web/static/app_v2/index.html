@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-text="standard" data-motion="on">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FBF8F3">
+  <title>VoiceRx for Doctors</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app_v2/app.css">
+  <script type="module" src="/static/app.js"></script>
+  <script type="module" src="/static/app_v2/presentation.js"></script>
+</head>
+<body>
+  <button class="v2-skip" id="v2-skip" type="button">Skip to workspace</button>
+  <div class="v2-sky" aria-hidden="true">
+    <i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i><i class="rays"></i>
+  </div>
+  <div id="root" aria-live="polite"></div>
+  <details class="v2-display" id="v2-display">
+    <summary class="btn btn-quiet" aria-label="Display settings">Display <span aria-hidden="true">☷</span></summary>
+    <div class="v2-menu">
+      <fieldset><legend>Text size</legend><p>Choose what is comfortable to read.</p>
+        <div class="v2-pills">
+          <button type="button" data-pref="text" data-value="standard" aria-pressed="true">Standard</button>
+          <button type="button" data-pref="text" data-value="large" aria-pressed="false">Large</button>
+        </div>
+      </fieldset>
+      <fieldset><legend>Background motion</legend><p>The soft colours behind the workspace.</p>
+        <div class="v2-pills">
+          <button type="button" data-pref="motion" data-value="on" aria-pressed="true">On</button>
+          <button type="button" data-pref="motion" data-value="off" aria-pressed="false">Off</button>
+        </div>
+      </fieldset>
+    </div>
+  </details>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="synthetic">Synthetic data only</div>
+</body>
+</html>

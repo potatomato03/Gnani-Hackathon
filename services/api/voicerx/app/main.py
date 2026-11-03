@@ -769,4 +769,11 @@ app.mount('/static', StaticFiles(directory=WEB / 'static'), name='static')
 
 @app.get('/')
 def index():
-    return FileResponse(WEB / 'index.html', headers={'Cache-Control': 'no-cache'})
+    # The app_v2 design is the interface (runbook D-124); it runs the same script as the original.
+    return FileResponse(WEB / 'static' / 'app_v2' / 'index.html', headers={'Cache-Control': 'no-cache'})
+
+
+@app.get('/v1')
+def index_v1():
+    """The original interface, kept beside app_v2."""
+    return FileResponse(WEB / 'index_v1.html', headers={'Cache-Control': 'no-cache'})
