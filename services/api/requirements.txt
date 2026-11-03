@@ -8,5 +8,7 @@ pytest
 fastapi==0.162.0
 uvicorn==0.54.0
 httpx==0.28.1
+# Patient memory in Supabase Postgres (voicerx/agent/memory.py, D-118); same pin as tools/knowledge
+psycopg[binary]==3.3.6
 # WhatsApp calls (voicerx/agent/webrtc_call.py, D-114)
 aiortc==1.15.0
