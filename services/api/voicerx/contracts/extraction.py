@@ -77,6 +77,9 @@ class ResolvedMedication(Strict):
     fuzzy: bool = False
     speaker_unclear: bool = False
     unbound: list[str] = Field(default_factory=list)
+    # Values VoiceRx filled in rather than heard, by field: product ("generic", "auto", "learned"), dose
+    # ("standard", or "unit" when only the number was said), food and schedule ("standard"). Shown to the doctor.
+    filled: dict[str, str] = Field(default_factory=dict)
 
 
 class CheckedExtraction(Strict):

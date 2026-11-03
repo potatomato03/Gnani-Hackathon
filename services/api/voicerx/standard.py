@@ -18,7 +18,7 @@ SLOTS = {'morning': 'm', 'afternoon': 'a', 'evening': 'e', 'night': 'n'}
 DAILY_SLOTS = {2: 'mn', 3: 'man', 4: 'maen'}
 FOOD_TEXT = {'after_food': 'after food', 'before_food': 'before food', 'with_food': 'with food',
              'empty_stomach': 'empty stomach'}
-DOSE_FORMS = ('tablet', 'capsule')
+DOSE_FORMS = ('tablet', 'capsule', 'sachet')
 
 
 @dataclass(frozen=True)

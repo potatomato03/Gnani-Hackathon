@@ -18,10 +18,27 @@ sys.path.insert(0, str(REPO_ROOT / 'tools/knowledge'))
 from names import ingredient_key  # noqa: E402
 
 
+def stand_in_for_mmh3():
+    """fastembed imports mmh3 only for BM25 sparse embeddings, which this app never uses. Where it can't load
+    (Windows Application Control blocked its compiled file on 3 Nov, runbook C-69), a stand-in that refuses to
+    hash lets the dense model load. The blocked file itself is never run."""
+    try:
+        import mmh3  # noqa: F401
+    except ImportError:
+        import types
+
+        def unavailable(*args, **kwargs):
+            raise RuntimeError('mmh3 could not load; sparse (BM25) embeddings are not used by this app')
+        stub = types.ModuleType('mmh3')
+        stub.hash = stub.hash64 = stub.hash128 = stub.hash_bytes = stub.hash_from_buffer = unavailable
+        sys.modules['mmh3'] = stub
+
+
 def _embedder():
     global _model
     with _lock:
         if _model is None:
+            stand_in_for_mmh3()
             from fastembed import TextEmbedding
             _model = TextEmbedding(MODEL, cache_dir=str(REPO_ROOT.parent / 'models' / 'fastembed'))
     return _model

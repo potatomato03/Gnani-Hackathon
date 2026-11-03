@@ -42,7 +42,7 @@ def main():
                 if rx.id in stored and not replace:
                     continue
                 items, method = suggest(conn, client, visit['transcript'] or '', rx, draft.checked,
-                                        visit['organisation_id'], visit['clinician_id'], reference.products)
+                                        visit['organisation_id'], reference.products)
                 conn.execute('insert into app.medicine_suggestions (encounter_id, medication_id, heard, suggestions, method) '
                              'values (%s, %s, %s, %s, %s) on conflict (encounter_id, medication_id) do update set '
                              'heard = excluded.heard, suggestions = excluded.suggestions, method = excluded.method',

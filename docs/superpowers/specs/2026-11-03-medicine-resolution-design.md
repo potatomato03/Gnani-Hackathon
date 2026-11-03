@@ -47,8 +47,9 @@
 4. The doctor confirms with one click. Nothing is ever applied automatically: sound-alike pairs such as
    Pan 40 and Pan-D are where a confident wrong guess hurts (runbook D-92). The audit keeps what was
    heard and what was chosen.
-5. Each confirmation is remembered per doctor (these heard words mean Pan 40) and ranks first next time, marked
-   as the doctor's earlier choice. Still a suggestion.
+5. Each confirmation is remembered with its doctor (these heard words mean Pan 40) and, across the clinic, ranks
+   first next time, marked as chosen before in this clinic. Since D-118 and D-119 (4 Nov) a clear lead is filled in
+   automatically and tagged; the doctor's approval of the draft is the check.
 
 ## Unchanged rules
 

@@ -165,6 +165,13 @@ class NameIndex:
         self.stems = [stem for _, stem, _ in rows]
         self.keys = [key for _, _, key in rows]
         self.by_id = {e.id: e for e in self.entries}
+        self.families = {}
+        for e in self.entries:
+            self.families.setdefault(e.stem.split()[0], []).append(e)
+
+    def family(self, entry):
+        """Every product whose name starts with the same word: Pan 40, Pan-D and Pan 20 for "pan"."""
+        return self.families.get(entry.stem.split()[0], [])
 
     def candidates(self, heard, limit=12):
         stem = brand_stem(heard)

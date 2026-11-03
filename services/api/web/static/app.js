@@ -476,6 +476,15 @@ const DONE_REASON = { choose_product: 'Product chosen by the doctor.', set_dose:
   add_line: 'Written by the doctor.', dismiss_item: 'Ruled out by the doctor.' };
 const ONE_CLICK = ['confirm_order', 'acknowledge'];
 const CONFIRM_TEXT = { remove_medicine: 'Yes, remove', remove_line: 'Yes, remove', dismiss_item: 'Yes, rule out' };
+// What VoiceRx filled in rather than heard (runbook D-118), shown on the prescription row for the doctor to check.
+const FILLED_PRODUCT = { generic: 'Generic name', auto: 'Name matched: check', learned: 'Chosen before in this clinic' };
+const FILLED_FIELD = { dose: 'dose', food: 'food', schedule: 'times' };
+function filledChips(m) {
+  const f = m.filled || {};
+  const standard = Object.keys(FILLED_FIELD).filter(k => f[k] === 'standard').map(k => FILLED_FIELD[k]);
+  return [f.product ? h('span', { class: 'chip ' + (f.product === 'auto' ? 'off' : 'muted'), text: FILLED_PRODUCT[f.product] || f.product }) : '',
+    standard.length ? h('span', { class: 'chip iris', text: 'Standard ' + standard.join(', ') }) : ''];
+}
 const TIER_TEXT = { formulary: 'In formulary', indian: 'Indian list · unverified', clinic: 'Clinic list · pending review' };
 const PRODUCT_CODES = ['unmatched_product', 'ambiguous_product', 'fuzzy_product_match', 'allergy_conflict'];
 const SOURCE_TEXT = { openfda_label: 'US label (openFDA)', nlem_2022: 'NLEM 2022', jan_aushadhi: 'Jan Aushadhi' };
@@ -667,7 +676,7 @@ async function showReview(encounter, view) {
             h('span', { class: 'chip ' + (s.tier === 'formulary' ? 'ok' : 'off'), text: TIER_TEXT[s.tier] || s.tier }),
             s.sound_alike_sibling ? h('span', { class: 'chip miss', text: 'Sound-alike: check which' }) : '',
             s.strength_match === false ? h('span', { class: 'chip off', text: 'Strength differs from what was said' }) : '',
-            s.chosen_before ? h('span', { class: 'chip iris', text: `You chose this before (${s.chosen_before}×)` }) : ''),
+            s.chosen_before ? h('span', { class: 'chip iris', text: `Chosen before in this clinic (${s.chosen_before}×)` }) : ''),
           s.reason ? h('p', { class: 'muted small', text: s.reason }) : '',
           s.standard?.length ? h('p', { class: 'muted small', text: 'Also sets the standard: ' + s.standard.map(p => p.text).join(' · ') }) : ''),
         h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => submit([
@@ -745,6 +754,7 @@ async function showReview(encounter, view) {
       h('tbody', {}, tableMeds.map(m => {
         const cell = h('td', {},
           h('span', { class: 'mname', text: m.row.label }), h('span', { class: 'how', text: m.row.detail }),
+          Object.keys(m.filled || {}).length ? h('div', { class: 'attrs' }, filledChips(m)) : '',
           m.row.flags.length ? h('div', { class: 'attrs' }, m.row.flags.map(f => h('span', { class: 'chip miss', text: f.replaceAll('_', ' ') }))) : '',
           canEdit && m.standard?.length ? h('div', { class: 'standard' }, h('span', { class: 'chip iris', text: 'Standard' }), standardText(m),
             h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => submit(standardItems(m, m.standard)) }, 'Accept')) : '',

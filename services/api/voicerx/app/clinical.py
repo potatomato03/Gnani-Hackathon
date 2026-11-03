@@ -2,6 +2,7 @@
 from ..pipeline.assemble import assemble_draft
 from ..pipeline.check_extraction import check_extraction
 from ..pipeline.check_report import check_report
+from ..pipeline.complete import complete
 from ..pipeline.extract import extract
 from ..pipeline.run import active_after
 from ..pipeline.write_report import write_report
@@ -34,7 +35,8 @@ def current_ids(approved_reports):
     return active
 
 
-def process_typed(case_id, transcript, patient_id, doctor_id, visit_date, client, reference, active_ids, on_step):
+def process_typed(case_id, transcript, patient_id, doctor_id, visit_date, client, reference, active_ids, on_step,
+                  rules=None, generics=frozenset(), finder=None):
     if not transcript.strip():
         raise StageFailed('extracting', 'The source is empty; there is nothing to process.')
     stage = 'extracting'
@@ -45,6 +47,11 @@ def process_typed(case_id, transcript, patient_id, doctor_id, visit_date, client
         stage = 'checking'
         on_step(stage, 'running')
         checked = check_extraction(extracted, transcript, reference, patient_id, visit_date, active_ids)
+        if rules is not None:
+            # Name clear products and fill unsaid values, marked for the doctor (runbook D-118).
+            record = reference.patients[patient_id]
+            allergies = record['allergies'] if record['allergy_status'] != 'unknown' else None
+            checked, reference = complete(checked, reference, rules, allergies, finder, generics)
         on_step(stage, 'succeeded')
         stage = 'writing'
         on_step(stage, 'running')

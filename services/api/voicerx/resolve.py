@@ -94,6 +94,9 @@ def resolve(draft, resolutions, reference):
                 result.checked.medications.remove(rx)
             elif correction.action == 'confirm_order':
                 rx.speaker_unclear = False
+            # A value the doctor set is no longer one VoiceRx filled in.
+            rx.filled.pop({'choose_product': 'product', 'set_dose': 'dose', 'set_food': 'food',
+                           'set_timing': 'schedule', 'set_duration': 'duration'}.get(correction.action, ''), None)
             if cleared:
                 rx.unbound = [x for x in rx.unbound if x not in (cleared, cleared.removesuffix('_phrase'))]
                 rx.unresolved = [x for x in rx.unresolved if x not in (cleared, cleared.removesuffix('_phrase'))]

@@ -17,6 +17,11 @@ SIDE_WORDS = {'left': {'left', 'बायां', 'बाएँ', 'बाएं'
               'right': {'right', 'दायां', 'दाएँ', 'दाएं', 'दाईं', 'కుడి', 'வலது'},
               'bilateral': {'bilateral', 'both', 'दोनों', 'రెండు', 'இரண்டு'}}
 FIRST_PERSON = {'मैं', 'मुझे', 'मेरा', 'मेरी', 'i', 'my', 'me', 'నేను', 'నా', 'நான்', 'என்'}
+# A doctor dictating says "I am recommending ..."; first person with a prescribing verb is the doctor, not a
+# patient interrupting (runbook C-70).
+PRESCRIBING = {'recommend', 'recommending', 'suggest', 'suggesting', 'prescribe', 'prescribing', 'advise', 'advising',
+               'starting', 'giving', 'adding', 'i want you', 'लिख रहा', 'लिख रही', 'दे रहा', 'दे रही'}
+NUKTA = '\u093c'  # the nukta dot, as in ज़
 ENDS = re.compile(r'[।?!\n]|\.(?=\s|$)')
 PHRASES = ('dose_phrase', 'timing_phrase', 'food_phrase', 'duration_phrase', 'start_phrase', 'route_phrase')
 MEDICINE_CODES = {'missing_quantity', 'ambiguous_product', 'fuzzy_product_match', 'unmatched_product',
@@ -24,7 +29,8 @@ MEDICINE_CODES = {'missing_quantity', 'ambiguous_product', 'fuzzy_product_match'
 
 
 def normalise(text):
-    return ' '.join(unicodedata.normalize('NFC', text).casefold().split())
+    # The nukta is written or left out at will ("ज़रूरत", "जरूरत"); it never tells two words apart here.
+    return ' '.join(unicodedata.normalize('NFC', text).casefold().replace(NUKTA, '').split())
 
 
 def has_word(text, words):
@@ -71,6 +77,40 @@ def medicine_issues(medications, reference, allergies):
     return issues
 
 
+LINKING = {'is', 'are', 'was', 'will', 'be', 'should', 'for', 'dose', 'dosage', 'tablet', 'tablets', 'tab', 'capsule',
+           'capsules', 'cap', 'syrup', 'sachet', 'inhaler', 'drops'}
+
+
+def _patient_voice(sentence):
+    return has_word(sentence, FIRST_PERSON) and not has_word(sentence, PRESCRIBING)
+
+
+def _appears(phrase, window):
+    """The phrase is in the window verbatim, or, for three words or more, its words appear there in order with at
+    most two other words between them: "after breakfast and after dinner" in "one after breakfast and one after
+    dinner". The model sometimes drops a repeated word when it copies."""
+    if phrase in window:
+        return True
+    clean = lambda words: [w.strip('.,;:!?…।') for w in words]
+    words, have = clean(phrase.split()), clean(window.split())
+    if len(words) < 3:
+        return False
+    for start, word in enumerate(have):
+        if word != words[0]:
+            continue
+        found, gap = 1, 0
+        for other in have[start + 1:]:
+            if found == len(words) or gap > 2:
+                break
+            if other == words[found]:
+                found, gap = found + 1, 0
+            else:
+                gap += 1
+        if found == len(words):
+            return True
+    return False
+
+
 def _trim(phrase):
     return phrase.rstrip(' ।.?!,;') if phrase is not None else None
 
@@ -93,7 +133,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
     text = normalise(transcript)
     # Keep a same-length copy with utterance boundaries for mention binding.
     bounded_text = re.sub(r'\s+', lambda m: '\n' if '\n' in m[0] or '\r' in m[0] else ' ',
-                          unicodedata.normalize('NFC', transcript).casefold()).strip()
+                          unicodedata.normalize('NFC', transcript).casefold().replace(NUKTA, '')).strip()
     kept, dropped, medications, issues = [], [], [], []
     for item in extraction.items:
         quote = normalise(item.quote)
@@ -115,16 +155,16 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         if item.laterality and not has_word(quote, SIDE_WORDS[item.laterality]):
             issues.append(issue('laterality_mismatch', item.id))
         kept.append(item)
-    name_positions = [(m.start(), rx.id) for rx in extraction.medications
+    name_positions = [(m.start(), m.end(), rx.id) for rx in extraction.medications
                       for m in re.finditer(re.escape(normalise(rx.name_quote)), text) if normalise(rx.name_quote)]
     for rx in extraction.medications:
-        positions = [p for p, rid in name_positions if rid == rx.id]
+        positions = [p for p, _, rid in name_positions if rid == rx.id]
         # A medicine the model calls patient speech is dropped only on evidence: a [patient] line label, or,
         # with no label, a first-person sentence. Otherwise it is kept and blocked as unclear for the doctor
         # to confirm, never silently dropped.
         def patient_said(p):
             label = _line_label(bounded_text, p)
-            return label == 'patient' if label else has_word(_sentence(bounded_text, p), FIRST_PERSON)
+            return label == 'patient' if label else _patient_voice(_sentence(bounded_text, p))
         overruled = rx.said_by == 'patient' and not (positions and all(patient_said(p) for p in positions))
         if rx.said_by == 'patient' and not overruled:
             issues.append(issue('patient_speech', rx.id, 'warn'))
@@ -146,11 +186,23 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
             corrected.add(correction.field)
         possibilities = []
         for pos in positions:
-            following = [p for p, rid in name_positions if p > pos and rid != rx.id]
-            next_name = min(following, default=len(text))
-            end = ENDS.search(bounded_text, pos)
-            stop = min(pos + 200, end.start() if end else len(text), next_name)
-            bound = {field: (value is None or (bool(normalise(value)) and normalise(value) in text[pos:next_name if field in corrected else stop]))
+            # A medicine's words run from the start of its sentence (or the end of the medicine named before it
+            # there), so "one Pan D" keeps its dose, and stop at the sentence end or the next medicine named.
+            # Only when its own sentence says nothing after the name ("the dosage for Pan D is... One after
+            # breakfast") do they run on through the next sentence, and never across a line (another turn).
+            others = [(s, e) for s, e, rid in name_positions if rid != rx.id]
+            next_name = min((s for s, _ in others if s > pos), default=len(text))
+            earlier_end = max((e for s, e in others if e <= pos), default=0)
+            ends = [m.end() for m in ENDS.finditer(bounded_text[:pos])]
+            begin = max(earlier_end, ends[-1] if ends else 0)
+            first_end = ENDS.search(bounded_text, pos)
+            stop = first_end.start() if first_end else len(text)
+            after_name = set(re.findall(r'\w+', text[pos + len(normalise(rx.name_quote)):stop])) - LINKING
+            if first_end and first_end.group() != '\n' and not after_name:
+                second_end = ENDS.search(bounded_text, first_end.end())
+                stop = second_end.start() if second_end else len(text)
+            stop = min(pos + 300, stop, next_name)
+            bound = {field: (value is None or (bool(normalise(value)) and _appears(normalise(value), text[begin:next_name if field in corrected else stop])))
                      for field, value in values.items()}
             possibilities.append((sum(bound.values()), pos, bound))
         _, pos, bound = max(possibilities, key=lambda entry: entry[0])
@@ -159,6 +211,9 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         parsed = {'dose': parse_dose(clean['dose_phrase']), 'schedule': parse_timing(clean['timing_phrase']),
                   'food': parse_food(clean['food_phrase']), 'duration': parse_duration(clean['duration_phrase']),
                   'start': parse_start(clean['start_phrase'], visit_date), 'route': clean['route_phrase']}
+        if parsed['duration'] is None and not clean['duration_phrase'] and clean['timing_phrase']:
+            # "after breakfast and after dinner for three days": the duration came inside the timing phrase.
+            parsed['duration'] = parse_duration(clean['timing_phrase'])
         if isinstance(parsed['schedule'], Taper) and parsed['food'] is None and not clean['food_phrase']:
             # A taper is quoted whole in its timing phrase, so its single food rule is said there too.
             parsed['food'] = parse_food(clean['timing_phrase'])
@@ -174,6 +229,9 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
                 parsed['schedule'] = Grid(**{s: '1' if s in slots else '0' for s in 'maen'})
             elif isinstance(schedule, Grid) and {s for s in 'maen' if float(getattr(schedule, s)) > 0} != slots:
                 meal_conflict = True
+            if parsed['food'] is None and not clean['food_phrase']:
+                # The meal said in the timing phrase is the food rule too ("after lunch and after dinner").
+                parsed['food'] = meal[0]
         mapping = {'dose_phrase': 'dose', 'timing_phrase': 'schedule', 'food_phrase': 'food', 'duration_phrase': 'duration', 'start_phrase': 'start'}
         unresolved = [field for field, output in mapping.items() if clean[field] and parsed[output] is None]
         if meal_conflict and 'timing_phrase' not in unresolved:
@@ -197,7 +255,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         medications.append(ResolvedMedication(id=rx.id, action=rx.action, spoken_name=rx.spoken_name,
             **match.model_dump(), **parsed, unresolved=unresolved,
             quotes={'name_quote': rx.name_quote, **{field: value for field, value in values.items() if value is not None}},
-            speaker_unclear=overruled or rx.said_by == 'unclear' or has_word(_sentence(bounded_text, pos), FIRST_PERSON), unbound=unbound))
+            speaker_unclear=overruled or rx.said_by == 'unclear' or _patient_voice(_sentence(bounded_text, pos)), unbound=unbound))
     record = reference.patients[patient_id]
     allergies = record['allergies'] if record['allergy_status'] != 'unknown' else None
     issues += medicine_issues(medications, reference, allergies)

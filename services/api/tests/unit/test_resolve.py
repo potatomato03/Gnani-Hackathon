@@ -147,3 +147,10 @@ def test_added_line_needs_a_known_section_text_and_kept_citations():
                        fix("add_line", "advice", {"text": "x", "cites": ["x99"]})):
         with pytest.raises(ResolutionRefused):
             resolve(omitted_draft(), [correction], REF)
+
+
+def test_a_doctor_setting_a_filled_value_removes_its_mark():
+    draft = make_draft([resolved_medicine(filled={'dose': 'standard', 'food': 'standard', 'product': 'auto'})])
+    fixed = resolve(draft, [fix("set_dose", "rx1", {"amount": "2", "unit": "tablet"}),
+                            fix("choose_product", "rx1", {"product_id": "p-dolo-650"}).model_copy(update={"id": "r2"})], REF)
+    assert fixed.checked.medications[0].filled == {'food': 'standard'}

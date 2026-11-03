@@ -17,7 +17,7 @@ from .catalog import (Candidate, CatalogEntry, NameIndex, brand_stem, product_fr
                       strengths)
 
 log = logging.getLogger('voicerx.suggest')
-PROMPT_VERSION = 'suggest-v3'
+PROMPT_VERSION = 'suggest-v4'
 MAX_CANDIDATES = 8
 MAX_SUGGESTIONS = 5
 PRIOR_BONUS = 0.3
@@ -46,6 +46,20 @@ SYSTEM = (
     '5. A stated strength that differs is a warning to mention, not a reason to prefer a worse-sounding name. '
     'Use only the candidate ids given; never invent one. Each reason is one short sentence naming the heard '
     'words and the context words that support it.')
+
+# Taking a match without asking needs a close sound, a listed or widely sold product, no strength conflict, no
+# other well-known brand nearly as close, and no sibling of the same brand family with another composition.
+AUTO_SOUND = 0.88
+AUTO_MARGIN = 0.05
+# A stated strength that only one listed product shares is strong evidence: "Vysolon ten" can sound only 0.77 like
+# Wysolone 10, but the closer names are other strengths. Then a lower sound will do, with a wider margin.
+AUTO_SOUND_WITH_STRENGTH = 0.75
+AUTO_MARGIN_WITH_STRENGTH = 0.08
+AUTO_POPULAR = 0.5
+RIVAL_POPULAR = 0.3
+# A sibling of the same brand family with another composition (Pan 40 beside Pan-D) is the doctor's call unless
+# the top sounds clearly closer: "Pandee" is Pan-D (1.0) far more than Pan 40 (0.8); "Bann 40" is not (D-92).
+FAMILY_MARGIN = 0.15
 
 _index, _lock = None, threading.Lock()
 
@@ -140,10 +154,9 @@ def merge_ranking(candidate_ids, ranking):
     return list(reasons) + [pid for pid in candidate_ids if pid not in reasons], reasons
 
 
-def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, formulary):
-    """Up to five suggestions for one medicine, best first, and how they were made."""
+def candidates_for(pools, rx):
+    """Sound-alike candidates for a medicine's heard words and quote, each judged on strength against both."""
     heard = rx.spoken_name
-    pools = [shared_index(conn, formulary), clinic_index(conn, organisation_id)]
     found = {}
     # A fixed order, and every candidate judged on strength against the full heard words: the bare quote
     # ("Band") carries no strength, and its results escaped the mismatch rule depending on set order.
@@ -154,9 +167,78 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, f
             for c in pool.candidates(name, limit=40):
                 if c.entry.id not in found or c.score > found[c.entry.id].score:
                     found[c.entry.id] = Candidate(c.entry, c.score, bool(numbers & c.entry.numbers) if numbers else None)
-    priors = {r['product_id']: r['times'] for r in conn.execute(
-        'select product_id, times from app.medicine_aliases where organisation_id = %s and doctor_id = %s and heard_key = %s',
-        (organisation_id, doctor_id, heard_key(heard))).fetchall()}
+    return found
+
+
+def confident_choice(found, family=(), heard=''):
+    """The candidate to take without asking, or None. family: other products of the top's brand family, from the
+    whole index, since a sibling that sounds less alike may not be among the candidates."""
+    # Products of another strength than the one said are out of the running.
+    ranked = sorted((c for c in found if c.strength_match is not False), key=lambda c: c.score + standing(c.entry),
+                    reverse=True)
+    if not ranked:
+        return None
+    top = ranked[0]
+    said = top.strength_match is True
+    floor, margin = (AUTO_SOUND_WITH_STRENGTH, AUTO_MARGIN_WITH_STRENGTH) if said else (AUTO_SOUND, AUTO_MARGIN)
+    listed = lambda e, popular: e.tier in ('formulary', 'clinic') or e.popularity >= popular
+    if top.score < floor or not listed(top.entry, AUTO_POPULAR):
+        return None
+    # A rival with the same composition is the same medicine under another name; it doesn't count.
+    same = lambda a, b: ' '.join(a.composition.lower().split()) == ' '.join(b.composition.lower().split())
+    first = lambda e: e.stem.split()[0]
+    numbers = strengths(heard) if heard else set()
+    rivals = [(c.entry, c.score) for c in ranked[1:]]
+    rivals += [(e, similarity(heard, e)) for e in family
+               if e.id != top.entry.id and (not numbers or numbers & e.numbers)]
+    for entry, score in rivals:
+        if not listed(entry, RIVAL_POPULAR) or same(entry, top.entry):
+            continue
+        if first(entry) == first(top.entry) and score >= top.score - FAMILY_MARGIN:
+            return None
+        if score >= top.score - margin:
+            return None
+    return top
+
+
+def clinic_choices(conn, organisation_id, heard):
+    """What the clinic's doctors confirmed these heard words to mean, most confirmed first: {product id: times}.
+    Each confirmation records its doctor; the lookup is clinic-wide, so one doctor's confirmation helps all
+    (runbook D-119)."""
+    return {r['product_id']: r['times'] for r in conn.execute(
+        'select product_id, sum(times)::int as times from app.medicine_aliases where organisation_id = %s and '
+        'heard_key = %s group by product_id order by times desc, max(last_at) desc',
+        (organisation_id, heard_key(heard))).fetchall()}
+
+
+def finder_for(conn, organisation_id, formulary):
+    """For the completion step: the clinic's earlier choice for these heard words, else a clear match."""
+    pools = [shared_index(conn, formulary), clinic_index(conn, organisation_id)]
+
+    def find(rx):
+        choices = list(clinic_choices(conn, organisation_id, rx.spoken_name).items())
+        # Taken only with a clear lead: two products confirmed equally often for the same words stay a question.
+        if choices and (len(choices) == 1 or choices[0][1] > choices[1][1]):
+            product = catalog_product(conn, organisation_id, choices[0][0], formulary)
+            if product:
+                return product, 'learned'
+        found = candidates_for(pools, rx).values()
+        best = confident_choice(found)
+        if best:
+            family = [e for pool in pools for e in pool.family(best.entry)]
+            best = confident_choice(found, family, rx.spoken_name)
+        product = catalog_product(conn, organisation_id, best.entry.id, formulary) if best else None
+        return (product, 'auto') if product else None
+    return find
+
+
+def suggest(conn, client, transcript, rx, checked, organisation_id, formulary):
+    """Up to five suggestions for one medicine, best first, and how they were made."""
+    heard = rx.spoken_name
+    pools = [shared_index(conn, formulary), clinic_index(conn, organisation_id)]
+    numbers = strengths(heard, rx.quotes.get('name_quote', ''))
+    found = candidates_for(pools, rx)
+    priors = clinic_choices(conn, organisation_id, heard)
     ordered = sorted(found.values(), key=lambda c: (c.entry.id in priors, c.entry.id in rx.candidate_ids,
                                                     c.strength_match is not False, c.score + standing(c.entry)),
                      reverse=True)
@@ -194,7 +276,7 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, f
                      f'listed as {fact["category"] or "unknown"}{listed_note}; '
                      f'sounds like the heard words {candidate.score:.2f}; '
                      f'strength {"agrees" if candidate.strength_match else "differs" if candidate.strength_match is False else "not said"}'
-                     + ('; the doctor chose this for these words before' if candidate.entry.id in priors else ''))
+                     + ('; a doctor in this clinic chose this for these words before' if candidate.entry.id in priors else ''))
     user = (f'Heard words: "{heard}"\nWhere it was said: "{window}"\nFindings: {", ".join(findings) or "none"}\n'
             f'Other medicines: {", ".join(others) or "none"}\nCandidates:\n' + '\n'.join(lines))
     ranking, model = None, None

@@ -21,7 +21,9 @@ from .clinical import StageFailed, current_ids, process_typed, reference_for
 from .config import REPO_ROOT, read_env
 from .db import audit, one, transaction
 from .repo import approved_reports, clinic_record, doctor_record, parse_report, patient_record, report_row
-from .suggest import suggest
+from ..pipeline.complete import load_generics
+from ..standard import load_rules
+from .suggest import finder_for, suggest
 
 log = logging.getLogger('voicerx.worker')
 LEASE = '10 minutes'
@@ -106,7 +108,8 @@ class Worker(threading.Thread):
         try:
             transcript = context['text'] if context['kind'] == 'typed' else self.transcript(run, context, on_step)
             draft = process_typed(context['id'], transcript, patient['id'], doctor['id'], context['visit_date'],
-                                  self.llm(), reference, current_ids(history), on_step)
+                                  self.llm(), reference, current_ids(history), on_step, rules=load_rules(REPO_ROOT),
+                                  generics=load_generics(REPO_ROOT), finder=self.finder(context))
         except StageFailed as failure:
             self.fail(run, steps, failure)
             return True
@@ -130,6 +133,18 @@ class Worker(threading.Thread):
                    'blocking': sum(i.severity == 'block' for i in draft.issues)})
         return True
 
+    def finder(self, context):
+        """Looks up the doctor's earlier choices and clear matches, each in its own short transaction; a failure
+        leaves that medicine for the doctor, never the run."""
+        def find(rx):
+            try:
+                with transaction() as conn:
+                    return finder_for(conn, context['organisation_id'], self.reference.products)(rx)
+            except Exception:
+                log.exception('matching %s failed; left for the doctor', rx.spoken_name)
+                return None
+        return find
+
     def suggestions(self, draft, transcript, context, on_step):
         """Ranked suggestions for every medicine not matched exactly. A failure here costs the suggestions,
         never the draft."""
@@ -143,7 +158,7 @@ class Worker(threading.Thread):
             with transaction() as conn:
                 for rx in unclear:
                     items, method = suggest(conn, self.llm(), transcript, rx, draft.checked,
-                                            context['organisation_id'], context['clinician_id'], self.reference.products)
+                                            context['organisation_id'], self.reference.products)
                     found[rx.id] = (rx.spoken_name, items, method)
         except Exception:
             log.exception('suggestions failed for %s', context['id'])

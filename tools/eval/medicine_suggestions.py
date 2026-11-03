@@ -51,10 +51,8 @@ def main():
             if rx is None:
                 print(f'{heard:16} not among the visit\'s medicines; skipped')
                 continue
-            # --as-doctor <id> measures as another doctor, whose remembered choices then count.
-            doctor = sys.argv[sys.argv.index('--as-doctor') + 1] if '--as-doctor' in sys.argv else row['clinician_id']
             items, method = suggest(conn, client, row['transcript'] or row['text'], rx, draft.checked,
-                                    row['organisation_id'], doctor, reference.products)
+                                    row['organisation_id'], reference.products)
         labels = [i['label'] for i in items]
         hits = lambda label: label.startswith(expected) if isinstance(expected, str) else (
             any(label.startswith(e) for e in expected) if expected else False)

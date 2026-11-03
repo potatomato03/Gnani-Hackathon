@@ -276,3 +276,46 @@ def test_a_slot_that_contradicts_the_meal_stays_as_said_and_is_flagged():
     rx = checked.medications[0]
     assert rx.schedule.model_dump() == {"type": "grid", "m": "0", "a": "0", "e": "0", "n": "1"}
     assert "timing_phrase" in rx.unresolved and "unparsed_timing" in codes(checked)
+
+
+# Real dictations put the dose before the name, or in the next sentence, and lump timing with duration
+# (runbook C-70); the medicine's own window still ends at the next medicine.
+def test_a_dose_said_just_before_the_name_belongs_to_it():
+    transcript = "Take one Pan D before breakfast for five days."
+    rx = run(meds=[med(spoken_name="Pan D", name_quote="Pan D", dose_phrase="one", timing_phrase=None,
+                       food_phrase="before breakfast", duration_phrase="for five days")], transcript=transcript).medications[0]
+    assert rx.unbound == [] and rx.quotes["dose_phrase"] == "one"
+
+
+def test_instructions_in_the_next_sentence_belong_to_the_medicine_named_before():
+    transcript = "The dosage for Dolo six fifty is... One after breakfast and one after dinner for three days."
+    checked = run(meds=[med(dose_phrase="One", timing_phrase="after breakfast and after dinner for three days",
+                            food_phrase=None, duration_phrase=None)], transcript=transcript)
+    rx = checked.medications[0]
+    assert rx.unbound == []
+    assert (rx.schedule.m, rx.schedule.a, rx.schedule.e, rx.schedule.n) == ("1", "0", "0", "1")
+    assert rx.food == "after_food" and rx.duration == Duration(value=3, unit="day")
+
+
+def test_the_window_still_stops_at_the_next_medicine():
+    transcript = "Dolo six fifty after food. Pan D one before breakfast."
+    rx = run(meds=[med(dose_phrase="one", timing_phrase=None, duration_phrase=None)], transcript=transcript).medications[0]
+    assert "dose_phrase" in rx.unbound
+
+
+def test_a_doctor_saying_i_recommend_is_not_an_unclear_speaker():
+    transcript = "I am recommending Dolo six fifty, one tablet twice daily after food for three days."
+    assert run(meds=[med()], transcript=transcript).medications[0].speaker_unclear is False
+
+
+def test_a_nukta_written_or_left_out_is_the_same_word():
+    transcript = "Dolo six fifty एक tablet जरूरत पड़ने पर खाने के बाद।"
+    rx = run(meds=[med(dose_phrase="एक tablet", timing_phrase="ज़रूरत पड़ने पर", food_phrase="खाने के बाद",
+                       duration_phrase=None)], transcript=transcript).medications[0]
+    assert rx.unbound == []
+
+
+def test_a_form_word_after_the_name_still_lets_the_next_sentence_count():
+    transcript = "Start Dolo six fifty tablet. One tablet twice daily after food for three days."
+    rx = run(meds=[med(dose_phrase="One tablet")], transcript=transcript).medications[0]
+    assert rx.unbound == []

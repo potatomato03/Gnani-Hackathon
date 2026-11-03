@@ -40,3 +40,67 @@ def test_a_repeated_id_keeps_its_first_place():
 
 def test_heard_words_give_one_key_however_they_are_written():
     assert heard_key('Mann 40') == heard_key('mann forty') == heard_key('MANN 40 tablet') == 'mann 40'
+
+
+# A clear match is taken without asking (runbook D-118); anything close to a rival is left for the doctor.
+def entry(pid, name, composition, tier='indian', popularity=0.0):
+    from voicerx.app.catalog import CatalogEntry
+    return CatalogEntry(pid, name, composition, tier, popularity=popularity)
+
+
+def cand(e, score, strength=None):
+    from voicerx.app.catalog import Candidate
+    return Candidate(e, score, strength)
+
+
+def test_a_clear_well_known_match_is_taken():
+    from voicerx.app.suggest import confident_choice
+    wysolone = entry('p-1', 'Wysolone 10 tablet', 'Prednisolone (10mg)', 'formulary')
+    obscure = entry('in-2', 'Islon 10mg Tablet', 'Prednisolone (10mg)', popularity=0.05)
+    assert confident_choice([cand(wysolone, 0.93, True), cand(obscure, 0.9, True)]).entry.id == 'p-1'
+
+
+def test_a_close_rival_brand_an_obscure_top_or_a_strength_conflict_leaves_it_to_the_doctor():
+    from voicerx.app.suggest import confident_choice
+    pan_d = entry('in-1', 'Pan-D Capsule PR', 'Domperidone (30mg) + Pantoprazole (40mg)', popularity=0.88)
+    pant_d = entry('in-2', 'Pant D Capsule SR', 'Domperidone (10mg) + Pantoprazole (40mg)', popularity=0.4)
+    assert confident_choice([cand(pan_d, 0.95), cand(pant_d, 0.94)]) is None
+    assert confident_choice([cand(entry('in-3', 'Panday 40mg Tablet', 'Pantoprazole (40mg)', popularity=0.2), 0.96)]) is None
+    assert confident_choice([cand(pan_d, 0.95, False)]) is None
+    assert confident_choice([cand(pan_d, 0.8)]) is None
+
+
+def test_a_stated_strength_only_one_listed_product_shares_allows_a_looser_sound():
+    from voicerx.app.suggest import confident_choice
+    wysolone_10 = entry('p-1', 'Wysolone 10 tablet', 'Prednisolone (10mg)', 'formulary')
+    wysolone_5 = entry('in-2', 'Wysolone 5 Tablet DT', 'Prednisolone (5mg)', popularity=0.8)
+    assert confident_choice([cand(wysolone_10, 0.77, True), cand(wysolone_5, 0.77, False)]).entry.id == 'p-1'
+    # Two listed products with that strength, sounding alike: Pan 40 or Pan-D for "Mann 40".
+    pan_40 = entry('p-2', 'Pan 40 tablet', 'Pantoprazole (40mg)', 'formulary')
+    pan_d = entry('p-3', 'Pan capsule', 'Domperidone (30mg) + Pantoprazole (40mg)', 'formulary')
+    assert confident_choice([cand(pan_40, 0.83, True), cand(pan_d, 0.83, True)]) is None
+
+
+def test_one_brand_in_two_strengths_waits_when_no_strength_was_said():
+    from voicerx.app.suggest import confident_choice
+    telma_40 = entry('in-1', 'Telma 40 Tablet', 'Telmisartan (40mg)', popularity=0.9)
+    telma_80 = entry('in-2', 'Telma 80 Tablet', 'Telmisartan (80mg)', popularity=0.8)
+    assert confident_choice([cand(telma_40, 0.95), cand(telma_80, 0.95)]) is None
+    assert confident_choice([cand(telma_40, 0.95, True), cand(telma_80, 0.95, False)]).entry.id == 'in-1'
+
+
+def test_a_rival_with_the_same_composition_is_the_same_medicine():
+    from voicerx.app.suggest import confident_choice
+    montair = entry('p-1', 'Montair-LC tablet', 'Levocetirizine (5mg) + Montelukast (10mg)', 'formulary')
+    montor = entry('in-2', 'Montor-LC Tablet', 'Levocetirizine (5mg) + Montelukast (10mg)', popularity=0.4)
+    assert confident_choice([cand(montair, 0.9), cand(montor, 0.92)]).entry.id == 'p-1'
+
+
+def test_a_brand_family_sibling_outside_the_candidates_still_counts():
+    from voicerx.app.suggest import confident_choice
+    pan_d = entry('p-3', 'Pan-D capsule', 'Domperidone (30mg) + Pantoprazole (40mg)', 'formulary')
+    pan_40 = entry('p-2', 'Pan 40 tablet', 'Pantoprazole (40mg)', 'formulary')
+    # "Bann 40": Pan-D 0.83, Pan 40 0.71; too close to choose between.
+    assert confident_choice([cand(pan_d, 0.83, True)], [pan_d, pan_40], 'Bann 40') is None
+    # "Pandee": Pan-D 1.0, Pan 40 well behind.
+    assert confident_choice([cand(pan_d, 1.0)], [pan_d, pan_40], 'Pandee').entry.id == 'p-3'

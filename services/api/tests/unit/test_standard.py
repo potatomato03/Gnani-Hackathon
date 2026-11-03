@@ -55,9 +55,10 @@ def test_once_daily_without_a_known_time_and_unsaid_timing_stay_for_the_doctor()
     assert 'set_timing' not in by_action(proposals(weekly, ['Pantoprazole'], 'tablet', RULES))
 
 
-def test_a_dose_is_proposed_only_for_tablets_and_capsules():
+def test_a_dose_is_proposed_only_for_tablets_capsules_and_sachets():
     rx = resolved_medicine(dose=None)
     assert by_action(proposals(rx, ['Paracetamol'], 'capsule', RULES))['set_dose'] == {'amount': '1', 'unit': 'capsule'}
+    assert by_action(proposals(rx, ['Collagen Peptide'], 'sachet', RULES))['set_dose'] == {'amount': '1', 'unit': 'sachet'}
     assert 'set_dose' not in by_action(proposals(rx, ['Paracetamol'], 'syrup', RULES))
 
 
