@@ -21,6 +21,8 @@ buttons:
   missed_some: 'Missed some'
   'yes': 'Yes, I will come'
   need_another_day: 'Need another day'
+  stop_yes: 'Yes, stop'
+  stop_no: 'No, continue'
 replies:
   thanks: 'Thank you. I have added this to {doctor}''s record.'
   answer_prefix: 'Your prescription says:'
@@ -37,6 +39,12 @@ replies:
   not_heard: 'Sorry, I could not hear that clearly. Please type it or try again.'
   stop_confirmed: 'Okay, you will not get any more follow-up messages. Please contact the clinic directly if you need to.'
   voice_failed: 'Sorry, I could not use that voice note. Please send one shorter than 30 seconds, or type your message.'
+  greeting: 'Hello! I am the AI assistant for {doctor}. You can ask about your medicines, tell me how you feel, or send a report. Reply DOCTOR to reach the clinic.'
+  stop_confirm: 'Do you want to stop the follow-up messages?'
+  stop_cancelled: 'Okay, your follow-up messages will continue.'
+  upload_hint: 'Please send your report here as a PDF or a clear photo. I will save it for {doctor} to review. (Test bot: send synthetic reports only.)'
+  language_set: 'Okay, I will reply in English from now on.'
+  language_unavailable: 'Sorry, I can only reply in Hindi or English for now.'
 # Spoken on a WhatsApp call (D-114). DRAFT, pending review.
 call:
   greeting: 'Hello, I am the AI assistant for {doctor} at {clinic}. You can ask about your medicines. Say DOCTOR to speak to the doctor. Please ask your question now.'

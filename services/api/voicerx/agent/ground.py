@@ -47,6 +47,15 @@ def answer_medicine_question(approved, templates, text, at=None, message_id='dra
     rx = which_medicine(approved, text)
     if rx is None:
         return None
+    return answer_for(approved, templates, rx.id, at=at, message_id=message_id)
+
+
+def answer_for(approved, templates, medicine_id, at=None, message_id='draft'):
+    """The fixed-row answer for a medicine already identified (by the rules above or a validated model
+    reading, D-115). None when the id isn't an approved medicine."""
+    rows = medicine_rows(approved)
+    if medicine_id not in rows:
+        return None
     from datetime import datetime, timezone
-    return Message(id=message_id, sender='clinic', kind='answer', cites=[rx.id],
-                   text=answer_text(templates, medicine_rows(approved)[rx.id]), at=at or datetime.now(timezone.utc))
+    return Message(id=message_id, sender='clinic', kind='answer', cites=[medicine_id],
+                   text=answer_text(templates, rows[medicine_id]), at=at or datetime.now(timezone.utc))

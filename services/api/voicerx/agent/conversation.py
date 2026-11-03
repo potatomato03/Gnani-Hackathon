@@ -1,8 +1,11 @@
 """The follow-up conversation: send the plan's touches, read replies, record them, and hand the doctor
-what needs a doctor. No model is called: buttons, keywords and fixed rules only (runbook D-104 to D-109).
+what needs a doctor. Buttons, keywords and fixed rules first (runbook D-104 to D-109); when the app passes an
+`nlu` callable, a model's validated reading of free text is used where the rules don't decide (D-115). Every
+reply is fixed text either way.
 
-Order for each patient message: warning sign, STOP, DOCTOR, side-effect detail, check-in answer,
-new consultation, medicine question, then ask again (during a check-in) or pass to the doctor.
+Order for each patient message: warning sign (rules), STOP, DOCTOR, warning sign (model, may only add),
+side-effect detail, check-in answer, new consultation, medicine question, the model's reading, then ask again
+(during a check-in) or pass to the doctor.
 """
 from datetime import timedelta
 from pathlib import Path
@@ -10,11 +13,11 @@ from pathlib import Path
 from ..contracts.followup import (Awaiting, Button, Conversation, DoctorTask, FollowUpAnswer, FollowUpRecord,
                                   Message)
 from .gate import CONSENT, GateRefused, check_consent, check_reply, check_schedule, summary_names
-from .ground import answer_medicine_question
+from .ground import CHANGES, answer_for, answer_medicine_question
 from .plan import plan_followups
 from .redflags import find_red_flags
 from .templates import format_date, load_templates, medicine_rows, summary_text
-from .text import find, negated, normalise, tokens
+from .text import contains, find, negated, normalise, tokens
 
 BUTTONS = {
     'tolerance': ['no_problem', 'some_problem', 'stopped'],
@@ -115,9 +118,10 @@ def advance(conv: Conversation) -> bool:
 
 
 def receive(conv: Conversation, text: str | None = None, button: str | None = None,
-            source: str = 'typed') -> FollowUpRecord:
+            source: str = 'typed', nlu=None) -> FollowUpRecord:
     """source is 'typed', 'prisma' for a voice note's transcript, or 'call' for speech on a WhatsApp call;
-    all go through the same rules."""
+    all go through the same rules. nlu(conv, text) -> Understanding | None reads free text with a model
+    (agent/understand.py); None, or no nlu, leaves the rules alone."""
     conv.clock = conv.clock + STEP
     templates = load_templates(conv.language)
     replies = templates['replies']
@@ -137,15 +141,10 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
         buttons = _buttons(templates, conv.awaiting.question) if conv.awaiting else []
         _reply(conv, record, 'question' if buttons else 'text', replies['not_heard'], buttons=buttons)
         return record
+    conv.confirm_stop = False      # any new message answers a pending "stop?" question with "no"
     flags = find_red_flags(text)
     if flags:
-        record = _record(conv, text, source, 'urgent', [], flags)
-        conv.awaiting = None
-        _skip_planned(conv)
-        _task(conv, 'urgent', record, f'Warning sign ({", ".join(flags)}). {said} «{text}». '
-                                      'Told to go to emergency or call 108.')
-        _reply(conv, record, 'urgent', replies['urgent'].format(doctor=doctor), flags)
-        return record
+        return _urgent(conv, text, source, flags)
     plain = ' '.join(tokens(text))
     if plain in {normalise(w) for w in STOP_WORDS}:
         return _stop(conv, text, source)
@@ -154,6 +153,9 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
         _task(conv, 'callback', record, f'Patient asked to speak to the clinic: «{text}».')
         _reply(conv, record, 'text', replies['callback'])
         return record
+    reading = nlu(conv, text) if nlu else None
+    if reading is not None and reading.warning_signs:     # a model may add a warning sign, never remove one
+        return _urgent(conv, text, source, reading.warning_signs)
     awaiting = conv.awaiting
     if awaiting and awaiting.question == 'side_effect_detail':
         answer = FollowUpAnswer(question='side_effect_detail', value='described', quote=text)
@@ -179,6 +181,10 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
             return record
         except GateRefused:
             conv.records.pop()  # nothing was sent; fall through to the doctor
+    if reading is not None:
+        record = _act(conv, reading, text, source)
+        if record is not None:
+            return record
     if awaiting:
         record = _record(conv, text, source, 'clarified', [])
         _reply(conv, record, 'question', replies['clarify'], buttons=_buttons(templates, awaiting.question))
@@ -187,6 +193,78 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
     _task(conv, 'question', record, f'Question the approved visit does not answer: «{text}».')
     _reply(conv, record, 'text', replies['escalated'].format(doctor=doctor))
     return record
+
+
+def _urgent(conv, text, source, flags):
+    record = _record(conv, text, source, 'urgent', [], flags)
+    conv.awaiting = None
+    _skip_planned(conv)
+    _task(conv, 'urgent', record, f'Warning sign ({", ".join(flags)}). {_said(source)} «{text}». '
+                                  'Told to go to emergency or call 108.')
+    _reply(conv, record, 'urgent', load_templates(conv.language)['replies']['urgent'].format(
+        doctor=conv.doctor_name), flags)
+    return record
+
+
+def _escalate(conv, text, source, kind, note, reply):
+    record = _record(conv, text, source, 'escalated', [])
+    _task(conv, kind, record, note)
+    _reply(conv, record, 'text', reply)
+    return record
+
+
+def _act(conv, reading, text, source):
+    """Act on a validated model reading (agent/understand.py). Returns None to leave the message to the
+    rules' fallback (ask again during a check-in, else pass to the doctor)."""
+    templates = load_templates(conv.language)
+    replies, doctor, said = templates['replies'], conv.doctor_name, _said(source)
+    intent = reading.intent
+    if intent == 'checkin_answer':           # validated: the value is one the awaited question accepts
+        return _answer(conv, conv.awaiting.question, reading.answer_value, text, source)
+    if intent == 'medicine_question' and not contains(text, CHANGES):
+        answer = answer_for(conv._visit.approved, templates, reading.medicine_id, at=conv.clock)
+        if answer is not None:
+            record = _record(conv, text, source, 'answered', [])
+            try:
+                _reply(conv, record, 'answer', answer.text, cites=answer.cites)
+                return record
+            except GateRefused:
+                conv.records.pop()
+    if intent in ('medicine_question', 'change_request'):
+        return _escalate(conv, text, source, 'question', f'Question the approved visit does not answer: «{text}».',
+                         replies['escalated'].format(doctor=doctor))
+    if intent == 'problem':
+        return _escalate(conv, text, source, 'side_effect', f'Problem reported. {said} «{text}».',
+                         replies['side_effect_noted'].format(doctor=doctor))
+    if intent == 'appointment':
+        return _escalate(conv, text, source, 'consult_request', f'Patient asked for an appointment: «{text}».',
+                         replies['consult'])
+    if intent == 'talk_to_doctor':
+        return _escalate(conv, text, source, 'callback', f'Patient asked to speak to the clinic: «{text}».',
+                         replies['callback'])
+    record = _record(conv, text, source, 'clarified', [])
+    if intent == 'stop':
+        conv.confirm_stop = True
+        _reply(conv, record, 'question', replies['stop_confirm'],
+               buttons=[Button(id=b, label=templates['buttons'][b]) for b in ('stop_yes', 'stop_no')])
+    elif intent == 'greeting':
+        _reply(conv, record, 'text', replies['greeting'].format(doctor=doctor))
+    elif intent == 'send_report':
+        _reply(conv, record, 'text', replies['upload_hint'].format(doctor=doctor))
+    elif intent == 'change_language':
+        if reading.language:
+            _set_language(conv, reading.language, record)
+        else:
+            _reply(conv, record, 'text', replies['language_unavailable'])
+    else:
+        conv.records.pop()
+        return None
+    return record
+
+
+def _set_language(conv, language, record):
+    conv.language, conv.language_chosen = language, True
+    _reply(conv, record, 'text', load_templates(language)['replies']['language_set'])
 
 
 def voice_not_used(conv: Conversation) -> FollowUpRecord:
@@ -267,6 +345,13 @@ def _next_question(conv):
 def _button(conv, button, label):
     awaiting = conv.awaiting
     templates = load_templates(conv.language)
+    if button in ('stop_yes', 'stop_no') and conv.confirm_stop:
+        conv.confirm_stop = False
+        if button == 'stop_yes':
+            return _stop(conv, label, 'button')
+        record = _record(conv, label, 'button', 'clarified', [])
+        _reply(conv, record, 'text', templates['replies']['stop_cancelled'])
+        return record
     if not awaiting or button not in BUTTONS.get(awaiting.question, []):
         record = _record(conv, label, 'button', 'clarified', [])
         _reply(conv, record, 'text', templates['replies']['clarify'])
