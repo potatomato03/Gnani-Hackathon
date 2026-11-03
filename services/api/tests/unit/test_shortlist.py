@@ -15,7 +15,7 @@ GENERICS, RULES = load_generics(REPO_ROOT), load_rules(REPO_ROOT)
 
 
 def choices(*items):
-    return Shortlist(items=[Choice(generic=g, strength=s, brand=b, why='pain') for g, s, b in items])
+    return Shortlist(items=[Choice(generic=g, strength=s, brand=b, why='pain', group='Pain') for g, s, b in items])
 
 
 def test_named_choices_become_real_products_in_the_models_order():
@@ -60,3 +60,10 @@ def test_a_brand_whose_ingredients_differ_from_the_named_generic_is_never_used()
     find = lambda pid: product_from_row(pid, rows[pid].name, '', rows[pid].composition) if pid in rows else None
     items = build_items(choices(('Paracetamol', '500 mg', 'Crocin')), [index], GENERICS, RULES, find)
     assert [i['product_id'] for i in items] == ['g-paracetamol-500']
+
+
+def test_each_choice_keeps_its_purpose_and_the_prompt_asks_for_companions():
+    from voicerx.app.shortlist import MAX_ITEMS, PROMPT_VERSION, SYSTEM
+    items = build_items(choices(('Ibuprofen + Paracetamol', '400 mg + 325 mg', 'Combiflam')), [INDEX], GENERICS, RULES, lookup)
+    assert items[0]['group'] == 'Pain'
+    assert PROMPT_VERSION == 'shortlist-v2' and MAX_ITEMS == 8 and 'stomach' in SYSTEM

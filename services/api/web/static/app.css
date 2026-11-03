@@ -237,6 +237,8 @@ textarea.input { resize: vertical; line-height: 1.55; }
 .pk-opts { display: flex; gap: 6px; flex-wrap: wrap; }
 .pk-opt { border: 1px solid var(--line-2); background: var(--surface); border-radius: 6px; padding: 4px 10px; font-size: 13px; color: var(--ink-2); }
 .pk-opt.sel { border-color: var(--accent); background: var(--accent); color: #fff; }
+.pk-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.pk-group { margin-right: 8px; height: 20px; font-size: 11px; }
 .pk-hint { margin: 10px 0 0; font-family: var(--mono); font-size: 12px; }
 .meds .standard { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: var(--ink-2); }
 

@@ -490,7 +490,7 @@ const PK_UNIT = { tablet: 'tablet', capsule: 'capsule', sachet: 'sachet', syrup:
 const ONCE_SLOT = { morning: 'm', afternoon: 'a', evening: 'e', night: 'n' };
 const whenText = w => w ? w.split('').map(s => PK_SLOT[s]).join(' + ') : 'As needed';
 
-function medicinePicker({ shortlist, med, onSave, onCancel }) {
+function medicinePicker({ shortlist, med, onSave, onCancel, taken = [], number = 1 }) {
   const box = h('div', { class: 'picker', tabindex: '-1' });
   const search = h('input', { class: 'input', type: 'search', placeholder: 'Type a medicine, or press ↓ for the common choices', autocomplete: 'off' });
   const list = h('ul', { class: 'pk-list', role: 'listbox' });
@@ -501,10 +501,13 @@ function medicinePicker({ shortlist, med, onSave, onCancel }) {
   const drawList = () => {
     list.replaceChildren(...options.map((o, i) => h('li', { class: 'pk-item' + (i === active ? ' active' : ''), role: 'option',
       onmousedown: e => { e.preventDefault(); pick(o); } },
-      h('b', { text: o.label }), h('span', { class: 'muted small', text: [o.composition, o.why].filter(Boolean).join(' · ') }))));
+      h('div', {}, o.group ? h('span', { class: 'chip muted pk-group', text: o.group }) : '', h('b', { text: o.label })),
+      h('span', { class: 'muted small', text: [o.composition, o.why].filter(Boolean).join(' · ') }))));
     list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
   };
-  const fromShortlist = q => shortlist.items.filter(o => !q || (o.label + ' ' + o.composition).toLowerCase().includes(q.toLowerCase()));
+  // What is already prescribed drops out, so the list moves on to the next kind of medicine.
+  const fromShortlist = q => shortlist.items.filter(o => !taken.includes(o.product_id)
+    && (!q || (o.label + ' ' + o.composition + ' ' + (o.group || '')).toLowerCase().includes(q.toLowerCase())));
   const refresh = () => {
     const q = search.value.trim();
     options = fromShortlist(q); active = 0; drawList();
@@ -593,7 +596,8 @@ function medicinePicker({ shortlist, med, onSave, onCancel }) {
     box.append(rowsHost, hint);
     startRows({ product_id: med.product_id, label: med.product_label || med.spoken_name, composition: '', form: med.product_form || 'tablet' }, med);
   } else {
-    box.append(shortlist.conditions.length ? h('p', { class: 'muted small', text: 'Common for: ' + shortlist.conditions.slice(0, 4).join(', ') }) : '',
+    box.append(h('div', { class: 'pk-head' }, h('b', { text: `Medicine ${number}` }), h('span', { class: 'muted small', text: 'Enter saves and opens the next · Esc when done' })),
+      shortlist.conditions.length ? h('p', { class: 'muted small', text: 'Common for: ' + shortlist.conditions.slice(0, 4).join(', ') }) : '',
       search, list, rowsHost, hint);
     hint.textContent = '↓ ↑ choose · Enter pick · Esc close';
     refresh();
@@ -634,6 +638,7 @@ async function showReview(encounter, view) {
       ui.editing = null; toast(`Saved. Draft is now version ${updated.version}.`);
       showReview(encounter, updated);
     } catch (e) {
+      ui.chainPicker = false;
       if (e.code === 'version_conflict') { toast(e.message, true); return showEncounter(encounter.id); }
       fail(e);
     }
@@ -884,9 +889,11 @@ async function showReview(encounter, view) {
       ui.shortlists ||= {};
       try { shortlist = ui.shortlists[encounter.id] ||= await api(`/encounters/${encounter.id}/shortlist`); } catch (e) { fail(e); }
     }
-    pickerHost.replaceChildren(medicinePicker({ shortlist, med, onCancel: closePicker, onSave: r => {
-      if (!med) return submit([{ action: 'add_medicine', target: 'new', reason: 'Added by the doctor.', value: {
-        product_id: r.product.product_id, dose: r.dose, schedule: r.schedule, food: r.food, duration: r.duration } }]);
+    const taken = view.medication_views.map(m => m.product_id).filter(Boolean);
+    pickerHost.replaceChildren(medicinePicker({ shortlist, med, taken, number: tableMeds.length + 1, onCancel: closePicker, onSave: r => {
+      // Saving a new medicine opens the picker again for the next one, until Esc.
+      if (!med) { ui.chainPicker = true; return submit([{ action: 'add_medicine', target: 'new', reason: 'Added by the doctor.', value: {
+        product_id: r.product.product_id, dose: r.dose, schedule: r.schedule, food: r.food, duration: r.duration } }]); }
       const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       const changes = [];
       if (!same(r.dose, med.dose)) changes.push({ action: 'set_dose', value: r.dose });
@@ -966,6 +973,7 @@ async function showReview(encounter, view) {
   else ui.selectedLine = null;
   ui.picking = false;
   ui.addMedicine = canEdit ? { open: () => { medsPanel.scrollIntoView({ block: 'start' }); openPicker(); }, host: pickerHost } : null;
+  if (ui.chainPicker) { ui.chainPicker = false; if (ui.addMedicine) ui.addMedicine.open(); }
 }
 
 // The space bar on a review screen opens the medicine picker with the visit's common choices, unless the doctor
