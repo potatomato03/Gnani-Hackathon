@@ -1,10 +1,12 @@
 import json
 
+DEFAULT_MODEL = 'gemini-3.8-flash'
+
 
 class GeminiAdapter:
     name = 'gemini'
 
-    def __init__(self, model='gemini-3.8-flash'):
+    def __init__(self, model=DEFAULT_MODEL):
         self.model = model
 
     def build(self, system, user, schema, key):
