@@ -239,6 +239,7 @@ Recorded in `runbook.md` when the demo was built. The IDs first proposed here (D
 - Privacy: numbers come only from `WHATSAPP_TEST_NUMBERS`, live in memory, and are stored only as a keyed hash. After a restart, delivery waits for the phone's next message. Errors and logs scrub numbers and the token.
 - Free-form messages go only inside the 24-hour window, and template messages aren't built. Through a tunnel, the API answers only the webhook.
 - Not run against Meta yet. The setup is in `docs/whatsapp-testing.md`.
+- **Calls (D-114):** the patient calls the clinic's WhatsApp number. `agent/webrtc_call.py` answers Meta's SDP offer with aiortc (`pre_accept`, then `accept`). `agent/call.py` greets with fixed text, then takes half-duplex turns: VAD cuts an utterance, Prisma REST transcribes it, `receive(source='call')` routes it, and Timbre speaks the gated replies, which also go to the chat. It ends after a warning sign, STOP, DOCTOR or a limit. The clinic calling the patient isn't built: it isn't available from the US test number.
 
 ## Out of scope
 

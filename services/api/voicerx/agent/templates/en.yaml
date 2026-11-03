@@ -37,3 +37,8 @@ replies:
   not_heard: 'Sorry, I could not hear that clearly. Please type it or try again.'
   stop_confirmed: 'Okay, you will not get any more follow-up messages. Please contact the clinic directly if you need to.'
   voice_failed: 'Sorry, I could not use that voice note. Please send one shorter than 30 seconds, or type your message.'
+# Spoken on a WhatsApp call (D-114). DRAFT, pending review.
+call:
+  greeting: 'Hello, I am the AI assistant for {doctor} at {clinic}. You can ask about your medicines. Say DOCTOR to speak to the doctor. Please ask your question now.'
+  no_input: 'I did not hear anything. Please ask your question, or type it on WhatsApp.'
+  goodbye: 'Thank you. My answers are also in your WhatsApp chat. Call again if you need to.'

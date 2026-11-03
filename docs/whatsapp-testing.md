@@ -110,6 +110,37 @@ The summary of that synthetic visit arrives. In the web page, pick the same visi
 - `DOCTOR` opens a callback task; `STOP` ends all messages.
 - Other visit codes: `JOIN fam-001-a` (Hindi) and `JOIN fam-004-a` (English). Send anything else first to get the list.
 
+## 7. Voice calls (optional)
+
+The patient can also **call** the test number on WhatsApp and talk to the same agent. Prisma listens, the same rules and gate decide the reply, and Timbre speaks it. The replies also appear in the chat as text. This needs `GNANI_API_KEY`. Facts are from Meta's Calling docs, 3 Nov 2026:
+- Calls from a WhatsApp user to a business are free.
+- Public test numbers may use calling, but it's off by default.
+- The clinic can't call the patient from the US test number: business-initiated calling isn't available for US numbers.
+
+1. Switch calling on for the number, using the settings already in `.env`:
+
+   ```bash
+   PYTHONPATH=services/api .venv/bin/python -m voicerx.agent.whatsapp enable-calling
+   ```
+
+   On Windows: `$env:PYTHONPATH = "services/api"; .venv\Scripts\python -m voicerx.agent.whatsapp enable-calling`
+2. In the Meta app, under **WhatsApp → Configuration → Webhook fields**, also subscribe to **calls**.
+3. Send `JOIN fam-010-a` first, so the call knows which visit it's about. Then tap the call icon in the chat with the test number.
+
+On the call:
+- The agent says it's an AI assistant, then asks for your question. Speak after it finishes, because it doesn't hear you while it talks.
+- It answers medicine questions only from the approved prescription.
+- It ends the call after a warning sign (and tells you to go to emergency or call 108), after `DOCTOR`, after `STOP`, after 6 questions, or after two silences.
+
+Your voice is kept in memory only for the sentence being transcribed and is never saved.
+
+**Network:**
+- Call audio goes directly between your laptop and Meta over UDP; the tunnel carries only the signalling.
+- Some college or office Wi-Fi blocks outbound UDP. If the call connects and then drops, or you hear nothing, use a phone hotspot.
+- There's no TURN relay.
+
+**Credits:** each question on a call is one Prisma call, plus one Timbre call for any reply text not voiced before. Greetings and repeated answers are cached in `runs/followup-demo/audio/`. A full call is at most about 13 Gnani calls.
+
 ## Credits
 
 Messages are free during testing. With `GNANI_API_KEY` set, each patient voice note is one Prisma call. Each reply to a voice note is one Timbre call, unless that exact text was voiced before; replies are cached in `runs/followup-demo/audio/`.
@@ -126,3 +157,6 @@ Messages are free during testing. With `GNANI_API_KEY` set, each patient voice n
 | `401 bad signature` in the API log | `WHATSAPP_APP_SECRET` is wrong. |
 | The tunnel URL stopped working | `cloudflared` was restarted. Paste the new URL into the webhook settings. |
 | Your messages are ignored | Your number isn't in `WHATSAPP_TEST_NUMBERS` (digits only, with country code). |
+| No call icon in the chat | Run `enable-calling` (step 7), and reopen the chat. |
+| The call is declined at once | Send `JOIN <code>` first. Also check that `GNANI_API_KEY` is set, that the visit wasn't stopped with STOP, and that no other call is in progress. |
+| The call rings out, or connects with no sound | The **calls** webhook field isn't subscribed, or UDP is blocked on your network (try a hotspot). The API log shows `WhatsApp call failed: …`. |

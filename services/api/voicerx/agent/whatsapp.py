@@ -165,6 +165,12 @@ class GraphClient:
             raise WhatsAppError(502, 'media URL missing or not https')
         return self._call('GET', info['url'])
 
+    def enable_calling(self):
+        """Calling is off by default, also on test numbers. Body as in Meta's call-settings docs (3 Nov 2026)."""
+        body = json.dumps({'calling': {'status': 'ENABLED', 'call_icon_visibility': 'DEFAULT'}}).encode('utf-8')
+        return json.loads(self._call('POST', self._url(f'{self.config.phone_number_id}/settings'), body,
+                                     'application/json').decode('utf-8'))
+
     def call_action(self, call_id, action, sdp=None):
         payload = {'call_id': call_id, 'action': action}
         if sdp is not None:
@@ -327,3 +333,20 @@ class WhatsAppChannel:
             self.graph.send_audio(number, self.graph.upload_audio(data, 'audio/ogg'), voice=True)
         except (SpeechError, WhatsAppError) as error:
             log.warning('voice reply not sent (the text was): %s', scrub(str(error), [self.config.token]))
+
+
+def main(argv=None):
+    """python -m voicerx.agent.whatsapp enable-calling: switch on calls for the number in .env."""
+    import argparse
+    parser = argparse.ArgumentParser(description=main.__doc__)
+    parser.add_argument('command', choices=['enable-calling'])
+    parser.parse_args(argv)
+    config = WhatsAppConfig.from_env()
+    if config is None:
+        raise SystemExit('WhatsApp settings are missing from .env (see docs/whatsapp-testing.md)')
+    GraphClient(config).enable_calling()
+    print('Calling is on for the WhatsApp number. Subscribe the app to the "calls" webhook field too.')
+
+
+if __name__ == '__main__':
+    main()

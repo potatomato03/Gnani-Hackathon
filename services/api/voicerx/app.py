@@ -6,6 +6,7 @@ message is voiced when someone taps Listen (then cached), a patient voice note i
 Run from the repo root:
     PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000
 """
+import asyncio
 import json
 import logging
 import os
@@ -24,6 +25,7 @@ from .agent.demo import DEMO_VISITS, build_visit
 from .agent.gate import CONSENT, GateRefused
 from .agent.voice import (MAX_BYTES, VoiceRefused, synthetic_voice_note, transcribe_ogg_voice_note,
                           transcribe_voice_note, voice_message)
+from .agent.call import call_turn, run_call
 from .agent.whatsapp import JOIN, DeliveryHeld, WhatsAppChannel, WhatsAppError, parse_webhook, scrub, verify_signature
 from .contracts.followup import TASK_ORDER, Conversation
 from .ingest.gnani import SpeechError, speech_from_env
@@ -63,7 +65,7 @@ def default_speech():
 
 
 def create_app(state_dir: Path | None = None, runs_root: Path | None = None, speech=AUTO,
-               whatsapp=AUTO) -> FastAPI:
+               whatsapp=AUTO, call_media=None) -> FastAPI:
     # By default the app reads runs/ and keeps its state in runs/followup-demo/. Given only a state dir (tests),
     # it reads nothing outside it, and real WhatsApp stays off unless a channel is passed in.
     if whatsapp is AUTO:
@@ -75,6 +77,8 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
     lock = threading.RLock()
     conversations: dict[str, Conversation] = {}
     bound: dict[str, str] = {}      # WhatsApp contact hash -> its current conversation id
+    active_calls: dict = {}         # WhatsApp call id -> its media; one call at a time (D-114)
+    call_tasks: set = set()
     known: dict[str, visit_store.Visit] = {}
     demo_built = {}
 
@@ -321,10 +325,14 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
         if not verify_signature(body, request.headers.get('x-hub-signature-256'), channel.config.app_secret):
             raise HTTPException(401, 'bad signature')
         try:
-            messages, _calls = parse_webhook(json.loads(body))
+            messages, calls = parse_webhook(json.loads(body))
         except (ValueError, AttributeError, TypeError):
             raise HTTPException(400, 'not a WhatsApp webhook') from None
         background.add_task(whatsapp_messages, messages)
+        for event in calls:   # a call lasts minutes, so it runs as its own task
+            task = asyncio.get_running_loop().create_task(whatsapp_call(event))
+            call_tasks.add(task)
+            task.add_done_callback(call_tasks.discard)
         return {'ok': True}   # answer Meta at once; the messages are handled after
 
     def whatsapp_messages(messages):
@@ -356,6 +364,73 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
                 bound[contact] = conv.id
                 return conv
         return None
+
+    async def whatsapp_call(event):
+        """A patient calls the clinic's WhatsApp number (runbook D-114). Audio stays in memory only."""
+        channel = whatsapp
+
+        async def action(name, sdp=None):
+            await asyncio.to_thread(channel.graph.call_action, event.call_id, name, sdp)
+
+        if event.event == 'terminate':
+            media = active_calls.get(event.call_id)
+            if media is not None:
+                media.hang_up()
+            return
+        if event.event != 'connect' or not event.sdp:
+            return
+        if not channel.allowed(event.sender):
+            await action('reject')
+            return
+        contact = channel.contact(event.sender)
+
+        def find():
+            with lock:
+                return conversation_for(contact)
+
+        conv = await asyncio.to_thread(find)
+        if conv is None or conv.stopped or speech is None or active_calls:
+            await action('reject')
+            if conv is None:
+                await asyncio.to_thread(channel.send_help, event.sender, visit_codes(all_visits()))
+            return
+        if call_media is None:
+            from .agent.webrtc_call import WebRtcCall
+            media = WebRtcCall(event.sdp)
+        else:
+            media = call_media(event.sdp)
+        active_calls[event.call_id] = media
+
+        def opened():
+            with lock:
+                conv.last_inbound_at, conv.last_inbound_voice = channel.now(), False
+                view(conv)
+
+        def respond(text):
+            with lock:
+                replies, end = call_turn(conv, text)
+                view(conv)   # the replies also go to the WhatsApp chat as text
+                return replies, end
+
+        try:
+            answer = await media.answer()
+            await action('pre_accept', answer)
+            await media.connected()
+            await action('accept', answer)
+            await asyncio.to_thread(opened)
+            ended = await run_call(conv, media, speech, audio_dir, respond)
+            if ended != 'hung_up':
+                await action('terminate')
+        except Exception as error:
+            log.warning('WhatsApp call failed: %s: %s', type(error).__name__,
+                        scrub(str(error), [channel.config.token, channel.config.app_secret]))
+            try:
+                await action('terminate')
+            except Exception:
+                pass
+        finally:
+            active_calls.pop(event.call_id, None)
+            await media.close()
 
     def whatsapp_message(item):
         channel = whatsapp

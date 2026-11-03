@@ -76,7 +76,7 @@ Every Gnani call spends credits, so nothing is voiced or transcribed until someo
 
 ### Real WhatsApp (private testing only)
 
-The same agent can run on WhatsApp through Meta's Cloud API test number, on the team's own phones. Every visit is still synthetic, and the submitted demo stays on the simulated chat. See [docs/whatsapp-testing.md](docs/whatsapp-testing.md) for the Meta setup, the `.env` settings and the tunnel. WhatsApp stays off until those settings exist.
+The same agent can run on WhatsApp through Meta's Cloud API test number, on the team's own phones. Every visit is still synthetic, and the submitted demo stays on the simulated chat. Patients can also call the number and talk to the agent: Prisma listens and Timbre answers. See [docs/whatsapp-testing.md](docs/whatsapp-testing.md) for the Meta setup, the `.env` settings, the tunnel and calling. WhatsApp stays off until those settings exist.
 
 ### Starting follow-up from a real approval
 
