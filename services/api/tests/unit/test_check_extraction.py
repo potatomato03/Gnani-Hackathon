@@ -339,3 +339,39 @@ def test_a_medicine_does_not_take_the_instructions_said_for_the_one_before_it():
                 food_phrase="before breakfast", duration_phrase="for three days")]
     pan = run(meds=meds, transcript=transcript).medications[1]
     assert "duration_phrase" in pan.unbound
+
+
+def test_a_side_said_in_the_quotes_own_sentence_supports_it():
+    transcript = "Patient को left knee में pain और instability है। Right shoulder normal."
+    checked = run([item(id="x1", kind="symptom", term="pain in left knee", quote="pain और instability है",
+                        assertion="present", laterality="left")], transcript=transcript)
+    assert "laterality_mismatch" not in codes(checked)
+    wrong = run([item(id="x1", kind="symptom", term="pain in right knee", quote="pain और instability है",
+                      assertion="present", laterality="right")], transcript=transcript)
+    assert "laterality_mismatch" in codes(wrong)
+
+
+def test_instructions_in_devanagari_english_are_read_and_bound():
+    transcript = "स्टार्ट डोलो कैप्सूल से। वन कैप्सूल ओरली लेनी है और ब्रेकफास्ट के पहले पाँच दिन के लिए लेनी है।"
+    rx = run(meds=[med(spoken_name="डोलो कैप्सूल", name_quote="डोलो कैप्सूल", dose_phrase="वन कैप्सूल",
+                       timing_phrase="ओरली", food_phrase="ब्रेकफास्ट के पहले", duration_phrase="पाँच दिन")],
+             transcript=transcript).medications[0]
+    assert rx.unbound == []
+    assert rx.dose == Dose(amount="1", unit="capsule") and rx.food == "before_food"
+    assert rx.duration == Duration(value=5, unit="day") and rx.route == "orally"
+    assert (rx.schedule.m, rx.schedule.n) == ("1", "0")
+
+
+def test_gujarati_negation_and_sides_are_read():
+    transcript = "હમણાં એમને fever નથી. ડાબા ઘૂંટણમાં દુખાવો છે."
+    checked = run([item(id="x1", term="fever", quote="એમને fever નથી", assertion="absent"),
+                   item(id="x2", kind="symptom", term="pain in left knee", quote="ડાબા ઘૂંટણમાં દુખાવો છે",
+                        assertion="present", laterality="left")], transcript=transcript)
+    assert {"negation_mismatch", "laterality_mismatch"} & codes(checked) == set()
+
+
+def test_gujarati_linking_words_let_the_next_sentence_count():
+    transcript = "જો fever આવે તો Dolo six fifty લેવી છે. One tablet daily after lunch."
+    rx = run(meds=[med(dose_phrase="One tablet", timing_phrase="daily", food_phrase="after lunch",
+                       duration_phrase=None)], transcript=transcript).medications[0]
+    assert rx.unbound == []

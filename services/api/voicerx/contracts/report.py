@@ -51,6 +51,7 @@ class MedicineRow(Strict):
 class Resolution(Strict):
     id: str
     action: Literal["choose_product", "set_dose", "set_timing", "set_food", "set_duration", "remove_medicine", "confirm_order", "acknowledge",
+                    "add_medicine",
                     "edit_line", "remove_line", "add_line", "dismiss_item"]
     target: str
     value: dict

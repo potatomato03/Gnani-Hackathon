@@ -23,7 +23,8 @@ from .db import audit, one, transaction
 from .repo import approved_reports, clinic_record, doctor_record, parse_report, patient_record, report_row
 from ..pipeline.complete import load_generics
 from ..standard import load_rules
-from .suggest import finder_for, suggest
+from .shortlist import conditions_of, make_shortlist
+from .suggest import catalog_product, clinic_index, finder_for, shared_index, suggest
 
 log = logging.getLogger('voicerx.worker')
 LEASE = '10 minutes'
@@ -48,6 +49,24 @@ def claim_artifact(conn):
                     where (state = 'pending') or (state = 'running' and updated_at < now() - interval '{LEASE}')
                     order by created_at limit 1 for update skip locked)
         returning *''')
+
+
+def is_adult(patient, visit_date):
+    return bool(patient.get('birth_year')) and visit_date.year - patient['birth_year'] >= 18
+
+
+def shortlist_for(conn, client, draft, organisation_id, formulary, adult):
+    pools = [shared_index(conn, formulary), clinic_index(conn, organisation_id)]
+    conditions = conditions_of(draft)
+    lookup = lambda pid: catalog_product(conn, organisation_id, pid, formulary)
+    items, method = make_shortlist(client, conditions, pools, load_generics(REPO_ROOT), load_rules(REPO_ROOT), lookup, adult)
+    return conditions, items, method
+
+
+def save_shortlist(conn, encounter_id, conditions, items, method):
+    conn.execute('insert into app.medicine_shortlists (encounter_id, conditions, items, method) values (%s, %s, %s, %s) '
+                 'on conflict (encounter_id) do update set conditions = excluded.conditions, items = excluded.items, '
+                 'method = excluded.method, created_at = now()', (encounter_id, conditions, Jsonb(items), Jsonb(method)))
 
 
 class Worker(threading.Thread):
@@ -114,6 +133,7 @@ class Worker(threading.Thread):
             self.fail(run, steps, failure)
             return True
         suggestions = self.suggestions(draft, transcript, context, on_step)
+        shortlist = self.shortlist(draft, context, patient)
         with transaction() as conn:
             conn.execute('insert into app.report_versions (encounter_id, version, status, report, content_hash, run_id, '
                          "created_by) values (%s, %s, 'draft', %s, %s, %s, %s)",
@@ -124,6 +144,8 @@ class Worker(threading.Thread):
                              'values (%s, %s, %s, %s, %s) on conflict (encounter_id, medication_id) do update set '
                              'heard = excluded.heard, suggestions = excluded.suggestions, method = excluded.method',
                              (context['id'], medication_id, heard, Jsonb(items), Jsonb(method)))
+            if shortlist:
+                save_shortlist(conn, context['id'], *shortlist)
             conn.execute("update app.encounters set state = 'in_review', current_version = %s where id = %s",
                          (draft.version, context['id']))
             conn.execute("update app.runs set state = 'succeeded', stage = null, draft_version = %s, error = null, "
@@ -136,7 +158,7 @@ class Worker(threading.Thread):
     def finder(self, context, patient):
         """Looks up the clinic's earlier choices and clear matches, each in its own short transaction; a failure
         leaves that medicine for the doctor, never the run. An adult's unnamed form means the tablet (D-120)."""
-        adult = bool(patient.get('birth_year')) and context['visit_date'].year - patient['birth_year'] >= 18
+        adult = is_adult(patient, context['visit_date'])
 
         def find(rx):
             try:
@@ -146,6 +168,16 @@ class Worker(threading.Thread):
                 log.exception('matching %s failed; left for the doctor', rx.spoken_name)
                 return None
         return find
+
+    def shortlist(self, draft, context, patient):
+        """(conditions, items, method) for the medicine picker; a failure costs only the list."""
+        try:
+            with transaction() as conn:
+                return shortlist_for(conn, self.llm(), draft, context['organisation_id'], self.reference.products,
+                                     is_adult(patient, context['visit_date']))
+        except Exception:
+            log.exception('shortlist failed for %s', context['id'])
+            return None
 
     def suggestions(self, draft, transcript, context, on_step):
         """Ranked suggestions for every medicine not matched exactly. A failure here costs the suggestions,

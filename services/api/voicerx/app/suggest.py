@@ -12,7 +12,9 @@ from pydantic import Field
 
 from ..contracts.medication import Strict
 from ..pipeline.assemble import product_label
+from ..pipeline.complete import generic_from_id, load_generics
 from . import knowledge
+from .config import REPO_ROOT
 from .catalog import (FORMS, Candidate, CatalogEntry, NameIndex, brand_stem, parse_composition, product_from_row,
                       similarity, standing, strengths)
 
@@ -135,6 +137,8 @@ def catalog_product(conn, organisation_id, product_id, formulary):
         row = conn.execute('select * from app.clinic_products where id = %s and organisation_id = %s',
                            (product_id, organisation_id)).fetchone()
         return product_from_row(product_id, row['name'], row['manufacturer'], row['composition'], row['form']) if row else None
+    if product_id.startswith('g-'):
+        return generic_from_id(product_id, load_generics(REPO_ROOT))
     return None
 
 

@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 from pydantic import TypeAdapter, ValidationError
-from .contracts.medication import Dose, Duration, Food, Schedule
+from .contracts.extraction import ResolvedMedication
+from .contracts.medication import Dose, Duration, Food, Schedule, Start
 from .contracts.report import MODEL_SECTIONS, DraftReport, ReportLine, Resolution
 from .pipeline.check_extraction import medicine_issues, MEDICINE_CODES
 from .pipeline.assemble import DISPLAY_NAMES, content_hash, medicine_row, table_medicines, current_medicine_lines
@@ -66,6 +67,23 @@ def resolve(draft, resolutions, reference):
                 if correction.target not in kept_ids:
                     raise ResolutionRefused('unknown finding')
                 dismissed.add(correction.target)
+                continue
+            if correction.action == 'add_medicine':
+                # A medicine nobody said, chosen by the doctor with its instructions (runbook D-122).
+                value = correction.value
+                if value['product_id'] not in products:
+                    raise ResolutionRefused('unknown product')
+                product = products[value['product_id']]
+                taken = {m.id for m in result.checked.medications} | original_ids
+                number = next(n for n in range(1, len(taken) + 2) if f'rx{n}' not in taken)
+                result.checked.medications.append(ResolvedMedication(
+                    id=f'rx{number}', action='start', spoken_name=product.brand, match='exact', product_id=product.id,
+                    candidate_ids=[product.id], dose=Dose.model_validate(value['dose']),
+                    schedule=TypeAdapter(Schedule).validate_python(value['schedule']),
+                    food=TypeAdapter(Food).validate_python(value['food']) if value['food'] else None,
+                    duration=Duration.model_validate(value['duration']), start=Start(), route=None, unresolved=[],
+                    quotes={}))
+                result.products_used[product.id] = product.model_copy(deep=True)
                 continue
             rx = next((m for m in result.checked.medications if m.id == correction.target), None)
             if rx is None:

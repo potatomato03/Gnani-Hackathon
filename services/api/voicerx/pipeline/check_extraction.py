@@ -8,21 +8,23 @@ from ..contracts.extraction import CheckedExtraction, DroppedItem, ResolvedMedic
 from ..contracts.issues import Issue
 from ..contracts.medication import AsNeeded, Frequency, Grid, Taper, Start
 from .match_medicine import MatchResult, match_medicine
+from .romanise import english_loanwords
 from .schedule import parse_dose, parse_timing, parse_food, parse_duration, parse_meal, parse_start
 
 NEGATION_WORDS = {'no', 'not', 'nil', 'without', 'denies', 'negative', 'never', 'नहीं', 'नही', 'न', 'ना', 'बिना',
-                  'లేదు', 'లేవు', 'కాదు', 'இல்லை', 'இல்லாமல்'}
+                  'లేదు', 'లేవు', 'కాదు', 'இல்லை', 'இல்லாமல்', 'નથી', 'નહીં', 'નહિ', 'વગર'}
 # A hedge in the quote means the doctor suspects, not states. Telugu and Tamil hedges are not yet listed.
 HEDGE_WORDS = {'likely', 'probably', 'possibly', 'probable', 'suspected', 'suspect', 'provisional', 'seems',
-               'looks like', 'could be', 'लग रहा', 'लग रही', 'लगता', 'लगती', 'शायद', 'संभवतः'}
-SIDE_WORDS = {'left': {'left', 'बायां', 'बाएँ', 'बाएं', 'बाईं', 'ఎడమ', 'இடது'},
-              'right': {'right', 'दायां', 'दाएँ', 'दाएं', 'दाईं', 'కుడి', 'வலது'},
-              'bilateral': {'bilateral', 'both', 'दोनों', 'రెండు', 'இரண்டு'}}
-FIRST_PERSON = {'मैं', 'मुझे', 'मेरा', 'मेरी', 'i', 'my', 'me', 'నేను', 'నా', 'நான்', 'என்'}
+               'looks like', 'could be', 'लग रहा', 'लग रही', 'लगता', 'लगती', 'शायद', 'संभवतः', 'કદાચ', 'લાગે છે'}
+SIDE_WORDS = {'left': {'left', 'बायां', 'बाएँ', 'बाएं', 'बाईं', 'ఎడమ', 'இடது', 'ડાબો', 'ડાબા', 'ડાબી', 'ડાબે'},
+              'right': {'right', 'दायां', 'दाएँ', 'दाएं', 'दाईं', 'కుడి', 'வலது', 'જમણો', 'જમણા', 'જમણી', 'જમણે'},
+              'bilateral': {'bilateral', 'both', 'दोनों', 'రెండు', 'இரண்டு', 'બંને', 'બન્ને'}}
+FIRST_PERSON = {'मैं', 'मुझे', 'मेरा', 'मेरी', 'i', 'my', 'me', 'నేను', 'నా', 'நான்', 'என்', 'હું', 'મને', 'મારો', 'મારી', 'મારું'}
 # A doctor dictating says "I am recommending ..."; first person with a prescribing verb is the doctor, not a
 # patient interrupting (runbook C-70).
 PRESCRIBING = {'recommend', 'recommending', 'suggest', 'suggesting', 'prescribe', 'prescribing', 'advise', 'advising',
-               'starting', 'giving', 'adding', 'i want you', 'लिख रहा', 'लिख रही', 'दे रहा', 'दे रही'}
+               'starting', 'giving', 'adding', 'i want you', 'लिख रहा', 'लिख रही', 'दे रहा', 'दे रही', 'આપું છું',
+               'લખું છું', 'શરૂ કરો'}
 NUKTA = '\u093c'  # the nukta dot, as in ज़
 ENDS = re.compile(r'[।?!\n]|\.(?=\s|$)')
 PHRASES = ('dose_phrase', 'timing_phrase', 'food_phrase', 'duration_phrase', 'start_phrase', 'route_phrase')
@@ -79,7 +81,10 @@ def medicine_issues(medications, reference, allergies):
     return issues
 
 
-LINKING = {'is', 'are', 'was', 'will', 'be', 'should', 'for', 'dose', 'dosage', 'tablet', 'tablets', 'tab', 'capsule',
+ROUTE_WORDS = {'orally', 'oral', 'by mouth', 'po'}
+LINKING = {'से', 'है', 'हैं', 'का', 'की', 'के', 'लें', 'लेनी', 'लेना', 'लेने',
+           'થી', 'છે', 'લેવી', 'લેવો', 'લેવા', 'લેવાની', 'જોઈએ', 'ની', 'નો', 'ના', 'માં',
+           'is', 'are', 'was', 'will', 'be', 'should', 'for', 'dose', 'dosage', 'tablet', 'tablets', 'tab', 'capsule',
            'capsules', 'cap', 'syrup', 'sachet', 'inhaler', 'drops'}
 
 
@@ -185,7 +190,12 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
             issues.append(issue('negation_mismatch', item.id))
         if item.certainty == 'stated' and item.assertion == 'present' and has_word(quote, HEDGE_WORDS):
             issues.append(issue('certainty_mismatch', item.id))
-        if item.laterality and not has_word(quote, SIDE_WORDS[item.laterality]):
+        # The side may be said just outside a short quote, in its own sentence ("left knee में pain और instability
+        # है"), as long as that sentence names no other side.
+        sentence = _sentence(bounded_text, text.index(quote))
+        side_in_sentence = item.laterality and has_word(sentence, SIDE_WORDS[item.laterality]) and not any(
+            has_word(sentence, words) for side, words in SIDE_WORDS.items() if side != item.laterality)
+        if item.laterality and not has_word(quote, SIDE_WORDS[item.laterality]) and not side_in_sentence:
             issues.append(issue('laterality_mismatch', item.id))
         kept.append(item)
     name_positions = [(m.start(), m.end(), rx.id) for rx in extraction.medications
@@ -235,7 +245,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
             first_end = ENDS.search(bounded_text, pos)
             stop = first_end.start() if first_end else len(text)
             name_end = next(e for s, e, rid in name_positions if s == pos and rid == rx.id)
-            after_name = set(re.findall(r'\w+', text[name_end:stop])) - LINKING
+            after_name = {w.strip('.,;:!?…।') for w in text[name_end:stop].split()} - LINKING - {''}
             if first_end and first_end.group() != '\n' and not after_name:
                 second_end = ENDS.search(bounded_text, first_end.end())
                 stop = second_end.start() if second_end else len(text)
@@ -246,19 +256,26 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         _, pos, bound = max(possibilities, key=lambda entry: entry[0])
         unbound = [field for field in PHRASES if not bound[field]] + invalid_corrections
         clean = {field: value if bound[field] else None for field, value in values.items()}
-        parsed = {'dose': parse_dose(clean['dose_phrase']), 'schedule': parse_timing(clean['timing_phrase']),
-                  'food': parse_food(clean['food_phrase']), 'duration': parse_duration(clean['duration_phrase']),
-                  'start': parse_start(clean['start_phrase'], visit_date), 'route': clean['route_phrase']}
-        if parsed['duration'] is None and not clean['duration_phrase'] and clean['timing_phrase']:
+        # English said in Devanagari ("वन कैप्सूल") is read as English; the quotes keep what was written.
+        read = {field: english_loanwords(value) if value else value for field, value in clean.items()}
+        timing = (read['timing_phrase'] or '').strip(' .,।').lower()
+        if timing in ROUTE_WORDS and not read['route_phrase']:
+            # A route given as the timing ("ओरली", orally) is the route, not a time.
+            read = {**read, 'route_phrase': timing, 'timing_phrase': None}
+            clean = {**clean, 'timing_phrase': None}
+        parsed = {'dose': parse_dose(read['dose_phrase']), 'schedule': parse_timing(read['timing_phrase']),
+                  'food': parse_food(read['food_phrase']), 'duration': parse_duration(read['duration_phrase']),
+                  'start': parse_start(read['start_phrase'], visit_date), 'route': read['route_phrase']}
+        if parsed['duration'] is None and not read['duration_phrase'] and read['timing_phrase']:
             # "after breakfast and after dinner for three days": the duration came inside the timing phrase.
-            parsed['duration'] = parse_duration(clean['timing_phrase'])
-        if isinstance(parsed['schedule'], Taper) and parsed['food'] is None and not clean['food_phrase']:
+            parsed['duration'] = parse_duration(read['timing_phrase'])
+        if isinstance(parsed['schedule'], Taper) and parsed['food'] is None and not read['food_phrase']:
             # A taper is quoted whole in its timing phrase, so its single food rule is said there too.
-            parsed['food'] = parse_food(clean['timing_phrase'])
+            parsed['food'] = parse_food(read['timing_phrase'])
         # "before breakfast" also says when: no timing, or "once a day" with one meal, becomes that slot.
         # A slot that contradicts the meal stays as said and is flagged; nothing is chosen between them.
         meal_conflict = False
-        meal = parse_meal(clean['food_phrase']) or parse_meal(clean['timing_phrase'])
+        meal = parse_meal(read['food_phrase']) or parse_meal(read['timing_phrase'])
         if meal and not isinstance(parsed['schedule'], (AsNeeded, Taper)):
             slots = meal[1]
             schedule = parsed['schedule']
@@ -267,7 +284,7 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
                 parsed['schedule'] = Grid(**{s: '1' if s in slots else '0' for s in 'maen'})
             elif isinstance(schedule, Grid) and {s for s in 'maen' if float(getattr(schedule, s)) > 0} != slots:
                 meal_conflict = True
-            if parsed['food'] is None and not clean['food_phrase']:
+            if parsed['food'] is None and not read['food_phrase']:
                 # The meal said in the timing phrase is the food rule too ("after lunch and after dinner").
                 parsed['food'] = meal[0]
         mapping = {'dose_phrase': 'dose', 'timing_phrase': 'schedule', 'food_phrase': 'food', 'duration_phrase': 'duration', 'start_phrase': 'start'}

@@ -8,6 +8,7 @@ for words in [
     'शून्य एक दो तीन चार पाँच छह सात आठ नौ दस ग्यारह बारह तेरह चौदह पंद्रह सोलह सत्रह अठारह उन्नीस',
     'సున్నా ఒకటి రెండు మూడు నాలుగు ఐదు ఆరు ఏడు ఎనిమిది తొమ్మిది పది',
     'பூஜ்ஜியம் ஒன்று இரண்டு மூன்று நான்கு ஐந்து ஆறு ஏழு எட்டு ஒன்பது பத்து',
+    'શૂન્ય એક બે ત્રણ ચાર પાંચ છ સાત આઠ નવ દસ',
 ]:
     NUMBERS.update({unicodedata.normalize('NFC', word): i for i, word in enumerate(words.split())})
 NUMBERS.update(dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(), range(20, 100, 10))))
@@ -16,7 +17,9 @@ NUMBERS.update({'ఒక': 1, 'ஒரு': 1, 'पांच': 5, 'छः': 6, '�
                 'अड़तालीस': 48, 'आधा': .5, 'आधी': .5, 'half': .5, 'डेढ़': 1.5, 'ढाई': 2.5,
                 'hundred': 100, 'सौ': 100, 'point': '.', 'दशमलव': '.'})
 VOCAB = '|'.join(re.escape(w) for w in sorted(NUMBERS, key=len, reverse=True))
-RUN = re.compile(r'(?<!\w)(?:' + VOCAB + r')(?!\w)(?:[\s-]+(?:' + VOCAB + r')(?!\w))*')
+# Vowel signs of Indian scripts are not \\w; counted as word characters, "છ" (six) never matches inside "છે".
+WORD = r'[\w\u0900-\u0dff]'
+RUN = re.compile(r'(?<!' + WORD + r')(?:' + VOCAB + r')(?!' + WORD + r')(?:[\s-]+(?:' + VOCAB + r')(?!' + WORD + r'))*')
 
 
 def _integer(values):

@@ -74,8 +74,8 @@ function toast(message, bad = false) {
 function fail(error) { console.error(error); toast(error.message || 'Something went wrong.', true); }
 
 const initials = name => name.replace(/^Dr\.?\s+/, '').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
-const LANG = { 'hi-IN': 'Hindi', 'en-IN': 'English', 'te-IN': 'Telugu', 'ta-IN': 'Tamil', hinglish: 'Hinglish',
-  hindi: 'Hindi', english: 'English', tamil: 'Tamil', telugu: 'Telugu' };
+const LANG = { 'hi-IN': 'Hindi', 'en-IN': 'English', 'te-IN': 'Telugu', 'ta-IN': 'Tamil', 'gu-IN': 'Gujarati', hinglish: 'Hinglish',
+  hindi: 'Hindi', english: 'English', tamil: 'Tamil', telugu: 'Telugu', gujarati: 'Gujarati' };
 function fmtDate(iso) {
   if (!iso) return '';
   return new Date(iso.length === 10 ? iso + 'T00:00:00' : iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -107,7 +107,7 @@ async function renderLogin() {
       h('div', { class: 'pitch' },
         h('h1', { text: 'Speak the visit. Check the report. Approve.' }),
         h('p', { class: 'lede', text: 'VoiceRx drafts the visit note and prescription from what was said, shows you every source quote, and flags anything it is unsure of. Nothing reaches a patient until you approve it.' }),
-        h('dl', {}, [['Languages offered', 'Hinglish, Hindi, English, Tamil, Telugu'],['Every line', 'Has a source'], ['Sent to patient', 'Only after approval']]
+        h('dl', {}, [['Languages offered', 'Hinglish, Hindi, English, Tamil, Telugu, Gujarati'],['Every line', 'Has a source'], ['Sent to patient', 'Only after approval']]
           .map(([term, value]) => h('div', {}, h('dt', { text: term }), h('dd', { text: value }))))),
       card),
     h('div')));
@@ -264,7 +264,7 @@ const clock = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 
 
 async function showCapture(encounter) {
   const failed = encounter.run && ['failed', 'incomplete'].includes(encounter.run.state);
-  const language = h('select', { class: 'input' }, [['hinglish', 'Hinglish'], ['hindi', 'Hindi'], ['english', 'English'], ['tamil', 'Tamil'], ['telugu', 'Telugu']]
+  const language = h('select', { class: 'input' }, [['hinglish', 'Hinglish'], ['hindi', 'Hindi'], ['english', 'English'], ['tamil', 'Tamil'], ['telugu', 'Telugu'], ['gujarati', 'Gujarati']]
     .map(([v, l]) => h('option', { value: v, selected: encounter.source?.language === v }, l)));
   const consent = h('input', { type: 'checkbox' });
   const status = h('p', { class: 'muted small', role: 'status' });
@@ -476,6 +476,132 @@ const DONE_REASON = { choose_product: 'Product chosen by the doctor.', set_dose:
   add_line: 'Written by the doctor.', dismiss_item: 'Ruled out by the doctor.' };
 const ONE_CLICK = ['confirm_order', 'acknowledge'];
 const CONFIRM_TEXT = { remove_medicine: 'Yes, remove', remove_line: 'Yes, remove', dismiss_item: 'Yes, rule out' };
+// ---------- Medicine picker (runbook D-122): choose a medicine and its instructions without the mouse ----------
+// Search or ↓ through the visit's common choices, Enter to pick; then ↑↓ moves between rows, ←→ changes the
+// value, Enter saves, Esc steps back. Nothing is typed but the search.
+
+const PK_DAYS = [1, 2, 3, 5, 7, 10, 14, 21, 30, 60, 90];
+const PK_TIMES = [['1', 'Once'], ['2', 'Twice'], ['3', 'Three times'], ['4', 'Four times'], ['sos', 'When needed']];
+const PK_WHEN = { '1': ['m', 'a', 'e', 'n'], '2': ['mn', 'me', 'ma', 'an'], '3': ['man', 'men'], '4': ['maen'], sos: [''] };
+const PK_SLOT = { m: 'Morning', a: 'Afternoon', e: 'Evening', n: 'Night' };
+const PK_DOSES = ['0.5', '1', '2', '3', '4'];
+const PK_FOOD = [['', 'Not said'], ['before_food', 'Before food'], ['after_food', 'After food'], ['with_food', 'With food'], ['empty_stomach', 'Empty stomach']];
+const PK_UNIT = { tablet: 'tablet', capsule: 'capsule', sachet: 'sachet', syrup: 'teaspoon', suspension: 'teaspoon', drops: 'drop', inhaler: 'puff' };
+const ONCE_SLOT = { morning: 'm', afternoon: 'a', evening: 'e', night: 'n' };
+const whenText = w => w ? w.split('').map(s => PK_SLOT[s]).join(' + ') : 'As needed';
+
+function medicinePicker({ shortlist, med, onSave, onCancel }) {
+  const box = h('div', { class: 'picker', tabindex: '-1' });
+  const search = h('input', { class: 'input', type: 'search', placeholder: 'Type a medicine, or press ↓ for the common choices', autocomplete: 'off' });
+  const list = h('ul', { class: 'pk-list', role: 'listbox' });
+  const rowsHost = h('div', { class: 'pk-rows' });
+  const hint = h('p', { class: 'muted small pk-hint' });
+  let options = [], active = 0, chosen = null, rows = [], row = 0, timer;
+
+  const drawList = () => {
+    list.replaceChildren(...options.map((o, i) => h('li', { class: 'pk-item' + (i === active ? ' active' : ''), role: 'option',
+      onmousedown: e => { e.preventDefault(); pick(o); } },
+      h('b', { text: o.label }), h('span', { class: 'muted small', text: [o.composition, o.why].filter(Boolean).join(' · ') }))));
+    list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+  };
+  const fromShortlist = q => shortlist.items.filter(o => !q || (o.label + ' ' + o.composition).toLowerCase().includes(q.toLowerCase()));
+  const refresh = () => {
+    const q = search.value.trim();
+    options = fromShortlist(q); active = 0; drawList();
+    clearTimeout(timer);
+    if (q.length < 2) return;
+    timer = setTimeout(async () => {
+      try {
+        const { items } = await api('/catalog/search?q=' + encodeURIComponent(q));
+        const seen = new Set(options.map(o => o.product_id));
+        options = [...fromShortlist(q), ...items.filter(p => !seen.has(p.id)).map(p => ({ product_id: p.id, label: p.label,
+          composition: p.composition, form: p.form, food: p.food, once_daily: p.once_daily }))];
+        active = Math.min(active, Math.max(options.length - 1, 0)); drawList();
+      } catch (e) { fail(e); }
+    }, 200);
+  };
+
+  // The instruction rows, with values taken from the medicine (when editing) or its standard instructions.
+  function startRows(o, current) {
+    chosen = o;
+    const s = current?.schedule;
+    const slots = s?.type === 'grid' ? 'maen'.split('').filter(k => Number(s[k]) > 0).join('') : '';
+    const times = s?.type === 'as_needed' ? 'sos' : slots ? String(slots.length) : s?.type === 'frequency' ? String(Math.min(s.times, 4))
+      : o.once_daily ? '1' : '2';
+    const days = current?.duration ? current.duration.value * ({ day: 1, week: 7, month: 30 })[current.duration.unit] : 5;
+    const pickWhen = t => slots && slots.length === Number(t) && PK_WHEN[t].includes(slots) ? slots
+      : t === '1' && ONCE_SLOT[o.once_daily] ? ONCE_SLOT[o.once_daily] : PK_WHEN[t][0];
+    rows = [
+      { key: 'days', label: 'Days', values: PK_DAYS.includes(days) ? PK_DAYS : [...PK_DAYS, days].sort((a, b) => a - b), value: days, text: d => `${d} day${d > 1 ? 's' : ''}` },
+      { key: 'times', label: 'Times a day', values: PK_TIMES.map(t => t[0]), value: times, text: t => Object.fromEntries(PK_TIMES)[t] },
+      { key: 'when', label: 'Which time', values: PK_WHEN[times], value: pickWhen(times), text: whenText },
+      { key: 'dose', label: 'Dose', values: PK_DOSES, value: current?.dose?.amount && PK_DOSES.includes(current.dose.amount) ? current.dose.amount : '1',
+        text: d => `${d === '0.5' ? '½' : d} ${PK_UNIT[o.form] || 'unit'}${Number(d) > 1 ? 's' : ''}` },
+      { key: 'food', label: 'Food', values: PK_FOOD.map(f => f[0]), value: current ? (current.food || '') : (o.food || ''), text: f => Object.fromEntries(PK_FOOD)[f] },
+    ];
+    row = 0;
+    search.hidden = true; list.hidden = true;
+    drawRows();
+    // When editing, the picker isn't on the page yet; focus once it is, so the arrow keys reach it.
+    setTimeout(() => box.focus(), 0);
+  }
+  const drawRows = () => {
+    rowsHost.replaceChildren(h('div', { class: 'pk-chosen' }, h('b', { text: chosen.label }), h('span', { class: 'muted small', text: chosen.composition || '' })),
+      ...rows.map((r, i) => h('div', { class: 'pk-row' + (i === row ? ' active' : '') },
+        h('span', { class: 'pk-label', text: r.label }),
+        h('div', { class: 'pk-opts' }, r.values.map(v => h('button', { class: 'pk-opt' + (v === r.value ? ' sel' : ''), type: 'button', tabindex: '-1',
+          onmousedown: e => { e.preventDefault(); row = i; set(r, v); } }, r.text(v)))))));
+    rowsHost.querySelector('.pk-row.active .sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    hint.textContent = '↑ ↓ row · ← → change · Enter save · Esc back';
+  };
+  const set = (r, v) => {
+    r.value = v;
+    if (r.key === 'times') { const when = rows[2]; when.values = PK_WHEN[v]; when.value = v === '1' && ONCE_SLOT[chosen.once_daily] ? ONCE_SLOT[chosen.once_daily] : PK_WHEN[v][0]; }
+    drawRows();
+  };
+  const result = () => {
+    const get = k => rows.find(r => r.key === k).value;
+    const when = get('when');
+    return { product: chosen, dose: { amount: get('dose'), unit: PK_UNIT[chosen.form] || 'unit' },
+      schedule: get('times') === 'sos' ? { type: 'as_needed', max_per_day: null }
+        : { type: 'grid', ...Object.fromEntries('maen'.split('').map(k => [k, when.includes(k) ? '1' : '0'])) },
+      food: get('food'), duration: { value: get('days'), unit: 'day' } };
+  };
+
+  search.addEventListener('input', refresh);
+  search.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, options.length - 1); drawList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); drawList(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (options[active]) pick(options[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+    // The space that opened the picker, or a second press, shows the common choices rather than typing a blank.
+    else if (e.key === ' ' && !search.value) { e.preventDefault(); }
+  });
+  box.addEventListener('keydown', e => {
+    if (!chosen || e.target === search) return;
+    const r = rows[row], i = r.values.indexOf(r.value);
+    if (e.key === 'ArrowDown') { e.preventDefault(); row = (row + 1) % rows.length; drawRows(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); row = (row + rows.length - 1) % rows.length; drawRows(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); set(r, r.values[Math.min(i + 1, r.values.length - 1)]); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); set(r, r.values[Math.max(i - 1, 0)]); }
+    else if (e.key === 'Enter') { e.preventDefault(); onSave(result()); }
+    else if (e.key === 'Escape') { e.preventDefault(); if (med) onCancel(); else { chosen = null; rowsHost.replaceChildren(); search.hidden = false; list.hidden = false; hint.textContent = '↓ ↑ choose · Enter pick · Esc close'; search.focus(); } }
+  });
+  function pick(o) { startRows(o); }
+
+  if (med) {
+    box.append(rowsHost, hint);
+    startRows({ product_id: med.product_id, label: med.product_label || med.spoken_name, composition: '', form: med.product_form || 'tablet' }, med);
+  } else {
+    box.append(shortlist.conditions.length ? h('p', { class: 'muted small', text: 'Common for: ' + shortlist.conditions.slice(0, 4).join(', ') }) : '',
+      search, list, rowsHost, hint);
+    hint.textContent = '↓ ↑ choose · Enter pick · Esc close';
+    refresh();
+    setTimeout(() => search.focus(), 0);
+  }
+  return box;
+}
+
 // What VoiceRx filled in rather than heard (runbook D-118), shown on the prescription row for the doctor to check.
 const FILLED_PRODUCT = { generic: 'Generic name', auto: 'Name matched: check', learned: 'Chosen before in this clinic' };
 const FILLED_FIELD = { dose: 'dose', food: 'food', schedule: 'times' };
@@ -748,7 +874,33 @@ async function showReview(encounter, view) {
   // Medicines
   const slot = v => v && v !== '-' && Number(v) !== 0 ? h('span', { class: 'pill-n', text: v }) : h('span', { class: 'pill-z', text: v === '-' ? '·' : '0' });
   const tableMeds = view.medication_views.filter(m => m.row);
-  const medsPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'Prescription' }), h('p', { text: tableMeds.length ? 'Morning · Afternoon · Evening · Night' : 'No medicines started or changed.' })),
+  const pickerHost = h('div');
+  const closePicker = () => { pickerHost.replaceChildren(); ui.picking = false; };
+  // Add a medicine nobody said, or change a medicine's instructions, from the keyboard (runbook D-122).
+  const openPicker = async med => {
+    ui.picking = true;
+    let shortlist = { conditions: [], items: [] };
+    if (!med) {
+      ui.shortlists ||= {};
+      try { shortlist = ui.shortlists[encounter.id] ||= await api(`/encounters/${encounter.id}/shortlist`); } catch (e) { fail(e); }
+    }
+    pickerHost.replaceChildren(medicinePicker({ shortlist, med, onCancel: closePicker, onSave: r => {
+      if (!med) return submit([{ action: 'add_medicine', target: 'new', reason: 'Added by the doctor.', value: {
+        product_id: r.product.product_id, dose: r.dose, schedule: r.schedule, food: r.food, duration: r.duration } }]);
+      const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+      const changes = [];
+      if (!same(r.dose, med.dose)) changes.push({ action: 'set_dose', value: r.dose });
+      if (!same(r.schedule, med.schedule)) changes.push({ action: 'set_timing', value: { schedule: r.schedule } });
+      if (r.food && r.food !== med.food) changes.push({ action: 'set_food', value: { food: r.food } });
+      if (!same(r.duration, med.duration)) changes.push({ action: 'set_duration', value: r.duration });
+      if (!changes.length) return closePicker();
+      submit(changes.map(c => ({ ...c, target: med.id, reason: DONE_REASON[c.action] })));
+    } }));
+  };
+  const addButton = canEdit ? h('button', { class: 'btn btn-line btn-sm', type: 'button', title: 'Shortcut: space bar', onclick: () => openPicker() }, 'Add medicine', h('kbd', { class: 'kbd', text: 'Space' })) : '';
+  const medsPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'Prescription' }),
+    h('div', { class: 'row' }, h('p', { text: tableMeds.length ? 'Morning · Afternoon · Evening · Night' : 'No medicines started or changed.' }), addButton)),
+    pickerHost,
     tableMeds.length ? h('div', { class: 'wrapx' }, h('table', { class: 'meds' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Medicine' }), ['M', 'A', 'E', 'N'].map(x => h('th', { class: 's', text: x })))),
       h('tbody', {}, tableMeds.map(m => {
@@ -759,7 +911,9 @@ async function showReview(encounter, view) {
           canEdit && m.standard?.length ? h('div', { class: 'standard' }, h('span', { class: 'chip iris', text: 'Standard' }), standardText(m),
             h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => submit(standardItems(m, m.standard)) }, 'Accept')) : '',
           h('div', { class: 'acts' },
-            canEdit ? ['choose_product', 'set_dose', 'set_timing', 'set_food', 'set_duration', ...(m.speaker_unclear ? ['confirm_order'] : []), 'remove_medicine']
+            canEdit && m.match === 'exact' ? h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => openPicker(m) }, 'Edit instructions') : '',
+            canEdit ? ['choose_product', ...(m.match === 'exact' ? [] : ['set_dose', 'set_timing', 'set_food', 'set_duration']),
+              ...(m.speaker_unclear ? ['confirm_order'] : []), 'remove_medicine']
               .filter(a => a !== 'choose_product' || m.match !== 'exact' || m.candidates.length > 1)
               .map(a => h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => act(a, m.id, cell) }, ACTION_TEXT[a])) : '',
             view.capabilities.knowledge && (m.product_id || m.candidates.length) ? h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => openReference({ encounter, med: m }) }, 'Reference') : ''));
@@ -810,7 +964,20 @@ async function showReview(encounter, view) {
   drawTranscript([]);
   if (ui.selectedLine && report.sections[ui.selectedLine.split(':')[0]]?.[Number(ui.selectedLine.split(':')[1])]) showLine(ui.selectedLine);
   else ui.selectedLine = null;
+  ui.picking = false;
+  ui.addMedicine = canEdit ? { open: () => { medsPanel.scrollIntoView({ block: 'start' }); openPicker(); }, host: pickerHost } : null;
 }
+
+// The space bar on a review screen opens the medicine picker with the visit's common choices, unless the doctor
+// is typing or has a button or link selected (where space presses it).
+document.addEventListener('keydown', e => {
+  const busy = ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(document.activeElement?.tagName);
+  if (e.key === ' ' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !busy && !ui.picking
+      && ui.addMedicine && document.contains(ui.addMedicine.host)) {
+    e.preventDefault();
+    ui.addMedicine.open();
+  }
+});
 
 // ---------- Reference drawer (DESIGN.md section 10: beside the record, never in it) ----------
 

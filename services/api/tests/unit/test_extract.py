@@ -21,7 +21,7 @@ def test_prompt_keeps_laterality_empty_unless_a_side_is_spoken():
     # Both models filled a side for a plural like "tonsils"; qwen3:8b filled one on every item (runbook C-35).
     from voicerx.pipeline.extract import SYSTEM
 
-    assert PROMPT_VERSION == "extract-v4"
+    assert PROMPT_VERSION == "extract-v5"
     assert "laterality is null unless the quote itself names a side" in SYSTEM
     assert "A plural body part" in SYSTEM
 

@@ -45,6 +45,7 @@ VALUE_SHAPES = {
     'set_timing': {'schedule': dict}, 'set_food': {'food': str}, 'set_duration': {'value': int, 'unit': str},
     'remove_medicine': {}, 'confirm_order': {}, 'acknowledge': {'code': str}, 'edit_line': {'text': str},
     'remove_line': {}, 'add_line': {'text': str, 'cites': list}, 'dismiss_item': {},
+    'add_medicine': {'product_id': str, 'dose': dict, 'schedule': dict, 'food': str, 'duration': dict},
 }
 
 
@@ -152,6 +153,7 @@ def report_view(report, encounter_id, patient_id, organisation_id, catalog, capa
         medication_views.append({
             **rx.model_dump(mode='json'),
             'product_label': product_label(products[rx.product_id]) if rx.product_id in products else None,
+            'product_form': products[rx.product_id].form if rx.product_id in products else None,
             'candidates': [{'id': pid, 'label': product_label(products[pid])} for pid in rx.candidate_ids if pid in products],
             'row': rows[rx.id].model_dump(mode='json') if rx.id in rows else None,
             'issue_uids': [v['uid'] for v in issue_views if v['target'] == rx.id],

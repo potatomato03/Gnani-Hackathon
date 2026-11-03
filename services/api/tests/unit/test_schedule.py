@@ -130,6 +130,7 @@ def test_real_corrections_still_keep_only_the_new_value():
     ("रात के खाने के बाद", "after_food", "n"),
     ("दोपहर के खाने के बाद", "after_food", "a"),
     ("breakfast के बाद", "after_food", "m"),
+    ("breakfast के पहले", "before_food", "m"),
     ("after breakfast and after dinner", "after_food", "mn"),
 ])
 def test_meal_phrases_give_food_and_slot(phrase, food, slots):
@@ -142,3 +143,30 @@ def test_meal_phrases_give_food_and_slot(phrase, food, slots):
 def test_mixed_or_mealless_phrases_give_no_meal(phrase):
     from voicerx.pipeline.schedule import parse_meal
     assert parse_meal(phrase) is None
+
+
+# Gujarati (runbook D-121).
+@pytest.mark.parametrize("phrase, want", [
+    ("દિવસમાં બે વાર", Frequency(type="frequency", times=2, period="day")),
+    ("સવારે", Grid(type="grid", m="1", a="0", e="0", n="0")),
+    ("સવારે અને રાત્રે", Grid(type="grid", m="1", a="0", e="0", n="1")),
+    ("રોજ", Frequency(type="frequency", times=1, period="day")),
+    ("જરૂર પડે તો", AsNeeded(type="as_needed")),
+])
+def test_gujarati_timing(phrase, want):
+    assert parse_timing(phrase) == want
+
+
+def test_gujarati_dose_duration_food_and_meals():
+    from voicerx.pipeline.schedule import parse_meal
+    assert parse_dose("એક ગોળી") == Dose(amount="1", unit="tablet")
+    assert parse_duration("પાંચ દિવસ") == Duration(value=5, unit="day")
+    assert parse_food("જમ્યા પછી") == "after_food" and parse_food("ખાલી પેટે") == "empty_stomach"
+    assert parse_meal("નાસ્તા પહેલાં") == ("before_food", {"m"})
+    assert parse_meal("before નાસ્તા") == ("before_food", {"m"})
+
+
+def test_a_number_word_inside_a_gujarati_word_is_not_a_number():
+    # "છ" is six, but "છે" is "is".
+    assert words_to_digits("fever નથી છે") == "fever નથી છે"
+    assert words_to_digits("છ મહિના") == "6 મહિના"

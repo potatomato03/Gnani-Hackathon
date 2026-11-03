@@ -27,7 +27,8 @@ LISTED_BONUS = 0.15
 # sound-alike); popularity runs 0 to 1 from the dataset's own order (runbook C-66) and never outweighs a listing.
 POPULAR_BONUS = 0.15
 UNITS = r'(?:mg|mcg|g|ml|iu|%)'
-SOUND = [('ph', 'f'), ('ck', 'k'), ('x', 'ks')]
+# 'c' before e or i is said 's' ("paracetamol" heard and written as "parasitamol").
+SOUND = [('ph', 'f'), ('ck', 'k'), ('x', 'ks'), ('ce', 'se'), ('ci', 'si'), ('cy', 'si')]
 LETTERS = str.maketrans({'b': 'p', 'm': 'p', 'c': 'k', 'q': 'k', 'g': 'k', 'd': 't', 'z': 's', 'j': 's', 'v': 'f',
                          'w': 'f'})
 # How a letter sounds when a doctor says a brand's suffix: "Pan-D" is said "pan dee", and speech recognition

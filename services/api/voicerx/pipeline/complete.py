@@ -17,11 +17,23 @@ from ..standard import DOSE_FORMS, proposals
 from .check_extraction import MEDICINE_CODES, issue, medicine_issues
 from .match_medicine import name_tokens
 from .numbers import words_to_digits
+from .romanise import english_loanwords, romanise
 
 FORM_WORDS = {'tablet': 'tablet', 'tab': 'tablet', 'capsule': 'capsule', 'cap': 'capsule', 'syrup': 'syrup',
               'suspension': 'suspension', 'injection': 'injection', 'drops': 'drops', 'gel': 'gel', 'cream': 'cream',
               'inhaler': 'inhaler', 'sachet': 'sachet'}
 PRESCRIBED = ('start', 'change', 'continue')
+
+
+@lru_cache(maxsize=None)
+def generic_sounds(generics):
+    """Each generic name by its sound key; a key two names share is left out as ambiguous."""
+    from ..app.catalog import sound_key
+    keys = {}
+    for name in generics:
+        key = sound_key(name)
+        keys[key] = None if key in keys else name
+    return {key: name for key, name in keys.items() if name}
 
 
 @lru_cache(maxsize=None)
@@ -34,9 +46,14 @@ def load_generics(repo_root):
 def generic_product(spoken, generics):
     """A generic named by its ingredient ("Paracetamol 650", "domperidone"), at the strength said, or None."""
     words = [w for w in re.split(r'[\s\-]+', words_to_digits(spoken.lower())) if w]
+    sounds = generic_sounds(generics)
     for size in (3, 2, 1):
-        name = ' '.join(words[:size])
-        if len(words) >= size and name in generics:
+        said = ' '.join(words[:size])
+        if len(words) < size:
+            continue
+        # Spelt as listed, or spelt as heard ("parasitamol" for paracetamol).
+        name = said if said in generics else sounds.get(_sound(said)) if len(said) >= 6 else None
+        if name:
             rest = words[size:]
             break
     else:
@@ -52,6 +69,19 @@ def generic_product(spoken, generics):
                    aliases=[])
 
 
+def _sound(text):
+    from ..app.catalog import sound_key
+    return sound_key(text)
+
+
+def generic_from_id(product_id, generics):
+    """The generic product an id like "g-pantoprazole-40" or "g-clavulanic-acid" names, or None."""
+    parts = product_id[2:].split('-') if product_id.startswith('g-') else []
+    strength = parts.pop() if parts and re.fullmatch(r'\d+(?:\.\d+)?', parts[-1]) else ''
+    product = generic_product(' '.join(parts + [strength]).strip(), generics) if parts else None
+    return product if product and product.id == product_id else None
+
+
 def _said_strengths(text):
     return set(re.findall(r'\d+(?:\.\d+)?', words_to_digits(text.lower())))
 
@@ -65,9 +95,15 @@ def _strength_fits(rx, product):
 def _choose(rx, products, generics, finder):
     """(product, how) for a medicine the matcher couldn't name exactly, or None to leave it for the doctor."""
     found = finder(rx) if finder else None
+    # A name written in Devanagari ("डोलो कैप्सूल") is also tried spelt in Latin letters.
+    latin = romanise(rx.spoken_name)
+    if finder and latin != rx.spoken_name and not found:
+        found = finder(rx.model_copy(update={'spoken_name': latin, 'quotes': {
+            **rx.quotes, 'name_quote': romanise(rx.quotes.get('name_quote', rx.spoken_name))}}))
     if found and found[1] == 'learned':
         return found
-    for name in dict.fromkeys([rx.spoken_name, rx.quotes.get('name_quote', '')]):
+    names = [rx.spoken_name, rx.quotes.get('name_quote', ''), latin, romanise(rx.quotes.get('name_quote', ''))]
+    for name in dict.fromkeys(names):
         product = generic_product(name, generics) if name else None
         if product and rx.match == 'unmatched':
             return product, 'generic'
@@ -80,7 +116,7 @@ def _choose(rx, products, generics, finder):
 
 
 def bare_number(phrase):
-    text = words_to_digits((phrase or '').lower()).strip(' .,')
+    text = words_to_digits(english_loanwords(phrase or '').lower()).strip(' .,।')
     return text if re.fullmatch(r'\d+(?:\.\d+)?', text) else None
 
 

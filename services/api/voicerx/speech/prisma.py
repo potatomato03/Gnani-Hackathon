@@ -18,7 +18,9 @@ URL = 'https://api.vachana.ai/stt/v3'
 RATE = 16000
 LIMIT_SECONDS = 29
 EARLIEST_CUT = 18
-LANGUAGE_CODES = {'english': 'en-IN', 'hindi': 'hi-IN', 'hinglish': 'hi-IN,en-IN', 'tamil': 'ta-IN', 'telugu': 'te-IN'}
+# Gujarati goes with English, as Hinglish does, so English medicine names stay in Latin letters (D-121).
+LANGUAGE_CODES = {'english': 'en-IN', 'hindi': 'hi-IN', 'hinglish': 'hi-IN,en-IN', 'tamil': 'ta-IN', 'telugu': 'te-IN',
+                  'gujarati': 'gu-IN,en-IN'}
 PREVIOUS_TEXT = 600
 
 

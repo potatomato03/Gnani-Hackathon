@@ -23,7 +23,7 @@ from ..exports.patient_box import build_patient_box
 from ..exports.pdf.render import html_to_pdf, render_html
 from ..reference import load_reference
 from ..resolve import ResolutionRefused, resolve
-from ..standard import load_rules
+from ..standard import load_rules, standard_for
 from ..speech.prisma import LANGUAGE_CODES, RATE, decode_audio
 from . import auth, knowledge
 from .clinical import initial_steps
@@ -33,9 +33,10 @@ from .repo import (approval_of, artifacts_of, encounters_of, get_encounter, get_
                    patient_summary, report_row)
 from ..pipeline.assemble import product_label
 from .catalog import FORMS, parse_composition
-from .suggest import catalog_product, clinic_index, composition_text, heard_key, shared_index
+from .catalog import standing
+from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index
 from .views import CorrectionRefused, build_resolutions, report_view
-from .worker import TEMPLATES, Worker
+from .worker import TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
 
 log = logging.getLogger('voicerx.app')
 WEB = Path(__file__).resolve().parents[2] / 'web'
@@ -69,6 +70,7 @@ async def lifespan(app):
     state['settings'] = settings
     open_pool(settings.database_url)
     worker = Worker(settings)
+    state['worker'] = worker
     worker.start()
     # Load the embedding model and the product name index in the background, so the first search isn't slow.
     threading.Thread(target=warm_up, daemon=True).start()
@@ -441,7 +443,7 @@ async def create_run(request: Request, encounter_id: str):
         conn.execute('insert into app.runs (id, encounter_id, source_id, source_version, steps, config, created_by) '
                      'values (%s, %s, %s, %s, %s, %s, %s)',
                      (run_id, encounter_id, source['id'], source['version'], Jsonb(initial_steps(source['kind'])),
-                      Jsonb({'pipeline': 'extract-v4/report-v3', 'provider': state['settings'].llm_provider}),
+                      Jsonb({'pipeline': 'extract-v5/report-v3', 'provider': state['settings'].llm_provider}),
                       session['user_id']))
         conn.execute("update app.encounters set state = 'processing' where id = %s", (encounter_id,))
         audit(conn, session['user_id'], session['organisation_id'], 'run.queued', 'run', run_id)
@@ -536,7 +538,7 @@ async def post_resolutions(request: Request, encounter_id: str):
             # A product from outside the formulary (Indian list, clinic) joins this correction's catalogue.
             products = dict(REFERENCE.products)
             for c in corrections:
-                pid = c.value.get('product_id') if c.action == 'choose_product' else None
+                pid = c.value.get('product_id') if c.action in ('choose_product', 'add_medicine') else None
                 if pid and pid not in products and pid not in draft.products_used:
                     product = catalog_product(conn, session['organisation_id'], pid, REFERENCE.products)
                     if product:
@@ -656,6 +658,26 @@ def preview_pdf(request: Request, encounter_id: str, version: int | None = None)
 
 # ---------- Product catalogue (spec 2026-11-03, part C) ----------
 
+@app.get('/api/v1/encounters/{encounter_id}/shortlist')
+def encounter_shortlist(request: Request, encounter_id: str):
+    """The medicines usually prescribed for this visit's conditions (runbook D-122), made once and kept."""
+    session = session_of(request)
+    auth.require(session, 'resolve')
+    with transaction() as conn:
+        encounter = get_encounter(conn, session['organisation_id'], encounter_id)
+        if encounter is None:
+            raise not_found('visit')
+        row = one(conn, 'select conditions, items from app.medicine_shortlists where encounter_id = %s', (encounter_id,))
+        if row is None and encounter['current_version']:
+            draft = parse_report(report_row(conn, encounter_id, encounter['current_version'], None))
+            patient = one(conn, 'select birth_year from app.patients where id = %s', (encounter['patient_id'],))
+            shortlist = shortlist_for(conn, state['worker'].llm(), draft, session['organisation_id'], REFERENCE.products,
+                                      is_adult(patient, encounter['visit_date']))
+            save_shortlist(conn, encounter_id, *shortlist)
+            row = {'conditions': shortlist[0], 'items': shortlist[1]}
+    return {'conditions': row['conditions'] if row else [], 'items': row['items'] if row else []}
+
+
 @app.get('/api/v1/catalog/search')
 def catalog_search(request: Request, q: str = ''):
     """Products by name across the formulary, the Indian list and the clinic's own, sound-alikes included."""
@@ -669,11 +691,18 @@ def catalog_search(request: Request, q: str = ''):
             for c in pool.candidates(q[:80], limit=10):
                 if c.entry.id not in found or c.score > found[c.entry.id].score:
                     found[c.entry.id] = c
-    ranked = sorted(found.values(), key=lambda c: (c.strength_match is not False, c.score), reverse=True)[:10]
+    # Widely sold and listed products first among equally close names: typing "pan" finds PAN 40 before Panday.
+    ranked = sorted(found.values(), key=lambda c: (c.strength_match is not False, c.score + standing(c.entry)),
+                    reverse=True)[:10]
     # Formulary aliases are indexed under the alias ("Pan" for Pan-D); show the product's own label.
     label = lambda c: product_label(REFERENCE.products[c.entry.id]) if c.entry.id in REFERENCE.products else c.entry.name
+    rules = load_rules(REPO_ROOT)
+
+    def defaults(c):
+        food, once_daily, _ = standard_for([p.ingredient for p in parse_composition(c.entry.composition)], rules)
+        return {'food': food, 'once_daily': once_daily, 'form': entry_form(c.entry) or 'tablet'}
     return {'items': [{'id': c.entry.id, 'label': label(c), 'composition': c.entry.composition,
-                       'tier': c.entry.tier, 'strength_match': c.strength_match} for c in ranked]}
+                       'tier': c.entry.tier, 'strength_match': c.strength_match, **defaults(c)} for c in ranked]}
 
 
 @app.post('/api/v1/catalog/products', status_code=201)

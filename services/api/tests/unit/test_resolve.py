@@ -154,3 +154,26 @@ def test_a_doctor_setting_a_filled_value_removes_its_mark():
     fixed = resolve(draft, [fix("set_dose", "rx1", {"amount": "2", "unit": "tablet"}),
                             fix("choose_product", "rx1", {"product_id": "p-dolo-650"}).model_copy(update={"id": "r2"})], REF)
     assert fixed.checked.medications[0].filled == {'food': 'standard'}
+
+
+ADD = {"product_id": "p-pan-40", "dose": {"amount": "1", "unit": "tablet"},
+       "schedule": {"type": "grid", "m": "1", "a": "0", "e": "0", "n": "0"}, "food": "before_food",
+       "duration": {"value": 5, "unit": "day"}}
+
+
+def test_a_doctor_adds_a_medicine_with_its_instructions_in_one_correction():
+    # The keyboard picker (runbook D-122): a medicine nobody said, chosen from the shortlist or search.
+    fixed = resolve(make_draft([resolved_medicine()]), [fix("add_medicine", "new", ADD)], REF)
+    added = fixed.checked.medications[-1]
+    assert (added.id, added.action, added.match, added.product_id) == ("rx2", "start", "exact", "p-pan-40")
+    assert added.food == "before_food" and added.duration.value == 5 and added.schedule.m == "1"
+    assert "p-pan-40" in fixed.products_used and len(fixed.medicines) == 2
+    assert not [i for i in fixed.issues if i.target == "rx2"]
+
+
+def test_an_added_medicine_needs_a_known_product_and_valid_instructions():
+    draft = make_draft([resolved_medicine()])
+    with pytest.raises(ResolutionRefused):
+        resolve(draft, [fix("add_medicine", "new", {**ADD, "product_id": "p-nothing"})], REF)
+    with pytest.raises(ResolutionRefused):
+        resolve(draft, [fix("add_medicine", "new", {**ADD, "duration": {"value": 0, "unit": "day"}})], REF)

@@ -81,3 +81,11 @@ def test_what_was_said_stays_and_nothing_is_marked():
     rx = run(rx)[0].medications[0]
     assert rx.food == 'before_food' and rx.dose == Dose(amount='1', unit='tablet')
     assert rx.filled == {'schedule': 'standard'}
+
+
+def test_a_generic_written_in_devanagari_is_recognised_with_its_said_dose():
+    rx = unknown('पैरासिटामोल').model_copy(update={'quotes': {'name_quote': 'पैरासिटामोल', 'dose_phrase': 'एक'}})
+    done, reference = run(rx)
+    rx = done.medications[0]
+    assert reference.products[rx.product_id].components[0].ingredient == 'Paracetamol'
+    assert rx.dose == Dose(amount='1', unit='tablet') and rx.filled['dose'] == 'unit'

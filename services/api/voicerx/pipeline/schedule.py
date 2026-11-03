@@ -6,26 +6,34 @@ from .numbers import words_to_digits
 
 UNIT_WORDS = {'tablet': 'tablet', 'tablets': 'tablet', 'tab': 'tablet', 'tabs': 'tablet', 'गोली': 'tablet',
               'गोलियाँ': 'tablet', 'टैबलेट': 'tablet', 'capsule': 'capsule', 'capsules': 'capsule',
-              'puff': 'puff', 'puffs': 'puff', 'चम्मच': 'teaspoon', 'teaspoon': 'teaspoon', 'ml': 'ml', 'mg': 'mg'}
+              'puff': 'puff', 'puffs': 'puff', 'चम्मच': 'teaspoon', 'teaspoon': 'teaspoon', 'ml': 'ml', 'mg': 'mg',
+              'ગોળી': 'tablet', 'ગોળીઓ': 'tablet', 'કેપ્સ્યુલ': 'capsule', 'ચમચી': 'teaspoon'}
 DURATIONS = {'day': 'day', 'days': 'day', 'दिन': 'day', 'రోజులు': 'day', 'రోజుల': 'day', 'நாட்கள்': 'day',
              'week': 'week', 'weeks': 'week', 'हफ़्ते': 'week', 'हफ्ते': 'week', 'हफ़्तों': 'week', 'வாரம்': 'week',
-             'month': 'month', 'months': 'month', 'महीने': 'month', 'महीना': 'month', 'महीनों': 'month'}
-SLOTS = {'m': ('morning', 'सुबह', 'subah', 'ఉదయం', 'காலையில்', 'காலை'),
-         'a': ('afternoon', 'दोपहर', 'మధ్యాహ్నం', 'மதியம்'),
-         'e': ('evening', 'शाम', 'సాయంత్రం', 'மாலை'),
-         'n': ('night', 'bedtime', 'रात', 'raat', 'రాత్రి', 'இரவு')}
-FOODS = {'after_food': ('after food', 'after meals', 'खाने के बाद', 'భోజనం తర్వాత', 'சாப்பாட்டுக்கு பின்'),
-         'before_food': ('before food', 'before meals', 'खाने से पहले', 'భోజనం ముందు', 'சாப்பாட்டுக்கு முன்'),
-         'with_food': ('with food', 'with meals', 'खाने के साथ'),
-         'empty_stomach': ('empty stomach', 'खाली पेट')}
+             'month': 'month', 'months': 'month', 'महीने': 'month', 'महीना': 'month', 'महीनों': 'month',
+             'દિવસ': 'day', 'દિવસો': 'day', 'દિવસની': 'day', 'અઠવાડિયા': 'week', 'અઠવાડિયું': 'week',
+             'મહિના': 'month', 'મહિનો': 'month'}
+SLOTS = {'m': ('morning', 'सुबह', 'subah', 'ఉదయం', 'காலையில்', 'காலை', 'સવારે', 'સવાર'),
+         'a': ('afternoon', 'दोपहर', 'మధ్యాహ్నం', 'மதியம்', 'બપોરે', 'બપોર'),
+         'e': ('evening', 'शाम', 'సాయంత్రం', 'மாலை', 'સાંજે', 'સાંજ'),
+         'n': ('night', 'bedtime', 'रात', 'raat', 'రాత్రి', 'இரவு', 'રાત્રે', 'રાત')}
+FOODS = {'after_food': ('after food', 'after meals', 'खाने के बाद', 'భోజనం తర్వాత', 'சாப்பாட்டுக்கு பின்',
+                        'જમ્યા પછી', 'જમ્યા બાદ', 'જમવા પછી'),
+         'before_food': ('before food', 'before meals', 'खाने से पहले', 'భోజనం ముందు', 'சாப்பாட்டுக்கு முன்',
+                         'જમ્યા પહેલાં', 'જમ્યા પહેલા', 'જમતા પહેલાં', 'જમતા પહેલા'),
+         'with_food': ('with food', 'with meals', 'खाने के साथ', 'જમવા સાથે'),
+         'empty_stomach': ('empty stomach', 'खाली पेट', 'ખાલી પેટે', 'ખાલી પેટ')}
 # A meal names a slot, and the word beside it the food rule (spec 2026-11-03, part A). English puts the
 # relation first ("before breakfast", "post-lunch"); Hindi puts it after ("नाश्ते से पहले", "breakfast के बाद").
-MEALS = {'m': ('breakfast', 'नाश्ते', 'नाश्ता'), 'a': ('lunch', 'दोपहर के खाने', 'दोपहर का खाना'),
-         'n': ('dinner', 'supper', 'रात के खाने', 'रात का खाना')}
+MEALS = {'m': ('breakfast', 'नाश्ते', 'नाश्ता', 'નાસ્તા', 'નાસ્તો'), 'a': ('lunch', 'दोपहर के खाने', 'दोपहर का खाना', 'બપોરના જમણ'),
+         'n': ('dinner', 'supper', 'रात के खाने', 'रात का खाना', 'રાતના જમણ', 'રાત્રિભોજન')}
 RELATION_BEFORE = re.compile(r'(before|after|with|pre|post)[\s-]*$')
-RELATION_AFTER = re.compile(r'^\s*(से पहले|के बाद|के साथ)')
-RELATIONS = {'before': 'before_food', 'pre': 'before_food', 'से पहले': 'before_food', 'after': 'after_food',
-             'post': 'after_food', 'के बाद': 'after_food', 'with': 'with_food', 'के साथ': 'with_food'}
+RELATION_AFTER = re.compile(r'^\s*(से पहले|के पहले|के बाद|के साथ|ના પહેલાં|પહેલાં|પહેલા|પછી|બાદ|સાથે)')
+RELATIONS = {'before': 'before_food', 'pre': 'before_food', 'से पहले': 'before_food', 'के पहले': 'before_food',
+             'after': 'after_food',
+             'post': 'after_food', 'के बाद': 'after_food', 'with': 'with_food', 'के साथ': 'with_food',
+             'ના પહેલાં': 'before_food', 'પહેલાં': 'before_food', 'પહેલા': 'before_food', 'પછી': 'after_food',
+             'બાદ': 'after_food', 'સાથે': 'with_food'}
 
 
 def _text(phrase):
@@ -81,7 +89,7 @@ def parse_timing(phrase):
                 return None
             parsed.append(TaperStep(dose=dose, duration=duration, when=_grid(step)))
         return Taper(steps=parsed)
-    if any(w in text for w in ('as needed', 'when needed', 'ज़रूरत', 'जरूरत', 'sos', 'prn')):
+    if any(w in text for w in ('as needed', 'when needed', 'ज़रूरत', 'जरूरत', 'sos', 'prn', 'જરૂર')):
         ns = re.findall(r'\d+', text)
         maximum = int(ns[0]) if len(ns) == 1 and any(w in text for w in ('max', 'at most', 'no more', 'not more', 'ज़्यादा नहीं', 'ज्यादा नहीं')) else None
         return AsNeeded(max_per_day=maximum)
@@ -94,14 +102,14 @@ def parse_timing(phrase):
     if grid:
         return grid
     # "Daily" alone is once a day, never morning and evening: that is twice daily (runbook D-115).
-    known = {'once daily': 1, 'once a day': 1, 'od': 1, 'daily': 1, 'roz': 1, 'रोज़': 1, 'रोज': 1,
+    known = {'once daily': 1, 'once a day': 1, 'od': 1, 'daily': 1, 'roz': 1, 'रोज़': 1, 'रोज': 1, 'રોજ': 1, 'દરરોજ': 1,
              'twice daily': 2, 'twice a day': 2, 'bd': 2, 'bid': 2, 'tds': 3, 'tid': 3, 'three times daily': 3,
              'thrice daily': 3, 'thrice a day': 3, 'qid': 4, 'qds': 4, 'four times daily': 4}
     if text.strip() == 'hs':
         return Grid(m='0', a='0', e='0', n='1')
     if text.strip() in known:
         return Frequency(times=known[text.strip()], period='day')
-    if any(w in text for w in ('दिन में', 'రోజుకి', 'times a day', 'times daily')):
+    if any(w in text for w in ('दिन में', 'రోజుకి', 'times a day', 'times daily', 'દિવસમાં')):
         ns = re.findall(r'\d+', text)
         if len(ns) == 1 and int(ns[0]) > 0:
             return Frequency(times=int(ns[0]), period='day')
