@@ -28,7 +28,7 @@ Facts below were read from Meta's docs on 3 Nov 2026 (Graph API v26.0). Meta cha
 
 ## 2. Fill in `.env`
 
-In the repository root, edit `.env`. It's git-ignored, so create it if it doesn't exist:
+In the repository root, copy the template to `.env`, which is git-ignored: `copy .env.example .env` on Windows, `cp .env.example .env` on macOS or Linux. Then fill in these lines:
 
 ```
 WHATSAPP_TOKEN=<temporary or system-user access token>

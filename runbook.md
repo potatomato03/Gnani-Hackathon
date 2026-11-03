@@ -377,6 +377,7 @@ Gaps added to ASTRA's review: the keyterm leak, the EULA, credit cost, reserved 
 | Follow-up voice and visits | `services/api/voicerx/agent/voice.py`, `agent/visits.py` | On-demand voicing with cache, voice-note transcription, approved-visit scan, `start_followup` |
 | Real WhatsApp channel | `services/api/voicerx/agent/whatsapp.py`, `docs/whatsapp-testing.md` | Cloud API client, webhook parsing and signature check, delivery with the 24-hour window, phone numbers in memory only. Off unless the `WHATSAPP_` settings are in `.env` |
 | WhatsApp calls | `services/api/voicerx/agent/call.py`, `agent/webrtc_call.py` | Half-duplex call loop with VAD, Prisma per turn and Timbre replies; aiortc WebRTC answerer for Meta's Calling API |
+| Settings template | `.env.example` | Every setting the code reads, with empty values; now includes the five `WHATSAPP_` settings. Copy it to `.env` (git-ignored) |
 
 Known coverage gaps: no two-person consultations, no held-out cases, 2 orthopaedic families, 1 family each for Hindi, Tamil and Telugu, and the shortest scripts are under the 15-second target by estimate.
 
