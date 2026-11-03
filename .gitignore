@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+*.env.txt
+Supabase secret/
 
 # Python
 __pycache__/
