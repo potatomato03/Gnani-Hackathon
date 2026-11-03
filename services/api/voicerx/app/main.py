@@ -30,6 +30,9 @@ from .config import REPO_ROOT, load_settings, today_in
 from .db import all_rows, audit, close_pool, one, open_pool, transaction
 from .repo import (approval_of, artifacts_of, encounters_of, get_encounter, get_patient, list_patients, parse_report,
                    patient_summary, report_row)
+from ..pipeline.assemble import product_label
+from .catalog import FORMS, parse_composition
+from .suggest import catalog_product, clinic_index, composition_text, heard_key, shared_index
 from .views import CorrectionRefused, build_resolutions, report_view
 from .worker import TEMPLATES, Worker
 
@@ -50,6 +53,15 @@ class ApiError(Exception):
         self.status, self.code, self.message, self.retryable, self.extra = status, code, message, retryable, extra
 
 
+def warm_up():
+    try:
+        knowledge.warm_up()
+        with transaction() as conn:
+            shared_index(conn, REFERENCE.products)
+    except Exception:
+        log.exception('warm-up failed; the first search will load instead')
+
+
 @asynccontextmanager
 async def lifespan(app):
     settings = load_settings()
@@ -57,8 +69,8 @@ async def lifespan(app):
     open_pool(settings.database_url)
     worker = Worker(settings)
     worker.start()
-    # Load the embedding model in the background so the first reference search isn't slow.
-    threading.Thread(target=knowledge.warm_up, daemon=True).start()
+    # Load the embedding model and the product name index in the background, so the first search isn't slow.
+    threading.Thread(target=warm_up, daemon=True).start()
     yield
     worker.stop()
     close_pool()
@@ -471,6 +483,9 @@ def retry_run(request: Request, run_id: str):
 
 def envelope(conn, session, encounter, row):
     report = parse_report(row)
+    suggestions = {r['medication_id']: {'heard': r['heard'], 'items': r['suggestions']} for r in all_rows(
+        conn, 'select medication_id, heard, suggestions from app.medicine_suggestions where encounter_id = %s',
+        (encounter['id'],))}
     approval = approval_of(conn, encounter['id'], report.version) if report.status == 'approved' else None
     artifacts = [{**a, 'created_at': a['created_at'].isoformat(), 'updated_at': a['updated_at'].isoformat()}
                  for a in artifacts_of(conn, encounter['id'], report.version)] if approval else []
@@ -479,7 +494,7 @@ def envelope(conn, session, encounter, row):
                        approval={'id': approval['id'], 'approver_id': approval['approver_id'],
                                  'approver_name': approval['approver_name'],
                                  'approved_at': approval['approved_at'].isoformat()} if approval else None,
-                       artifacts=artifacts)
+                       artifacts=artifacts, suggestions=suggestions)
 
 
 @app.get('/api/v1/encounters/{encounter_id}/report')
@@ -514,11 +529,29 @@ async def post_resolutions(request: Request, encounter_id: str):
             raise ApiError(409, 'not_in_review', 'Only a draft in review can be corrected.')
         row = report_row(conn, encounter_id, encounter['current_version'], 'draft')
         check_expected(row, body)
+        draft = parse_report(row)
         try:
             corrections = build_resolutions(body.get('resolutions') or [], actor(session), datetime.now(timezone.utc))
-            updated = resolve(parse_report(row), corrections, REFERENCE)
+            # A product from outside the formulary (Indian list, clinic) joins this correction's catalogue.
+            products = dict(REFERENCE.products)
+            for c in corrections:
+                pid = c.value.get('product_id') if c.action == 'choose_product' else None
+                if pid and pid not in products and pid not in draft.products_used:
+                    product = catalog_product(conn, session['organisation_id'], pid, REFERENCE.products)
+                    if product:
+                        products[pid] = product
+            updated = resolve(draft, corrections, REFERENCE.model_copy(update={'products': products}))
         except (CorrectionRefused, ResolutionRefused) as error:
             raise ApiError(422, 'correction_refused', str(error)[:300]) from None
+        # Remember what this doctor meant by words that didn't match exactly; it ranks first next time.
+        heard = {m.id: m.spoken_name for m in draft.checked.medications if m.match != 'exact'}
+        for c in corrections:
+            if c.action == 'choose_product' and c.target in heard:
+                conn.execute('insert into app.medicine_aliases (organisation_id, doctor_id, heard_key, product_id) '
+                             'values (%s, %s, %s, %s) on conflict (organisation_id, doctor_id, heard_key, product_id) '
+                             'do update set times = app.medicine_aliases.times + 1, last_at = now()',
+                             (session['organisation_id'], session['user_id'], heard_key(heard[c.target]),
+                              c.value['product_id']))
         conn.execute('insert into app.report_versions (encounter_id, version, status, report, content_hash, created_by) '
                      "values (%s, %s, 'draft', %s, %s, %s)",
                      (encounter_id, updated.version, Jsonb(updated.model_dump(mode='json')), updated.content_hash,
@@ -618,6 +651,53 @@ def preview_pdf(request: Request, encounter_id: str, version: int | None = None)
         data = pdf.read_bytes()
     return Response(data, media_type='application/pdf',
                     headers={'Content-Disposition': f'inline; filename="preview-v{report.version}.pdf"'})
+
+
+# ---------- Product catalogue (spec 2026-11-03, part C) ----------
+
+@app.get('/api/v1/catalog/search')
+def catalog_search(request: Request, q: str = ''):
+    """Products by name across the formulary, the Indian list and the clinic's own, sound-alikes included."""
+    session = session_of(request)
+    auth.require(session, 'resolve')
+    if len(q.strip()) < 2:
+        return {'items': []}
+    with transaction() as conn:
+        found = {}
+        for pool in (shared_index(conn, REFERENCE.products), clinic_index(conn, session['organisation_id'])):
+            for c in pool.candidates(q[:80], limit=10):
+                if c.entry.id not in found or c.score > found[c.entry.id].score:
+                    found[c.entry.id] = c
+    ranked = sorted(found.values(), key=lambda c: (c.strength_match is not False, c.score), reverse=True)[:10]
+    # Formulary aliases are indexed under the alias ("Pan" for Pan-D); show the product's own label.
+    label = lambda c: product_label(REFERENCE.products[c.entry.id]) if c.entry.id in REFERENCE.products else c.entry.name
+    return {'items': [{'id': c.entry.id, 'label': label(c), 'composition': c.entry.composition,
+                       'tier': c.entry.tier, 'strength_match': c.strength_match} for c in ranked]}
+
+
+@app.post('/api/v1/catalog/products', status_code=201)
+async def add_product(request: Request):
+    """A product the lists lack, added for this clinic and pending review. It can be chosen at once."""
+    session = session_of(request)
+    auth.require(session, 'resolve')
+    body = await request.json()
+    name = ' '.join(str(body.get('name') or '').split())
+    form = str(body.get('form') or 'other')
+    composition = ' '.join(str(body.get('composition') or '').split())
+    if not 2 <= len(name) <= 80:
+        raise ApiError(422, 'invalid_product', 'Give the brand name as on the pack.')
+    if form not in set(FORMS.values()) | {'other'}:
+        raise ApiError(422, 'invalid_product', 'Choose the form from the list.')
+    if not composition or len(composition) > 300 or not all(c.ingredient for c in parse_composition(composition)):
+        raise ApiError(422, 'invalid_product', 'Give the composition, for example "Pantoprazole (40mg)".')
+    product_id = 'cp-' + uuid.uuid4().hex[:12]
+    with transaction() as conn:
+        conn.execute('insert into app.clinic_products (id, organisation_id, name, form, composition, created_by) '
+                     'values (%s, %s, %s, %s, %s, %s)',
+                     (product_id, session['organisation_id'], name, form, composition, session['user_id']))
+        audit(conn, session['user_id'], session['organisation_id'], 'catalog.product_added', 'clinic_product', product_id,
+              {'name': name, 'composition': composition})
+    return {'id': product_id, 'label': name, 'composition': composition, 'tier': 'clinic', 'status': 'pending_review'}
 
 
 # ---------- Reference knowledge ----------

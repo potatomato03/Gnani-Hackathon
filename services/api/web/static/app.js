@@ -431,7 +431,8 @@ async function retryRun(encounter) {
 }
 
 const STEP_TEXT = { transcribing: 'Transcribe the recording with Gnani Prisma', extracting: 'Find findings and medicines', checking: 'Check every quote against what was said',
-  writing: 'Write the report', report_checks: 'Check each report line against its sources', assembling: 'Put the draft together' };
+  writing: 'Write the report', report_checks: 'Check each report line against its sources', assembling: 'Put the draft together',
+  suggesting: 'Suggest products for unclear medicine names' };
 
 function showProcessing(encounter, run) {
   const list = h('ol', { class: 'proc' });
@@ -464,6 +465,8 @@ function showProcessing(encounter, run) {
 const ACTION_TEXT = { choose_product: 'Choose product', set_dose: 'Set dose', set_timing: 'Set timing', set_food: 'Set food',
   set_duration: 'Set duration', remove_medicine: 'Remove medicine', confirm_order: 'Confirm I said it', acknowledge: 'Acknowledge',
   edit_line: 'Edit line', remove_line: 'Remove line', add_line: 'Add a line', dismiss_item: 'Rule out finding' };
+const TIER_TEXT = { formulary: 'In formulary', indian: 'Indian list · unverified', clinic: 'Clinic list · pending review' };
+const PRODUCT_CODES = ['unmatched_product', 'ambiguous_product', 'fuzzy_product_match', 'allergy_conflict'];
 const SOURCE_TEXT = { openfda_label: 'US label (openFDA)', nlem_2022: 'NLEM 2022', jan_aushadhi: 'Jan Aushadhi' };
 
 async function showReview(encounter, view) {
@@ -532,7 +535,7 @@ async function showReview(encounter, view) {
   };
 
   // One editor at a time; every correction carries the doctor's reason (DESIGN.md section 7).
-  function openEditor(action, target, host, issue) {
+  function openEditor(action, target, host, issue, preset) {
     host.querySelector('.editor')?.remove();
     const reason = h('input', { class: 'input', placeholder: 'Why? For example: confirmed with the patient', required: true });
     const fields = h('div');
@@ -540,8 +543,44 @@ async function showReview(encounter, view) {
     const med = medById[target];
     const select = (options, current) => h('select', { class: 'input' }, options.map(([v, l]) => h('option', { value: v, selected: v === current }, l)));
     if (action === 'choose_product') {
-      const options = (med?.candidates?.length ? med.candidates : view.catalog).map(p => [p.id, p.label]);
-      const s = select(options, med?.product_id); fields.append(h('label', { class: 'field' }, h('span', { text: 'Product' }), s));
+      // Suggestions, the matcher's candidates and the formulary; search and "add a product" reach every tier.
+      const options = new Map();
+      (med?.suggestions || []).forEach(s => options.set(s.product_id, `${s.label} · ${TIER_TEXT[s.tier] || s.tier}`));
+      (med?.candidates || []).forEach(c => options.set(c.id, c.label));
+      view.catalog.forEach(p => { if (!options.has(p.id)) options.set(p.id, p.label); });
+      const s = select([...options], preset?.product_id || med?.product_id);
+      const offer = (id, label) => { if (!options.has(id)) { options.set(id, label); s.append(h('option', { value: id }, label)); } s.value = id; };
+      const search = h('input', { class: 'input', type: 'search', placeholder: 'Search all products: formulary, Indian list, clinic' });
+      const found = h('div', { class: 'found' });
+      let searchTimer;
+      search.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(async () => {
+          if (search.value.trim().length < 2) return put(found);
+          try {
+            const { items } = await api('/catalog/search?q=' + encodeURIComponent(search.value));
+            put(found, items.map(p => h('button', { class: 'btn btn-quiet btn-sm', type: 'button',
+              onclick: () => { offer(p.id, `${p.label} · ${TIER_TEXT[p.tier] || p.tier}`); put(found); search.value = ''; } },
+              `${p.label} (${p.composition})`)));
+          } catch (e) { fail(e); }
+        }, 250);
+      });
+      const newName = h('input', { class: 'input', placeholder: 'Brand name as on the pack, e.g. Colaquick' });
+      const newForm = select(['tablet', 'capsule', 'syrup', 'suspension', 'injection', 'sachet', 'powder', 'gel', 'cream', 'drops', 'other'].map(f => [f, f]), 'tablet');
+      const newComposition = h('input', { class: 'input', placeholder: 'Composition, e.g. Collagen Peptide (10g) + Vitamin C (40mg)' });
+      const add = h('details', { class: 'add-product' }, h('summary', { text: 'Add a product that isn’t listed' }),
+        h('label', { class: 'field' }, h('span', { text: 'Brand' }), newName),
+        h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { text: 'Form' }), newForm),
+          h('label', { class: 'field' }, h('span', { text: 'Composition' }), newComposition)),
+        h('p', { class: 'muted small', text: 'Added for this clinic and marked pending review. It can be used at once.' }),
+        h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: async () => {
+          try {
+            const p = await api('/catalog/products', { method: 'POST', body: { name: newName.value, form: newForm.value, composition: newComposition.value } });
+            offer(p.id, `${p.label} · ${TIER_TEXT.clinic}`); add.open = false; toast(`${p.label} added for this clinic.`);
+          } catch (e) { fail(e); }
+        } }, 'Add and select'));
+      fields.append(h('label', { class: 'field' }, h('span', { text: 'Product' }), s), search, found, add);
+      if (preset && med) reason.value = `Heard “${med.spoken_name}”; meant ${preset.label}.`;
       value = () => ({ product_id: s.value });
     } else if (action === 'set_dose') {
       const amount = h('input', { class: 'input', inputmode: 'decimal', value: med?.dose?.amount || '1' });
@@ -599,6 +638,23 @@ async function showReview(encounter, view) {
         h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => editor.remove() }, 'Cancel')));
     host.append(editor);
     editor.querySelector('input, select, textarea')?.focus();
+  }
+
+  // What was heard and what it may have been (spec 2026-11-03, part B). Never applied without a click.
+  function suggestionList(med, card, issue) {
+    const likely = med.suggestions[0]?.likely;
+    return h('div', { class: 'suggest' },
+      h('p', { class: 'where', text: `Heard “${med.spoken_name}”. ${likely ? 'Likely match first; confirm it:' : 'Possible matches; choose the one you meant:'}` }),
+      med.suggestions.map((s, i) => h('div', { class: 'sugg' + (i === 0 && likely ? ' top' : '') },
+        h('div', {},
+          h('b', { text: s.label }),
+          h('div', { class: 'attrs' },
+            h('span', { class: 'chip ' + (s.tier === 'formulary' ? 'ok' : 'off'), text: TIER_TEXT[s.tier] || s.tier }),
+            s.sound_alike_sibling ? h('span', { class: 'chip miss', text: 'Sound-alike: check which' }) : '',
+            s.strength_match === false ? h('span', { class: 'chip off', text: 'Strength differs from what was said' }) : '',
+            s.chosen_before ? h('span', { class: 'chip iris', text: `You chose this before (${s.chosen_before}×)` }) : ''),
+          s.reason ? h('p', { class: 'muted small', text: s.reason }) : ''),
+        h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => openEditor('choose_product', med.id, card, issue, s) }, 'Use this'))));
   }
 
   // Approval panel
@@ -673,6 +729,8 @@ async function showReview(encounter, view) {
         h('span', { class: 'sev', text: issue.severity === 'block' ? 'Must fix' : 'Warning' }), h('b', { text: issue.title }),
         h('p', { class: 'where', text: describe(issue) }),
         issue.title !== issue.message && !issue.message.startsWith(issue.code.replaceAll('_', ' ')) ? h('p', { class: 'where', text: issue.message }) : '');
+      const med = issue.target_kind === 'medicine' ? medById[issue.target] : null;
+      if (canEdit && med?.suggestions?.length && PRODUCT_CODES.includes(issue.code)) card.append(suggestionList(med, card, issue));
       if (canEdit && issue.actions.length) card.append(h('div', { class: 'choices' }, issue.actions.map(a => h('button', { class: 'btn btn-line btn-sm', type: 'button',
         onclick: () => (a === 'edit_line' || a === 'remove_line') && issue.target_kind === 'finding'
           ? (issue.lines[0] ? (showLine(issue.lines[0]), openEditor(a, issue.lines[0], evidence)) : null)

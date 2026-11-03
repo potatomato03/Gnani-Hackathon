@@ -21,6 +21,7 @@ from .clinical import StageFailed, current_ids, process_typed, reference_for
 from .config import REPO_ROOT, read_env
 from .db import audit, one, transaction
 from .repo import approved_reports, clinic_record, doctor_record, parse_report, patient_record, report_row
+from .suggest import suggest
 
 log = logging.getLogger('voicerx.worker')
 LEASE = '10 minutes'
@@ -109,11 +110,17 @@ class Worker(threading.Thread):
         except StageFailed as failure:
             self.fail(run, steps, failure)
             return True
+        suggestions = self.suggestions(draft, transcript, context, on_step)
         with transaction() as conn:
             conn.execute('insert into app.report_versions (encounter_id, version, status, report, content_hash, run_id, '
                          "created_by) values (%s, %s, 'draft', %s, %s, %s, %s)",
                          (context['id'], draft.version, Jsonb(draft.model_dump(mode='json')), draft.content_hash,
                           run['id'], run['created_by']))
+            for medication_id, (heard, items, method) in suggestions.items():
+                conn.execute('insert into app.medicine_suggestions (encounter_id, medication_id, heard, suggestions, method) '
+                             'values (%s, %s, %s, %s, %s) on conflict (encounter_id, medication_id) do update set '
+                             'heard = excluded.heard, suggestions = excluded.suggestions, method = excluded.method',
+                             (context['id'], medication_id, heard, Jsonb(items), Jsonb(method)))
             conn.execute("update app.encounters set state = 'in_review', current_version = %s where id = %s",
                          (draft.version, context['id']))
             conn.execute("update app.runs set state = 'succeeded', stage = null, draft_version = %s, error = null, "
@@ -122,6 +129,28 @@ class Worker(threading.Thread):
                   {'run_id': run['id'], 'version': draft.version,
                    'blocking': sum(i.severity == 'block' for i in draft.issues)})
         return True
+
+    def suggestions(self, draft, transcript, context, on_step):
+        """Ranked suggestions for every medicine not matched exactly. A failure here costs the suggestions,
+        never the draft."""
+        unclear = [m for m in draft.checked.medications if m.match != 'exact']
+        if not unclear:
+            on_step('suggesting', 'skipped')
+            return {}
+        on_step('suggesting', 'running')
+        found = {}
+        try:
+            with transaction() as conn:
+                for rx in unclear:
+                    items, method = suggest(conn, self.llm(), transcript, rx, draft.checked,
+                                            context['organisation_id'], context['clinician_id'], self.reference.products)
+                    found[rx.id] = (rx.spoken_name, items, method)
+        except Exception:
+            log.exception('suggestions failed for %s', context['id'])
+            on_step('suggesting', 'failed')
+            return {}
+        on_step('suggesting', 'succeeded')
+        return found
 
     def transcript(self, run, context, on_step):
         """Prisma's transcript of the recording; a retried run reuses the one it already paid for."""

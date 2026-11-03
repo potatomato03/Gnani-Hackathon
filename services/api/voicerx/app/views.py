@@ -71,7 +71,8 @@ def _actions(issue, kind, cited_by):
     return actions
 
 
-def report_view(report, encounter_id, patient_id, organisation_id, catalog, capabilities, approval=None, artifacts=()):
+def report_view(report, encounter_id, patient_id, organisation_id, catalog, capabilities, approval=None, artifacts=(),
+                suggestions=None):
     medication_ids = {m.id for m in report.checked.medications}
     cited_by = {}
     line_refs = []
@@ -98,7 +99,9 @@ def report_view(report, encounter_id, patient_id, organisation_id, catalog, capa
             'product_label': product_label(products[rx.product_id]) if rx.product_id in products else None,
             'candidates': [{'id': pid, 'label': product_label(products[pid])} for pid in rx.candidate_ids if pid in products],
             'row': rows[rx.id].model_dump(mode='json') if rx.id in rows else None,
-            'issue_uids': [v['uid'] for v in issue_views if v['target'] == rx.id]})
+            'issue_uids': [v['uid'] for v in issue_views if v['target'] == rx.id],
+            # Offered only while the doctor still has to choose; once a product is set they are history.
+            'suggestions': (suggestions or {}).get(rx.id, {}).get('items', []) if rx.match != 'exact' else []})
     blocking = sum(i.severity == 'block' for i in report.issues)
     return {
         'schema_version': SCHEMA_VERSION, 'encounter_id': encounter_id, 'patient_id': patient_id,

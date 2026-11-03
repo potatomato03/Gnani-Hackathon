@@ -4,9 +4,9 @@ import re
 import unicodedata
 from ..contracts.extraction import CheckedExtraction, DroppedItem, ResolvedMedication
 from ..contracts.issues import Issue
-from ..contracts.medication import Taper, Start
+from ..contracts.medication import AsNeeded, Frequency, Grid, Taper, Start
 from .match_medicine import MatchResult, match_medicine
-from .schedule import parse_dose, parse_timing, parse_food, parse_duration, parse_start
+from .schedule import parse_dose, parse_timing, parse_food, parse_duration, parse_meal, parse_start
 
 NEGATION_WORDS = {'no', 'not', 'nil', 'without', 'denies', 'negative', 'never', 'नहीं', 'नही', 'न', 'ना', 'बिना',
                   'లేదు', 'లేవు', 'కాదు', 'இல்லை', 'இல்லாமல்'}
@@ -162,8 +162,22 @@ def check_extraction(extraction, transcript, reference, patient_id, visit_date, 
         if isinstance(parsed['schedule'], Taper) and parsed['food'] is None and not clean['food_phrase']:
             # A taper is quoted whole in its timing phrase, so its single food rule is said there too.
             parsed['food'] = parse_food(clean['timing_phrase'])
+        # "before breakfast" also says when: no timing, or "once a day" with one meal, becomes that slot.
+        # A slot that contradicts the meal stays as said and is flagged; nothing is chosen between them.
+        meal_conflict = False
+        meal = parse_meal(clean['food_phrase']) or parse_meal(clean['timing_phrase'])
+        if meal and not isinstance(parsed['schedule'], (AsNeeded, Taper)):
+            slots = meal[1]
+            schedule = parsed['schedule']
+            if schedule is None or (isinstance(schedule, Frequency) and schedule.period == 'day'
+                                    and schedule.times == len(slots)):
+                parsed['schedule'] = Grid(**{s: '1' if s in slots else '0' for s in 'maen'})
+            elif isinstance(schedule, Grid) and {s for s in 'maen' if float(getattr(schedule, s)) > 0} != slots:
+                meal_conflict = True
         mapping = {'dose_phrase': 'dose', 'timing_phrase': 'schedule', 'food_phrase': 'food', 'duration_phrase': 'duration', 'start_phrase': 'start'}
         unresolved = [field for field, output in mapping.items() if clean[field] and parsed[output] is None]
+        if meal_conflict and 'timing_phrase' not in unresolved:
+            unresolved.append('timing_phrase')
         parsed['start'] = parsed['start'] or Start()
         match = match_medicine(rx.spoken_name, reference.products, current_ids)
         quoted_match = match_medicine(rx.name_quote, reference.products, current_ids)

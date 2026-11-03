@@ -18,6 +18,14 @@ FOODS = {'after_food': ('after food', 'after meals', 'खाने के बा
          'before_food': ('before food', 'before meals', 'खाने से पहले', 'భోజనం ముందు', 'சாப்பாட்டுக்கு முன்'),
          'with_food': ('with food', 'with meals', 'खाने के साथ'),
          'empty_stomach': ('empty stomach', 'खाली पेट')}
+# A meal names a slot, and the word beside it the food rule (spec 2026-11-03, part A). English puts the
+# relation first ("before breakfast", "post-lunch"); Hindi puts it after ("नाश्ते से पहले", "breakfast के बाद").
+MEALS = {'m': ('breakfast', 'नाश्ते', 'नाश्ता'), 'a': ('lunch', 'दोपहर के खाने', 'दोपहर का खाना'),
+         'n': ('dinner', 'supper', 'रात के खाने', 'रात का खाना')}
+RELATION_BEFORE = re.compile(r'(before|after|with|pre|post)[\s-]*$')
+RELATION_AFTER = re.compile(r'^\s*(से पहले|के बाद|के साथ)')
+RELATIONS = {'before': 'before_food', 'pre': 'before_food', 'से पहले': 'before_food', 'after': 'after_food',
+             'post': 'after_food', 'के बाद': 'after_food', 'with': 'with_food', 'के साथ': 'with_food'}
 
 
 def _text(phrase):
@@ -96,10 +104,31 @@ def parse_timing(phrase):
     return None
 
 
+def parse_meal(phrase):
+    """(food rule, slots) for a phrase that ties the medicine to meals, or None. Meals with a missing
+    relation, or with different relations ("before breakfast and after dinner"), give None."""
+    text = _text(phrase)
+    pairs = set()
+    for slot, words in MEALS.items():
+        for word in words:
+            for match in re.finditer(re.escape(word), text):
+                before = RELATION_BEFORE.search(text[max(0, match.start() - 12):match.start()])
+                after = RELATION_AFTER.match(text[match.end():match.end() + 12])
+                relation = (before or after)
+                if relation is None:
+                    return None
+                pairs.add((RELATIONS[relation[1]], slot))
+    foods = {food for food, _ in pairs}
+    return (foods.pop(), {slot for _, slot in pairs}) if len(foods) == 1 else None
+
+
 def parse_food(phrase):
     text = _text(phrase)
-    found = [key for key, terms in FOODS.items() if any(w in text for w in terms)]
-    return found[0] if len(found) == 1 else None
+    found = {key for key, terms in FOODS.items() if any(w in text for w in terms)}
+    meal = parse_meal(phrase)
+    if meal:
+        found.add(meal[0])
+    return found.pop() if len(found) == 1 else None
 
 
 def parse_start(phrase, visit_date: date):

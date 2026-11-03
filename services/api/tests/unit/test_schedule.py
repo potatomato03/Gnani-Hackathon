@@ -110,3 +110,30 @@ def test_a_cap_is_never_cut_off_as_a_correction(phrase, want):
 def test_real_corrections_still_keep_only_the_new_value():
     assert parse_duration("five days, sorry, three days, not five") == Duration(value=3, unit="day")
     assert parse_duration("पाँच दिन, नहीं, तीन दिन") == Duration(value=3, unit="day")
+
+
+# Meal phrases name both a food rule and a slot (spec 2026-11-03, part A).
+@pytest.mark.parametrize("phrase, food, slots", [
+    ("before breakfast", "before_food", "m"),
+    ("post-lunch", "after_food", "a"),
+    ("once a day post-lunch", "after_food", "a"),
+    ("after dinner", "after_food", "n"),
+    ("pre-lunch", "before_food", "a"),
+    ("with breakfast", "with_food", "m"),
+    ("after supper", "after_food", "n"),
+    ("नाश्ते से पहले", "before_food", "m"),
+    ("रात के खाने के बाद", "after_food", "n"),
+    ("दोपहर के खाने के बाद", "after_food", "a"),
+    ("breakfast के बाद", "after_food", "m"),
+    ("after breakfast and after dinner", "after_food", "mn"),
+])
+def test_meal_phrases_give_food_and_slot(phrase, food, slots):
+    from voicerx.pipeline.schedule import parse_meal
+    assert parse_food(phrase) == food
+    assert parse_meal(phrase) == (food, set(slots))
+
+
+@pytest.mark.parametrize("phrase", ["before breakfast and after dinner", "breakfast", "after food", "", None])
+def test_mixed_or_mealless_phrases_give_no_meal(phrase):
+    from voicerx.pipeline.schedule import parse_meal
+    assert parse_meal(phrase) is None

@@ -246,3 +246,33 @@ def test_misspelt_brand_is_never_exact():
     checked = run(meds=[med(spoken_name="Dollo 650", name_quote="Dollo 650")],
                   transcript="Dollo 650, one tablet twice daily after food for three days.")
     assert "fuzzy_product_match" in codes(checked) and checked.medications[0].product_id is None
+
+
+def test_a_meal_phrase_alone_sets_food_and_slot():
+    # Only a food phrase was said, as in "<medicine> before breakfast".
+    checked = run(meds=[med(timing_phrase=None, food_phrase="before breakfast")],
+                  transcript="Dolo six fifty, one tablet before breakfast for three days.")
+    rx = checked.medications[0]
+    assert rx.food == "before_food" and rx.schedule.model_dump() == {"type": "grid", "m": "1", "a": "0", "e": "0", "n": "0"}
+    assert "food_phrase" not in rx.unresolved and "unparsed_food" not in codes(checked)
+
+
+def test_once_a_day_with_a_meal_becomes_that_slot():
+    checked = run(meds=[med(timing_phrase="once a day", food_phrase="post-lunch")],
+                  transcript="Dolo six fifty, one tablet once a day post-lunch for three days.")
+    rx = checked.medications[0]
+    assert rx.food == "after_food" and rx.schedule.model_dump() == {"type": "grid", "m": "0", "a": "1", "e": "0", "n": "0"}
+
+
+def test_twice_daily_with_one_meal_keeps_the_frequency():
+    checked = run(meds=[med(timing_phrase="twice daily", food_phrase="after dinner")],
+                  transcript="Dolo six fifty, one tablet twice daily after dinner for three days.")
+    assert checked.medications[0].schedule == Frequency(times=2, period="day")
+
+
+def test_a_slot_that_contradicts_the_meal_stays_as_said_and_is_flagged():
+    checked = run(meds=[med(timing_phrase="at night", food_phrase="after breakfast")],
+                  transcript="Dolo six fifty, one tablet at night after breakfast for three days.")
+    rx = checked.medications[0]
+    assert rx.schedule.model_dump() == {"type": "grid", "m": "0", "a": "0", "e": "0", "n": "1"}
+    assert "timing_phrase" in rx.unresolved and "unparsed_timing" in codes(checked)

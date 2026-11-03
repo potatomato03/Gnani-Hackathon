@@ -6,7 +6,7 @@ from ..pipeline.extract import extract
 from ..pipeline.run import active_after
 from ..pipeline.write_report import write_report
 
-STEPS = ['transcribing', 'extracting', 'checking', 'writing', 'report_checks', 'assembling']
+STEPS = ['transcribing', 'extracting', 'checking', 'writing', 'report_checks', 'assembling', 'suggesting']
 
 
 class StageFailed(Exception):

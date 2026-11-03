@@ -221,6 +221,16 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .transcript { white-space: pre-wrap; font-size: 15px; line-height: 1.6; max-height: 320px; overflow: auto; }
 .transcript mark { background: var(--marigold); border-radius: 4px; padding: 0 2px; }
 
+.suggest { margin: 4px 0 10px; }
+.sugg { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; padding: 8px 10px; margin-top: 6px;
+  border-radius: 12px; background: rgba(255, 255, 255, .75); border: 1px solid var(--line); }
+.sugg.top { border-color: var(--ok); box-shadow: inset 3px 0 0 var(--ok); }
+.sugg b { font-size: 14px; }
+.sugg p { margin: 4px 0 0; }
+.found { display: grid; gap: 4px; margin: 6px 0; }
+.found .btn { justify-content: flex-start; height: auto; min-height: 34px; white-space: normal; text-align: left; }
+.add-product { margin-top: 8px; }
+.add-product summary { cursor: pointer; color: var(--iris); font-size: 14px; font-weight: 500; margin-bottom: 8px; }
 .editor { margin-top: 10px; padding: 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-2); }
 .editor .row { margin-bottom: 10px; }
 
