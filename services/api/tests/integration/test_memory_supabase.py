@@ -44,3 +44,19 @@ def test_items_and_documents_round_trip(key):
                           sha256='f' * 64, pages=1, method='pdf_text', reading=reading, received_at=at)
     assert store.add_document(doc) is True and store.add_document(doc) is False
     assert store.documents(key)[0].reading.findings[0].flag == 'low'
+
+
+
+def test_text_with_nul_characters_is_stored(key):
+    """pypdf can return NUL characters, which Postgres text and jsonb refuse (found in the live check, 4 Nov)."""
+    store = SupabaseMemoryStore(URL)
+    at = datetime(2026, 11, 4, 10, tzinfo=timezone.utc)
+    reading = ReportReading(is_medical_report=True, report_type='CBC\x00', report_date=None,
+                            transcription='Hb\x00 10.2', medicines_named=[], findings=[])
+    doc = PatientDocument(id=f'{key}-n', patient_key=key, visit_ref='v', mime='application/pdf', sha256='e' * 64,
+                          pages=1, method='pdf_text', reading=reading, received_at=at)
+    assert store.add_document(doc) is True
+    assert store.documents(key)[0].reading.transcription == 'Hb 10.2'
+    store.add([MemoryItem(id=f'{key}-n1', patient_key=key, visit_ref='v', kind='document_fact', text='Hb\x00: 10',
+                          quote='Hb\x00 10', source='document', source_ref=None, at=at)])
+    assert store.recent(key)[0].text == 'Hb: 10'

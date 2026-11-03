@@ -92,3 +92,29 @@ def test_patient_key_never_contains_the_number():
     key = patient_key_for_number("910000000001", "secret")
     assert len(key) == 16 and "0000000001" not in key
     assert key == patient_key_for_number("910000000001", "secret") != patient_key_for_number("910000000001", "x")
+
+
+
+class EmptyStore:
+    """A primary that works but holds nothing: e.g. Supabase after a write fell back to the local store."""
+
+    def add(self, items):
+        pass
+
+    def recent(self, patient_key, limit=20):
+        return []
+
+    def add_document(self, doc):
+        raise psycopg.errors.UntranslatableCharacter("NUL in text")
+
+    def documents(self, patient_key):
+        return []
+
+
+def test_safe_memory_reads_include_what_fell_back(tmp_path):
+    local = LocalMemoryStore(tmp_path)
+    local.add([item("a", "k1")])
+    safe = SafeMemory(EmptyStore(), local)
+    assert safe.add_document(document("k1")) is True              # primary refused it; kept locally
+    assert [d.sha256[0] for d in safe.documents("k1")] == ["a"]
+    assert [i.id for i in safe.recent("k1")] == ["a"]

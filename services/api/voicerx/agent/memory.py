@@ -85,6 +85,11 @@ class LocalMemoryStore:
         return self._read(self._file('documents', patient_key), PatientDocument)
 
 
+def _no_nul(value):
+    """Postgres text and jsonb refuse NUL characters, which pypdf can return (live check, 4 Nov)."""
+    return value.replace('\x00', '').replace('\\u0000', '') if isinstance(value, str) else value   # raw, or JSON-escaped
+
+
 class SupabaseMemoryStore:
     """Postgres over SUPABASE_DB_URL. Row-level security is on with no policy: only the backend reads (D-103)."""
 
@@ -106,7 +111,7 @@ class SupabaseMemoryStore:
             db.cursor().executemany(
                 f'insert into patient_memory ({", ".join(self.COLUMNS)}, synthetic) '
                 f'values ({", ".join(["%s"] * len(self.COLUMNS))}, true) on conflict (id) do nothing',
-                [tuple(getattr(i, c) for c in self.COLUMNS) for i in items])
+                [tuple(_no_nul(getattr(i, c)) for c in self.COLUMNS) for i in items])
 
     def recent(self, patient_key, limit=20):
         with self._connect() as db:
@@ -121,7 +126,7 @@ class SupabaseMemoryStore:
                 'received_at, synthetic) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, true) '
                 'on conflict (patient_key, sha256) do nothing',
                 (doc.id, doc.patient_key, doc.visit_ref, doc.mime, doc.sha256, doc.pages, doc.method,
-                 doc.reading.model_dump_json(), doc.received_at))
+                 _no_nul(doc.reading.model_dump_json()), doc.received_at))
             return cursor.rowcount == 1
 
     def documents(self, patient_key):
@@ -134,7 +139,8 @@ class SupabaseMemoryStore:
 
 
 class SafeMemory:
-    """Supabase first; on any database or network error, the local store, so the chat never stops.
+    """Supabase first; on any database or network error, the local store, so the chat never stops. Reads include
+    what was written locally, so nothing that fell back goes missing.
     ponytail: writes made during an outage stay local and aren't copied up later; add a sync if outages matter."""
 
     def __init__(self, primary, fallback):
@@ -151,13 +157,19 @@ class SafeMemory:
         return self._try('add', items)
 
     def recent(self, patient_key, limit=20):
-        return self._try('recent', patient_key, limit)
+        found = {i.id: i for i in self._try('recent', patient_key, limit)}
+        for i in self.fallback.recent(patient_key, limit):
+            found.setdefault(i.id, i)
+        return sorted(found.values(), key=lambda i: i.at)[-limit:]
 
     def add_document(self, doc):
         return self._try('add_document', doc)
 
     def documents(self, patient_key):
-        return self._try('documents', patient_key)
+        found = {d.id: d for d in self._try('documents', patient_key)}
+        for d in self.fallback.documents(patient_key):
+            found.setdefault(d.id, d)
+        return sorted(found.values(), key=lambda d: d.received_at)
 
 
 def memory_from_env(state_dir: Path, env_path: Path = ENV_FILE):
