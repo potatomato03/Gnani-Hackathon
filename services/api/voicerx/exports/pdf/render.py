@@ -23,42 +23,60 @@ def render_html(report, box):
                                                              groups=REPORT_GROUPS)
 
 
-def find_browser():
+def find_browsers():
+    """Every installed browser that can print headless: PDF_BROWSER first, then Edge, Chrome, Chromium."""
+    x86 = Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)'))
+    programs = Path(os.environ.get('PROGRAMFILES', 'C:/Program Files'))
+    local = Path(os.environ.get('LOCALAPPDATA', 'C:/nonexistent'))
     candidates = [os.environ.get('PDF_BROWSER'),
-        str(Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft/Edge/Application/msedge.exe'),
-        str(Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Microsoft/Edge/Application/msedge.exe'),
+        x86 / 'Microsoft/Edge/Application/msedge.exe', programs / 'Microsoft/Edge/Application/msedge.exe',
+        programs / 'Google/Chrome/Application/chrome.exe', x86 / 'Google/Chrome/Application/chrome.exe',
+        local / 'Google/Chrome/Application/chrome.exe',
         '/usr/bin/chromium', '/usr/bin/google-chrome']
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file():
-            return Path(candidate)
-    raise FileNotFoundError('no headless browser; set PDF_BROWSER')
+    found = [Path(c) for c in candidates if c and Path(c).is_file()]
+    return list(dict.fromkeys(found))
+
+
+def find_browser():
+    browsers = find_browsers()
+    if not browsers:
+        raise FileNotFoundError('no headless browser; set PDF_BROWSER')
+    return browsers[0]
 
 
 def html_to_pdf(html, out_pdf: Path):
-    browser = find_browser()
+    """Print with the first browser that produces a PDF. One that exits without a PDF hands over to the next
+    (Edge 156 on the dev machine printed nothing, runbook C-74); one that stalls stops the attempt."""
+    browsers = find_browsers() or [find_browser()]
     out_pdf = Path(out_pdf).resolve()
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pdf-', dir=out_pdf.parent, ignore_cleanup_errors=True) as temporary:
         root = Path(temporary)
         source, target = root / 'report.html', root / 'report.pdf'
         source.write_text(html, encoding='utf-8')
-        command = [str(browser), '--headless=new', '--disable-gpu', '--no-pdf-header-footer',
-                   '--no-first-run', '--no-default-browser-check', '--disable-extensions',
-                   '--user-data-dir=' + str(root / 'profile'), '--print-to-pdf=' + str(target), source.as_uri()]
-        # No captured pipes: Edge's helper processes can hold them open after a timeout, and a captured
-        # run then waits forever. A stalled browser is killed with all its children.
-        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL,
-                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        try:
-            returncode = process.wait(timeout=90)
-        except subprocess.TimeoutExpired:
-            _kill_tree(process)
-            raise RuntimeError('headless browser timed out') from None
-        if returncode or not target.exists() or not target.read_bytes().startswith(b'%PDF'):
-            raise RuntimeError('headless browser failed to produce a PDF')
-        target.replace(out_pdf)
-    return out_pdf
+        for n, browser in enumerate(browsers):
+            if _print(browser, source, target, root / f'profile-{n}'):
+                target.replace(out_pdf)
+                return out_pdf
+    raise RuntimeError('headless browser failed to produce a PDF')
+
+
+def _print(browser, source, target, profile):
+    """True when this browser wrote the PDF. Raises when it stalls."""
+    command = [str(browser), '--headless=new', '--disable-gpu', '--no-pdf-header-footer',
+               '--no-first-run', '--no-default-browser-check', '--disable-extensions',
+               '--user-data-dir=' + str(profile), '--print-to-pdf=' + str(target), source.as_uri()]
+    # No captured pipes: Edge's helper processes can hold them open after a timeout, and a captured
+    # run then waits forever. A stalled browser is killed with all its children.
+    process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL,
+                               creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    try:
+        returncode = process.wait(timeout=90)
+    except subprocess.TimeoutExpired:
+        _kill_tree(process)
+        raise RuntimeError('headless browser timed out') from None
+    return not returncode and target.exists() and target.read_bytes().startswith(b'%PDF')
 
 
 def _kill_tree(process):

@@ -28,6 +28,49 @@ def test_stalled_browser_is_killed_with_its_children_and_never_hangs(monkeypatch
     assert calls[0]["stdout"] is subprocess.DEVNULL and calls[0]["stderr"] is subprocess.DEVNULL
 
 
+def fake_browsers(monkeypatch, works):
+    """Browsers named in `works` print the PDF; the others exit cleanly without one, as Edge 156 did (runbook C-74)."""
+    from pathlib import Path
+
+    from voicerx.exports.pdf import render
+    tried = []
+
+    class Browser:
+        pid = 1
+
+        def __init__(self, command, **options):
+            tried.append(Path(command[0]).name)
+            if tried[-1] in works:
+                target = next(c for c in command if c.startswith("--print-to-pdf=")).split("=", 1)[1]
+                Path(target).write_bytes(b"%PDF-1.7 fake")
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(render, "find_browsers", lambda: [Path("msedge.exe"), Path("chrome.exe")])
+    monkeypatch.setattr(render.subprocess, "Popen", Browser)
+    return tried
+
+
+def test_a_browser_that_prints_nothing_hands_over_to_the_next(monkeypatch, tmp_path):
+    tried = fake_browsers(monkeypatch, works={"chrome.exe"})
+    pdf = html_to_pdf("<p>x</p>", tmp_path / "r.pdf")
+    assert tried == ["msedge.exe", "chrome.exe"] and pdf.read_bytes().startswith(b"%PDF")
+
+
+def test_the_first_browser_that_prints_is_the_only_one_run(monkeypatch, tmp_path):
+    tried = fake_browsers(monkeypatch, works={"msedge.exe", "chrome.exe"})
+    html_to_pdf("<p>x</p>", tmp_path / "r.pdf")
+    assert tried == ["msedge.exe"]
+
+
+def test_no_browser_printing_is_an_error(monkeypatch, tmp_path):
+    tried = fake_browsers(monkeypatch, works=set())
+    with pytest.raises(RuntimeError, match="failed to produce a PDF"):
+        html_to_pdf("<p>x</p>", tmp_path / "r.pdf")
+    assert tried == ["msedge.exe", "chrome.exe"] and not (tmp_path / "r.pdf").exists()
+
+
 def test_draft_shows_synthetic_banner_and_draft_watermark(draft_report):
     html = render_html(draft_report, None)
     assert "SYNTHETIC DATA" in html and "DRAFT, NOT APPROVED" in html
