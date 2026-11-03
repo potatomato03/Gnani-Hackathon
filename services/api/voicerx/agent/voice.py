@@ -23,6 +23,27 @@ class VoiceRefused(Exception):
     pass
 
 
+def repair_wav_sizes(data: bytes) -> bytes:
+    """Timbre streams WAV with the RIFF and data sizes left at 0xFFFFFFFF (live check, 3 Nov 2026).
+
+    Read as written, such a header claims hours of audio. Set both sizes from the bytes actually present, so
+    the length check, Prisma and the browser all see the real clip. A correct header is returned unchanged.
+    """
+    if len(data) < 12 or data[:4] != b'RIFF' or data[8:12] != b'WAVE':
+        return data
+    clip, offset = bytearray(data), 12
+    while offset + 8 <= len(clip):
+        size = int.from_bytes(clip[offset + 4:offset + 8], 'little')
+        if clip[offset:offset + 4] == b'data':
+            real = len(clip) - offset - 8
+            if size > real:
+                clip[offset + 4:offset + 8] = (real - real % 2).to_bytes(4, 'little')
+            break
+        offset += 8 + size + (size & 1)
+    clip[4:8] = (len(clip) - 8).to_bytes(4, 'little')
+    return bytes(clip)
+
+
 def check_wav(data: bytes) -> float:
     if len(data) > MAX_BYTES:
         raise VoiceRefused('voice note is too large')
@@ -66,6 +87,9 @@ def voice_message(conv: Conversation, message_id: str, speech, cache_dir: Path):
 
 
 def transcribe_voice_note(conv: Conversation, wav_bytes: bytes, speech) -> FollowUpRecord:
+    if len(wav_bytes) > MAX_BYTES:
+        raise VoiceRefused('voice note is too large')
+    wav_bytes = repair_wav_sizes(wav_bytes)
     check_wav(wav_bytes)
     transcript = speech.transcribe(wav_bytes, stt_languages(conv.language))
     return receive(conv, text=transcript.text, source='prisma')
@@ -78,5 +102,6 @@ def synthetic_voice_note(conv: Conversation, text: str, speech, cache_dir: Path)
     language = tts_language(conv.language)
     path = Path(cache_dir) / f'{cache_name(TTS_MODEL, PATIENT_VOICE, language, "wav16k", text)}.wav'
     if not path.exists():
-        _write(path, speech.synthesize(text, language, PATIENT_VOICE, container='wav', sample_rate=16000))
+        _write(path, repair_wav_sizes(speech.synthesize(text, language, PATIENT_VOICE, container='wav',
+                                                        sample_rate=16000)))
     return transcribe_voice_note(conv, path.read_bytes(), speech)

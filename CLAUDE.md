@@ -60,7 +60,7 @@ These bind all pipeline code. The spec and plan have the full list.
 
 - **Test-first.** Write the test, see it fail for the expected reason, make it pass, then run the whole suite before committing.
 - **Never weaken, skip or delete a test to get green.** If a test looks wrong, record why in the runbook as a correction and fix it only if the spec supports the fix.
-- **Keep the runbook current, in the same commit as the change it describes** (D-03). Add entries at the end of each section and never rewrite history: mark an old entry `Replaced` and add a new one. New decisions get the next `D-` number with a status (Confirmed, Assistant call, Proposed, Open, Replaced). Mistakes get a `C-` row, ambiguous requests get a `J-` row, and open questions get a `Q-` row. A decision you make yourself is an **Assistant call**, which the team can overrule. As of the last runbook update, the highest numbers in use are D-112, C-60, J-24 and Q-28.
+- **Keep the runbook current, in the same commit as the change it describes** (D-03). Add entries at the end of each section and never rewrite history: mark an old entry `Replaced` and add a new one. New decisions get the next `D-` number with a status (Confirmed, Assistant call, Proposed, Open, Replaced). Mistakes get a `C-` row, ambiguous requests get a `J-` row, and open questions get a `Q-` row. A decision you make yourself is an **Assistant call**, which the team can overrule. As of the last runbook update, the highest numbers in use are D-112, C-61, J-24 and Q-29.
 - **Report eval results as numerator/denominator with coverage.** Name the build, prompt version and data. Synthetic results are not evidence of real-clinic performance.
 - **Live model calls only when the task needs them.** Otherwise use fakes, fixtures and the cache under `runs/`.
 - **Clinical and language content you write is a draft.** Mark it pending review. You are not a clinical reviewer, and Telugu and Tamil need a native speaker. Cases stop at `auto_checked` until an independent person reviews them (D-28).
@@ -70,7 +70,7 @@ These bind all pipeline code. The spec and plan have the full list.
 
 Cloud sessions run in a Linux container as root, with no `.env`, no `../.venv`, no `../DATA`, no GPU and no Ollama. The runbook's Windows paths (`../.venv/Scripts/python`, `D:\Study\JANANI\…`, Edge) describe Aditya's laptop and don't apply here.
 
-Set up and run the tests (checked on `claude/vibrant-archimedes-umbogz` in a cloud container: 471 passed, 2 skipped):
+Set up and run the tests (checked on `claude/vibrant-archimedes-umbogz` in a cloud container: 474 passed, 2 skipped):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -q -r services/api/requirements.txt -r tools/corpus/requirements.txt
@@ -84,7 +84,7 @@ mkdir -p runs && PYTHONPATH=services/api PDF_BROWSER=$PWD/tools/cloud/headless-c
 - PDF rendering needs `PDF_BROWSER=tools/cloud/headless-chrome.sh`. That wrapper runs the pre-installed chrome-headless-shell with `--no-sandbox`. Always set it: without it the renderer finds `/usr/bin/google-chrome`, which stalls on `--print-to-pdf` here, and tests that render a PDF hang. Don't run `playwright install`.
 - The web demo: `cd apps/web && npm install && npm run lint && npm run build`. To check it in a browser, start the API (`PYTHONPATH=services/api .venv/bin/uvicorn voicerx.app:app --port 8000`) and `npx next start -p 3000` in the background, then `NODE_PATH=$(npm root -g) node apps/web/scripts/e2e.mjs <screenshot-dir>`. Start the API with `VOICERX_FAKE_SPEECH=1` to cover the voice controls without spending Gnani credits. Stop the servers by PID (`ps -eo pid,args`), not `pkill -f`, which can match and kill the shell running it.
 - Module commands need `PYTHONPATH=services/api`, for example `python -m voicerx.pipeline.run --help`.
-- Gnani voice needs `GNANI_API_KEY` as an environment variable in the cloud environment's settings (never pasted in chat). Without it, `/health` reports `speech: off` and the voice endpoints return 503. Each Prisma or Timbre call spends credits (rule 7): keep calls on demand, and report live results as worked or failed only (Q-04).
+- Gnani voice needs `GNANI_API_KEY`, preferably as an environment variable in the cloud environment's settings (never pasted in chat). A `GNANI_API_KEY=` line in the repo's ignored `.env` also works, but it disappears with the container. Without either, `/health` reports `speech: off` and the voice endpoints return 503. Each Prisma or Timbre call spends credits (rule 7): keep calls on demand, and report live results as worked or failed only (Q-04). The live check on 3 Nov (runbook Verification) confirmed both endpoints through our code. Timbre returns WAV with streaming header sizes, which `repair_wav_sizes` fixes (C-61).
 - Provider keys exist only if they're set as environment secrets. Without them, don't attempt live Gemini, Groq or Gnani calls. Ollama is never available here. Cached and typed paths work offline.
 - `tools/corpus/build_formulary.py` and the audio tools need `../DATA`, Whisper or the GPU. They can't run here.
 - Commit the work you want to keep and push it to the session branch. The container is temporary, and `runs/` is never committed.

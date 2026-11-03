@@ -6,7 +6,8 @@ import pytest
 from voicerx.agent.conversation import advance, start
 from voicerx.agent.demo import build_visit
 from voicerx.agent.templates import load_templates
-from voicerx.agent.voice import VoiceRefused, synthetic_voice_note, transcribe_voice_note, voice_message
+from voicerx.agent.voice import (VoiceRefused, check_wav, repair_wav_sizes, synthetic_voice_note,
+                                  transcribe_voice_note, voice_message)
 from voicerx.ingest.gnani import Transcript
 
 
@@ -142,3 +143,41 @@ def test_english_patient_uses_english_hints(visits, tmp_path):
     transcribe_voice_note(conv, wav(), speech)
     voice_message(conv, conv.messages[0].id, speech, tmp_path)
     assert speech.calls[0][1] == "en-IN,hi-IN" and speech.calls[1][2] == "en-IN"
+
+
+def streaming_wav(seconds=1.0, rate=16000):
+    """What Timbre returned in the live check (3 Nov): RIFF and data sizes left at 0xFFFFFFFF, as a stream."""
+    clip = bytearray(wav(seconds, rate))
+    clip[4:8] = b"\xff\xff\xff\xff"
+    clip[40:44] = b"\xff\xff\xff\xff"
+    return bytes(clip)
+
+
+class StreamingSpeech(FakeSpeech):
+    def synthesize(self, text, language, voice, container="mp3", sample_rate=24000):
+        self.calls.append(("synthesize", text, language, voice, container))
+        return streaming_wav(1.5) if container == "wav" else b"ID3-fake-mp3"
+
+
+def test_streaming_wav_sizes_are_repaired_from_the_real_length():
+    fixed = repair_wav_sizes(streaming_wav(1.5))
+    assert check_wav(fixed) == pytest.approx(1.5)
+    assert int.from_bytes(fixed[4:8], "little") == len(fixed) - 8
+    assert repair_wav_sizes(wav(1.0)) == wav(1.0)   # a correct header is left alone
+
+
+def test_synthetic_voice_note_accepts_timbre_streaming_wav(asthma, tmp_path):
+    speech = StreamingSpeech("Montair कब लेनी है?")
+    synthetic_voice_note(asthma, "Montair कब लेनी है?", speech, tmp_path)
+    assert [c[0] for c in speech.calls] == ["synthesize", "transcribe"]
+    assert asthma.messages[-1].kind == "answer" and "MONTAIR" in asthma.messages[-1].text
+    cached = next(tmp_path.glob("*.wav")).read_bytes()
+    assert check_wav(cached) == pytest.approx(1.5)   # cached with real sizes, so the browser can play it
+
+
+def test_streaming_header_voice_note_is_measured_by_its_real_length(asthma):
+    speech = FakeSpeech("Montair कब लेनी है?")
+    transcribe_voice_note(asthma, streaming_wav(1.0), speech)
+    assert speech.calls[0][0] == "transcribe"
+    with pytest.raises(VoiceRefused, match="longer than 30"):
+        transcribe_voice_note(asthma, streaming_wav(31), FakeSpeech("x"))
