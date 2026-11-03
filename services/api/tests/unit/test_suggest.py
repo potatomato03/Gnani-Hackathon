@@ -104,3 +104,34 @@ def test_a_brand_family_sibling_outside_the_candidates_still_counts():
     assert confident_choice([cand(pan_d, 0.83, True)], [pan_d, pan_40], 'Bann 40') is None
     # "Pandee": Pan-D 1.0, Pan 40 well behind.
     assert confident_choice([cand(pan_d, 1.0)], [pan_d, pan_40], 'Pandee').entry.id == 'p-3'
+
+
+def test_for_an_adult_with_no_form_said_the_tablet_is_taken_over_its_syrup():
+    # Runbook D-120: a liquid or injection of the same brand doesn't make an adult's tablet ambiguous.
+    from voicerx.app.suggest import confident_choice
+    tablet = entry('p-1', 'Combiflam tablet', 'Ibuprofen (400mg) + Paracetamol (325mg)', 'formulary')
+    syrup = entry('in-2', 'Combiflam Suspension', 'Ibuprofen (100mg) + Paracetamol (162.5mg)', popularity=0.8)
+    found = [cand(tablet, 0.95), cand(syrup, 0.95)]
+    assert confident_choice(found, [tablet, syrup], 'Combyflam', adult=True).entry.id == 'p-1'
+    assert confident_choice(found, [tablet, syrup], 'Combyflam', adult=False) is None
+    # Said as a syrup, the syrup is meant, so the choice stays open.
+    assert confident_choice(found, [tablet, syrup], 'Combyflam syrup', adult=True) is None
+
+
+def test_a_product_on_the_clinics_list_needs_a_little_less_sound():
+    from voicerx.app.suggest import confident_choice
+    listed = entry('p-1', 'Combiflam tablet', 'Ibuprofen (400mg) + Paracetamol (325mg)', 'formulary')
+    obscure = entry('in-2', 'Cypaflam Tablet', 'Ibuprofen (400mg) + Paracetamol (325mg)', popularity=0.05)
+    assert confident_choice([cand(listed, 0.86), cand(obscure, 0.82)]).entry.id == 'p-1'
+    popular = entry('in-3', 'Combiflam Tablet', 'Ibuprofen (400mg) + Paracetamol (325mg)', popularity=0.9)
+    assert confident_choice([cand(popular, 0.86)]) is None
+
+
+def test_for_an_adult_a_childrens_sachet_of_the_same_drug_yields_to_the_capsule():
+    from voicerx.app.suggest import confident_choice
+    capsule = entry('in-1', 'Redotil 100mg Capsule', 'Racecadotril (100mg)', popularity=0.76)
+    sachet = entry('in-2', 'Redotil Sachet', 'Racecadotril (10mg)', popularity=0.39)
+    found = [cand(capsule, 0.93), cand(sachet, 0.93)]
+    assert confident_choice(found, [capsule, sachet], 'Redotyl', adult=True).entry.id == 'in-1'
+    other = entry('in-3', 'Redomix Sachet', 'Probiotic (1g)', popularity=0.5)
+    assert confident_choice([cand(capsule, 0.93), cand(other, 0.92)], [], 'Redotyl', adult=True) is None

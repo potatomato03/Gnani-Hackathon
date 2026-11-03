@@ -13,8 +13,8 @@ from pydantic import Field
 from ..contracts.medication import Strict
 from ..pipeline.assemble import product_label
 from . import knowledge
-from .catalog import (Candidate, CatalogEntry, NameIndex, brand_stem, product_from_row, similarity, standing,
-                      strengths)
+from .catalog import (FORMS, Candidate, CatalogEntry, NameIndex, brand_stem, parse_composition, product_from_row,
+                      similarity, standing, strengths)
 
 log = logging.getLogger('voicerx.suggest')
 PROMPT_VERSION = 'suggest-v4'
@@ -50,6 +50,9 @@ SYSTEM = (
 # Taking a match without asking needs a close sound, a listed or widely sold product, no strength conflict, no
 # other well-known brand nearly as close, and no sibling of the same brand family with another composition.
 AUTO_SOUND = 0.88
+# A product on the clinic's own list (formulary or clinic-added) is what its doctors prescribe; it may sound a
+# little less alike, with the same margins over every well-known rival.
+AUTO_SOUND_LISTED = 0.84
 AUTO_MARGIN = 0.05
 # A stated strength that only one listed product shares is strong evidence: "Vysolon ten" can sound only 0.77 like
 # Wysolone 10, but the closer names are other strengths. Then a lower sound will do, with a wider margin.
@@ -60,6 +63,23 @@ RIVAL_POPULAR = 0.3
 # A sibling of the same brand family with another composition (Pan 40 beside Pan-D) is the doctor's call unless
 # the top sounds clearly closer: "Pandee" is Pan-D (1.0) far more than Pan 40 (0.8); "Bann 40" is not (D-92).
 FAMILY_MARGIN = 0.15
+# For an adult, a brand named without its form means the tablet or capsule: its syrup, drops or injection
+# neither win nor make the choice ambiguous. A form said aloud is always respected (runbook D-120).
+NOT_THE_ADULT_DEFAULT = {'syrup', 'suspension', 'drops', 'solution', 'injection'}
+# ...and a sachet or granules of the same drugs (a children's strength) yield to its tablet or capsule.
+CHILD_FORMS = {'sachet', 'granules', 'powder'}
+
+
+def entry_form(entry):
+    return next((FORMS[w] for w in entry.name.lower().split() if w in FORMS), None)
+
+
+def form_said(heard):
+    return any(w in FORMS for w in re.split(r'[^a-z]+', heard.lower()))
+
+
+def ingredients(entry):
+    return {c.ingredient.lower() for c in parse_composition(entry.composition)}
 
 _index, _lock = None, threading.Lock()
 
@@ -170,9 +190,12 @@ def candidates_for(pools, rx):
     return found
 
 
-def confident_choice(found, family=(), heard=''):
+def confident_choice(found, family=(), heard='', adult=False):
     """The candidate to take without asking, or None. family: other products of the top's brand family, from the
     whole index, since a sibling that sounds less alike may not be among the candidates."""
+    if adult and not form_said(heard):
+        found = [c for c in found if entry_form(c.entry) not in NOT_THE_ADULT_DEFAULT]
+        family = [e for e in family if entry_form(e) not in NOT_THE_ADULT_DEFAULT]
     # Products of another strength than the one said are out of the running.
     ranked = sorted((c for c in found if c.strength_match is not False), key=lambda c: c.score + standing(c.entry),
                     reverse=True)
@@ -182,6 +205,11 @@ def confident_choice(found, family=(), heard=''):
     said = top.strength_match is True
     floor, margin = (AUTO_SOUND_WITH_STRENGTH, AUTO_MARGIN_WITH_STRENGTH) if said else (AUTO_SOUND, AUTO_MARGIN)
     listed = lambda e, popular: e.tier in ('formulary', 'clinic') or e.popularity >= popular
+    if not said and top.entry.tier in ('formulary', 'clinic'):
+        floor = AUTO_SOUND_LISTED
+    # For an adult, the same drugs as a sachet are the children's strength, not a rival to the tablet.
+    child_version = lambda e: (adult and not form_said(heard) and entry_form(e) in CHILD_FORMS
+                               and entry_form(top.entry) in ('tablet', 'capsule') and ingredients(e) == ingredients(top.entry))
     if top.score < floor or not listed(top.entry, AUTO_POPULAR):
         return None
     # A rival with the same composition is the same medicine under another name; it doesn't count.
@@ -192,7 +220,7 @@ def confident_choice(found, family=(), heard=''):
     rivals += [(e, similarity(heard, e)) for e in family
                if e.id != top.entry.id and (not numbers or numbers & e.numbers)]
     for entry, score in rivals:
-        if not listed(entry, RIVAL_POPULAR) or same(entry, top.entry):
+        if not listed(entry, RIVAL_POPULAR) or same(entry, top.entry) or child_version(entry):
             continue
         if first(entry) == first(top.entry) and score >= top.score - FAMILY_MARGIN:
             return None
@@ -211,7 +239,7 @@ def clinic_choices(conn, organisation_id, heard):
         (organisation_id, heard_key(heard))).fetchall()}
 
 
-def finder_for(conn, organisation_id, formulary):
+def finder_for(conn, organisation_id, formulary, adult=False):
     """For the completion step: the clinic's earlier choice for these heard words, else a clear match."""
     pools = [shared_index(conn, formulary), clinic_index(conn, organisation_id)]
 
@@ -223,10 +251,10 @@ def finder_for(conn, organisation_id, formulary):
             if product:
                 return product, 'learned'
         found = candidates_for(pools, rx).values()
-        best = confident_choice(found)
+        best = confident_choice(found, heard=rx.spoken_name, adult=adult)
         if best:
             family = [e for pool in pools for e in pool.family(best.entry)]
-            best = confident_choice(found, family, rx.spoken_name)
+            best = confident_choice(found, family, rx.spoken_name, adult)
         product = catalog_product(conn, organisation_id, best.entry.id, formulary) if best else None
         return (product, 'auto') if product else None
     return find

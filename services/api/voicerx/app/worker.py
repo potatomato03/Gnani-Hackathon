@@ -109,7 +109,7 @@ class Worker(threading.Thread):
             transcript = context['text'] if context['kind'] == 'typed' else self.transcript(run, context, on_step)
             draft = process_typed(context['id'], transcript, patient['id'], doctor['id'], context['visit_date'],
                                   self.llm(), reference, current_ids(history), on_step, rules=load_rules(REPO_ROOT),
-                                  generics=load_generics(REPO_ROOT), finder=self.finder(context))
+                                  generics=load_generics(REPO_ROOT), finder=self.finder(context, patient))
         except StageFailed as failure:
             self.fail(run, steps, failure)
             return True
@@ -133,13 +133,15 @@ class Worker(threading.Thread):
                    'blocking': sum(i.severity == 'block' for i in draft.issues)})
         return True
 
-    def finder(self, context):
-        """Looks up the doctor's earlier choices and clear matches, each in its own short transaction; a failure
-        leaves that medicine for the doctor, never the run."""
+    def finder(self, context, patient):
+        """Looks up the clinic's earlier choices and clear matches, each in its own short transaction; a failure
+        leaves that medicine for the doctor, never the run. An adult's unnamed form means the tablet (D-120)."""
+        adult = bool(patient.get('birth_year')) and context['visit_date'].year - patient['birth_year'] >= 18
+
         def find(rx):
             try:
                 with transaction() as conn:
-                    return finder_for(conn, context['organisation_id'], self.reference.products)(rx)
+                    return finder_for(conn, context['organisation_id'], self.reference.products, adult)(rx)
             except Exception:
                 log.exception('matching %s failed; left for the doctor', rx.spoken_name)
                 return None
