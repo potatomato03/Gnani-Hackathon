@@ -90,10 +90,11 @@ class FakeSpeech:
     name = "fake"
 
     def __init__(self, transcript=""):
-        self.transcript, self.calls = transcript, []
+        self.transcript, self.calls, self.languages = transcript, [], []
 
     def transcribe(self, audio, language_code, filename="voice-note.wav"):
         self.calls.append(("transcribe", filename, len(audio)))
+        self.languages.append(language_code)
         return Transcript(text=self.transcript, detected_language=None, truncated=False)
 
     def synthesize(self, text, language, voice, container="mp3", sample_rate=24000):
@@ -128,6 +129,8 @@ def message(kind="text", sender=PHONE, mid=None, **content):
     item = {"from": sender, "id": mid or f"wamid.in.{next(_ids)}", "timestamp": "1762164000", "type": kind}
     if kind == "text":
         item["text"] = {"body": content["text"]}
+    elif kind == "interactive" and "row" in content:
+        item["interactive"] = {"type": "list_reply", "list_reply": {"id": content["row"], "title": "x"}}
     elif kind == "interactive":
         item["interactive"] = {"type": "button_reply", "button_reply": {"id": content["button"], "title": "x"}}
     elif kind == "audio":
@@ -136,9 +139,15 @@ def message(kind="text", sender=PHONE, mid=None, **content):
             "contacts": [{"wa_id": sender, "profile": {"name": "Tester"}}], "messages": [item]}
 
 
-def join(client, case="fam-010-a"):
+def join(client, case="fam-010-a", choose="native"):
+    """JOIN a visit. The first message asks for the language (D-116); by default the patient picks the visit's
+    own language, so the rest of the chat is as before. choose=None leaves the question open."""
     assert post(client, message(text=f"JOIN {case}")).status_code == 200
-    return next(v for v in client.get("/visits").json() if v["case_id"] == case)["conversation_id"]
+    visit = next(v for v in client.get("/visits").json() if v["case_id"] == case)
+    if choose and not client.get(f"/conversations/{visit['conversation_id']}").json()["language_chosen"]:
+        language = visit["language"] if choose == "native" else choose
+        assert post(client, message(kind="interactive", button=f"lang_{language}")).status_code == 200
+    return visit["conversation_id"]
 
 
 # Webhook security
@@ -190,12 +199,14 @@ def test_join_starts_the_visit_and_sends_the_summary(world):
     conversation_id = join(client)
     conv = client.get(f"/conversations/{conversation_id}").json()
     assert conv["plan"]["channel"] == "whatsapp"
-    summary = graph.sent[0]
+    assert [b["reply"]["id"] for b in graph.sent[0]["interactive"]["action"]["buttons"]] == ["lang_hi-IN", "lang_en-IN"]
+    summary = graph.sent[1]
     assert summary["to"] == PHONE and summary["type"] == "interactive"
     assert summary["interactive"]["type"] == "list"         # five quick-menu buttons go as a list (D-117)
-    assert summary["interactive"]["body"]["text"] == conv["messages"][0]["text"] and "MONTAIR" in graph.texts()[0]
+    first_summary = next(m for m in conv["messages"] if m["kind"] == "summary")
+    assert summary["interactive"]["body"]["text"] == first_summary["text"] and "MONTAIR" in graph.texts()[1]
     rows = summary["interactive"]["action"]["sections"][0]["rows"]
-    assert [r["id"] for r in rows] == [b["id"] for b in conv["messages"][0]["buttons"]]
+    assert [r["id"] for r in rows] == [b["id"] for b in first_summary["buttons"]]
     assert all(len(r["title"]) <= 24 for r in rows) and len(summary["interactive"]["action"]["button"]) <= 20
     assert conv["contact"] and PHONE not in json.dumps(conv)
 
@@ -495,3 +506,102 @@ def test_enable_calling_switches_calling_on_for_the_number():
     GraphClient(CONFIG, transport=transport).enable_calling()
     assert sent == [("POST", "/v26.0/pnid-1/settings",
                      {"calling": {"status": "ENABLED", "call_icon_visibility": "DEFAULT"}})]
+
+
+
+# Conversational bot (D-115 to D-118): the model's reading, the language question, the menu list, memory
+
+from voicerx.agent.memory import LocalMemoryStore, patient_key_for_number  # noqa: E402
+from voicerx.contracts.followup import Understanding  # noqa: E402
+
+HASH_KEY = "test-patient-hash-key"
+
+
+class Talk:
+    """A WhatsApp test world with patient memory and a stub model whose reading each test sets."""
+
+    def __init__(self, tmp_path):
+        self.graph, self.clock, self.speech = FakeGraph(), Clock(), FakeSpeech()
+        self.memory = LocalMemoryStore(tmp_path / "memory")
+        self.reading = None
+        channel = WhatsAppChannel(CONFIG, GraphClient(CONFIG, transport=self.graph), now=self.clock,
+                                  hash_key=HASH_KEY)
+        self.client = TestClient(create_app(tmp_path, speech=self.speech, whatsapp=channel, memory=self.memory,
+                                            nlu=lambda conv, text: self.reading))
+        self.patient_key = patient_key_for_number(PHONE, HASH_KEY)
+
+    def reads(self, **fields):
+        base = dict(intent="other", answer_value=None, medicine_id=None, language=None, warning_signs=[], quote="")
+        self.reading = Understanding(**{**base, **fields})
+
+    def tasks(self):
+        conv_id = next(v for v in self.client.get("/visits").json() if v["case_id"] == "fam-001-a")["conversation_id"]
+        return [t["kind"] for t in self.client.get(f"/conversations/{conv_id}").json()["tasks"]]
+
+
+@pytest.fixture
+def talk(tmp_path):
+    return Talk(tmp_path)
+
+
+def choose_english(talk):
+    assert post(talk.client, message(kind="interactive", button="lang_en-IN")).status_code == 200
+
+
+def test_join_asks_for_the_language_with_two_buttons(talk):
+    join(talk.client, "fam-001-a", choose=None)
+    first = talk.graph.sent[0]
+    assert first["interactive"]["type"] == "button"
+    assert [b["reply"]["id"] for b in first["interactive"]["action"]["buttons"]] == ["lang_hi-IN", "lang_en-IN"]
+    choose_english(talk)
+    summary = talk.graph.sent[-1]
+    assert summary["interactive"]["type"] == "list" and "Your doctor prescribed" in summary["interactive"]["body"]["text"]
+
+
+def test_list_reply_works_as_a_menu_tap(talk):
+    join(talk.client, "fam-001-a", choose=None)
+    choose_english(talk)
+    post(talk.client, message(kind="interactive", row="menu_doctor"))
+    assert "callback" in talk.tasks()
+
+
+def test_records_reach_memory_once_under_the_patient_key(talk, tmp_path):
+    join(talk.client, "fam-001-a", choose=None)
+    choose_english(talk)
+    talk.reads(intent="problem", quote="I feel dizzy")
+    post(talk.client, message(text="I feel dizzy after the tablet"))
+    talk.reads(intent="greeting", quote="thanks")
+    post(talk.client, message(text="thanks"))
+    items = talk.memory.recent(talk.patient_key)
+    assert [i.kind for i in items].count("problem") == 1 and items[0].quote == "I feel dizzy after the tablet"
+    assert PHONE not in "".join(p.read_text(encoding="utf-8") for p in (tmp_path / "memory").rglob("*.jsonl"))
+
+
+def test_voice_note_transcript_goes_through_the_model(talk):
+    join(talk.client, "fam-001-a", choose=None)
+    choose_english(talk)
+    talk.graph.media = ogg_opus(2.0)
+    talk.speech.transcript = "the medicine makes me dizzy"
+    talk.reads(intent="problem", quote="makes me dizzy")
+    post(talk.client, message(kind="audio"))
+    assert "side_effect" in talk.tasks() and talk.speech.languages[-1] == "en-IN,hi-IN"
+
+
+def test_patient_key_survives_app_secret_rotation():
+    rotated = WhatsAppConfig(token=TOKEN, phone_number_id="pnid-1", app_secret="another-secret",
+                             verify_token="verify-me", test_numbers=frozenset({PHONE}))
+    a = WhatsAppChannel(CONFIG, GraphClient(CONFIG), hash_key="h").contact(PHONE)
+    b = WhatsAppChannel(rotated, GraphClient(rotated), hash_key="h").contact(PHONE)
+    assert a == b == patient_key_for_number(PHONE, "h")
+
+
+def test_images_and_documents_are_parsed_with_their_type():
+    from voicerx.agent.whatsapp import parse_webhook
+    value = message(kind="image")
+    value["messages"][0]["image"] = {"id": "media-img", "mime_type": "image/jpeg", "sha256": "x"}
+    doc = message(kind="document")
+    doc["messages"][0]["document"] = {"id": "media-doc", "mime_type": "application/pdf", "filename": "cbc.pdf"}
+    payload = {"entry": [{"changes": [{"value": value}, {"value": doc}]}]}
+    image, document = parse_webhook(payload)[0]
+    assert (image.kind, image.media_id, image.mime) == ("image", "media-img", "image/jpeg")
+    assert (document.kind, document.media_id, document.mime) == ("document", "media-doc", "application/pdf")

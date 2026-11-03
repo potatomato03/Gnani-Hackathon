@@ -86,13 +86,13 @@ def voice_message(conv: Conversation, message_id: str, speech, cache_dir: Path):
     return name, cached
 
 
-def transcribe_voice_note(conv: Conversation, wav_bytes: bytes, speech) -> FollowUpRecord:
+def transcribe_voice_note(conv: Conversation, wav_bytes: bytes, speech, nlu=None) -> FollowUpRecord:
     if len(wav_bytes) > MAX_BYTES:
         raise VoiceRefused('voice note is too large')
     wav_bytes = repair_wav_sizes(wav_bytes)
     check_wav(wav_bytes)
     transcript = speech.transcribe(wav_bytes, stt_languages(conv.language))
-    return receive(conv, text=transcript.text, source='prisma')
+    return receive(conv, text=transcript.text, source='prisma', nlu=nlu)
 
 
 def ogg_opus_seconds(data: bytes) -> float:
@@ -107,7 +107,7 @@ def ogg_opus_seconds(data: bytes) -> float:
     return max(granule - pre_skip, 0) / 48000
 
 
-def transcribe_ogg_voice_note(conv: Conversation, ogg_bytes: bytes, speech) -> FollowUpRecord:
+def transcribe_ogg_voice_note(conv: Conversation, ogg_bytes: bytes, speech, nlu=None) -> FollowUpRecord:
     """A WhatsApp voice note (Ogg Opus) goes to Prisma as it is; Prisma reads ogg from the file name.
     A clip that is too long or not Ogg Opus gets a fixed reply and costs no Prisma call."""
     try:
@@ -118,10 +118,10 @@ def transcribe_ogg_voice_note(conv: Conversation, ogg_bytes: bytes, speech) -> F
     except (ValueError, VoiceRefused):
         return voice_not_used(conv)
     transcript = speech.transcribe(ogg_bytes, stt_languages(conv.language), filename='voice-note.ogg')
-    return receive(conv, text=transcript.text, source='prisma')
+    return receive(conv, text=transcript.text, source='prisma', nlu=nlu)
 
 
-def synthetic_voice_note(conv: Conversation, text: str, speech, cache_dir: Path) -> FollowUpRecord:
+def synthetic_voice_note(conv: Conversation, text: str, speech, cache_dir: Path, nlu=None) -> FollowUpRecord:
     text = text.strip()
     if not text or len(text) > MAX_SYNTHETIC_CHARS:
         raise VoiceRefused(f'synthetic voice note needs 1 to {MAX_SYNTHETIC_CHARS} characters of text')
@@ -130,4 +130,4 @@ def synthetic_voice_note(conv: Conversation, text: str, speech, cache_dir: Path)
     if not path.exists():
         _write(path, repair_wav_sizes(speech.synthesize(text, language, PATIENT_VOICE, container='wav',
                                                         sample_rate=16000)))
-    return transcribe_voice_note(conv, path.read_bytes(), speech)
+    return transcribe_voice_note(conv, path.read_bytes(), speech, nlu)

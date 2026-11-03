@@ -159,7 +159,7 @@ async def run_call(conv, audio: CallAudio, speech, cache_dir: Path, respond, max
     return 'limit'
 
 
-def call_turn(conv, text):
+def call_turn(conv, text, nlu=None):
     """One thing the caller said, through the same rules as a typed message.
 
     Returns (the gated clinic replies to speak, whether to end the call). The call ends after a warning sign
@@ -169,7 +169,7 @@ def call_turn(conv, text):
     from .gate import GateRefused
     messages, tasks = len(conv.messages), len(conv.tasks)
     try:
-        record = receive(conv, text=text, source='call')
+        record = receive(conv, text=text, source='call', nlu=nlu)
     except GateRefused:
         return [], True
     replies = [m.text for m in conv.messages[messages:] if m.sender == 'clinic']

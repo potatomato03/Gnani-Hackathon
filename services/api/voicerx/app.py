@@ -26,9 +26,13 @@ from .agent.gate import CONSENT, GateRefused
 from .agent.voice import (MAX_BYTES, VoiceRefused, synthetic_voice_note, transcribe_ogg_voice_note,
                           transcribe_voice_note, voice_message)
 from .agent.call import call_turn, run_call
+from .agent.memory import (PLAIN_KEY, LocalMemoryStore, items_from_record, memory_from_env,
+                           patient_key_for_simulated)
+from .agent.understand import make_nlu
 from .agent.whatsapp import JOIN, DeliveryHeld, WhatsAppChannel, WhatsAppError, parse_webhook, scrub, verify_signature
 from .contracts.followup import TASK_ORDER, Conversation
-from .ingest.gnani import SpeechError, speech_from_env
+from .ingest.gnani import ENV_FILE, SpeechError, speech_from_env
+from .llm.client import build_client
 from .pipeline.assemble import table_medicines
 
 AUDIO_NAME = re.compile(r'[0-9a-f]{32}\.mp3')
@@ -64,14 +68,28 @@ def default_speech():
     return speech_from_env()
 
 
+def default_nlu(state_dir: Path, memory):
+    """The model that reads free text (D-115), when any provider is configured; else None (rules only)."""
+    try:
+        client = build_client(ENV_FILE, state_dir / 'llm-cache', quick=True)
+    except (ValueError, OSError):
+        return None
+    return make_nlu(client, memory)
+
+
 def create_app(state_dir: Path | None = None, runs_root: Path | None = None, speech=AUTO,
-               whatsapp=AUTO, call_media=None) -> FastAPI:
+               whatsapp=AUTO, call_media=None, memory=AUTO, nlu=AUTO) -> FastAPI:
     # By default the app reads runs/ and keeps its state in runs/followup-demo/. Given only a state dir (tests),
-    # it reads nothing outside it, and real WhatsApp stays off unless a channel is passed in.
+    # it reads nothing outside it: real WhatsApp, Supabase memory and the model stay off unless passed in.
+    real = state_dir is None
     if whatsapp is AUTO:
-        whatsapp = WhatsAppChannel.from_env() if state_dir is None else None
-    runs_root = Path(runs_root or (visit_store.RUNS if state_dir is None else state_dir))
+        whatsapp = WhatsAppChannel.from_env() if real else None
+    runs_root = Path(runs_root or (visit_store.RUNS if real else state_dir))
     state_dir = Path(state_dir or visit_store.STATE)
+    if memory is AUTO:
+        memory = memory_from_env(state_dir) if real else LocalMemoryStore(state_dir / 'memory')
+    if nlu is AUTO:
+        nlu = default_nlu(state_dir, memory) if real else None
     audio_dir = state_dir / 'audio'
     speech = default_speech() if speech is AUTO else speech
     lock = threading.RLock()
@@ -112,7 +130,21 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             conversations[conversation_id] = chat.attach(stored, visit_for(stored))
         return conversations[conversation_id]
 
+    def remember(conv):
+        """Write the records not yet in patient memory (D-118). Memory trouble never stops the chat."""
+        if conv.patient_key is None:
+            conv.patient_key = conv.contact or patient_key_for_simulated(conv)
+        new = conv.records[conv.remembered:]
+        if not new:
+            return
+        try:
+            memory.add([i for record in new for i in items_from_record(conv, record)])
+            conv.remembered = len(conv.records)
+        except Exception as error:   # the local store failing too: keep going, retry on the next save
+            log.warning('patient memory not written: %s', type(error).__name__)
+
     def view(conv, **extra):
+        remember(conv)
         if whatsapp is not None and conv.plan.channel == 'whatsapp':
             try:
                 whatsapp.deliver(conv, speech, audio_dir)
@@ -133,9 +165,9 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             raise HTTPException(503, 'voice is off: GNANI_API_KEY is not set')
         return speech
 
-    def start(visit, restart):
+    def start(visit, restart, ask_language=False):
         try:
-            conv = visit_store.start_followup(visit, state_dir, restart=restart)
+            conv = visit_store.start_followup(visit, state_dir, restart=restart, ask_language=ask_language)
         except GateRefused as refusal:
             raise HTTPException(409, f'not started: {refusal}') from None
         conversations[conv.id] = conv
@@ -179,12 +211,12 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             return sorted(out, key=lambda v: (v['source'] != 'demo', order.get(v['case_id'], 99), v['visit_date']))
 
     @app.post('/visits/{visit_id}/start')
-    def start_visit(visit_id: str, restart: bool = False):
+    def start_visit(visit_id: str, restart: bool = False, ask_language: bool = False):
         with lock:
             all_visits()
             if visit_id not in known:
                 raise HTTPException(404, 'unknown approved visit')
-            return start(known[visit_id], restart)
+            return start(known[visit_id], restart, ask_language)
 
     # Older demo routes, kept for the first version of the web page.
     @app.get('/demo/visits')
@@ -192,12 +224,12 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
         return [v for v in list_visits() if v['source'] == 'demo']
 
     @app.post('/demo/visits/{case_id}/start')
-    def start_demo(case_id: str):
+    def start_demo(case_id: str, ask_language: bool = False):
         with lock:
             match = [v for v in all_visits() if v.source == 'demo' and v.case_id == case_id]
             if not match:
                 raise HTTPException(404, 'unknown demo visit')
-            return start(match[0], restart=True)
+            return start(match[0], restart=True, ask_language=ask_language)
 
     @app.post('/demo/reset')
     def reset():
@@ -218,7 +250,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             conv = conversation(conversation_id)
             typed_here(conv)
             try:
-                chat.receive(conv, text=inbound.text, button=inbound.button)
+                chat.receive(conv, text=inbound.text, button=inbound.button, nlu=nlu)
             except GateRefused as refusal:
                 raise HTTPException(409, f'not sent: {refusal}') from None
             return view(conv)
@@ -264,7 +296,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             conv = conversation(conversation_id)
             typed_here(conv)
             try:
-                transcribe_voice_note(conv, clip, need_speech())
+                transcribe_voice_note(conv, clip, need_speech(), nlu)
             except VoiceRefused as refusal:
                 raise HTTPException(422, str(refusal)) from None
             except SpeechError as error:
@@ -279,7 +311,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             conv = conversation(conversation_id)
             typed_here(conv)
             try:
-                synthetic_voice_note(conv, body.text, need_speech(), audio_dir)
+                synthetic_voice_note(conv, body.text, need_speech(), audio_dir, nlu)
             except VoiceRefused as refusal:
                 raise HTTPException(422, str(refusal)) from None
             except SpeechError as error:
@@ -303,6 +335,15 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             tasks.sort(key=lambda t: t['created_at'], reverse=True)
             tasks.sort(key=lambda t: TASK_ORDER.index(t['kind']))
             return tasks
+
+    @app.get('/patients/{patient_key}/memory')
+    def patient_memory(patient_key: str):
+        """What one patient told the clinic and the reports they sent (D-118). Local only: the tunnel guard
+        keeps it off the internet."""
+        if not PLAIN_KEY.fullmatch(patient_key):
+            raise HTTPException(404, 'unknown patient')
+        return {'items': [i.model_dump(mode='json') for i in memory.recent(patient_key, 200)],
+                'documents': [d.model_dump(mode='json') for d in memory.documents(patient_key)]}
 
     # Real WhatsApp, private testing only (runbook D-113): the webhook Meta calls through the tunnel.
 
@@ -408,7 +449,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
 
         def respond(text):
             with lock:
-                replies, end = call_turn(conv, text)
+                replies, end = call_turn(conv, text, nlu)
                 view(conv)   # the replies also go to the WhatsApp chat as text
                 return replies, end
 
@@ -446,7 +487,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
                 if visit is None:
                     channel.send_help(item.sender, visit_codes(visits))
                     return
-                conv = visit_store.start_followup(visit, state_dir, restart=True)
+                conv = visit_store.start_followup(visit, state_dir, restart=True, ask_language=True)
                 conv.plan.channel, conv.contact, conv.delivered = 'whatsapp', contact, 0
                 conv.last_inbound_at, conv.last_inbound_voice = channel.now(), False
                 conversations[conv.id], bound[contact] = conv, conv.id
@@ -459,7 +500,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
             conv.last_inbound_at, conv.last_inbound_voice = channel.now(), item.kind == 'audio'
             try:
                 if item.kind == 'text':
-                    chat.receive(conv, text=(item.text or '')[:2000])
+                    chat.receive(conv, text=(item.text or '')[:2000], nlu=nlu)
                 elif item.kind == 'button':
                     chat.receive(conv, button=item.button)
                 elif item.kind == 'audio':
@@ -468,7 +509,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
                     else:
                         clip = channel.graph.download_media(item.media_id)   # memory only, never saved
                         try:
-                            transcribe_ogg_voice_note(conv, clip, speech)
+                            transcribe_ogg_voice_note(conv, clip, speech, nlu)
                         except SpeechError:
                             chat.voice_not_used(conv)
                 else:

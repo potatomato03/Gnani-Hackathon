@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ..ingest.gnani import CLINIC_VOICE, ENV_FILE, TTS_MODEL, SpeechError, read_env, ssl_context, tts_language
+from .memory import patient_key_for_number
 
 GRAPH_BASE = 'https://graph.facebook.com'
 GRAPH_VERSION = 'v26.0'
@@ -197,10 +198,11 @@ def verify_signature(body: bytes, header: str | None, app_secret: str) -> bool:
 class Inbound:
     sender: str
     message_id: str
-    kind: str                 # text, button, audio, or the WhatsApp type we don't handle
+    kind: str                 # text, button, audio, image, document, or the WhatsApp type we don't handle
     text: str | None = None
     button: str | None = None
     media_id: str | None = None
+    mime: str | None = None   # image and document: the type WhatsApp reports (checked again on download)
 
 
 @dataclass
@@ -238,10 +240,15 @@ def parse_webhook(payload):
                     inbound.text = (item.get('text') or {}).get('body', '')
                 elif kind == 'interactive' and (item.get('interactive') or {}).get('type') == 'button_reply':
                     inbound.kind, inbound.button = 'button', item['interactive']['button_reply'].get('id')
+                elif kind == 'interactive' and (item.get('interactive') or {}).get('type') == 'list_reply':
+                    inbound.kind, inbound.button = 'button', item['interactive']['list_reply'].get('id')
                 elif kind == 'button':   # a quick-reply button on a template message
                     inbound.kind, inbound.text = 'text', (item.get('button') or {}).get('text', '')
                 elif kind == 'audio':
                     inbound.media_id = (item.get('audio') or {}).get('id')
+                elif kind in ('image', 'document'):
+                    media = item.get(kind) or {}
+                    inbound.media_id, inbound.mime = media.get('id'), media.get('mime_type')
                 messages.append(inbound)
             for item in value.get('calls') or []:
                 session = item.get('session') or {}
@@ -253,8 +260,9 @@ def parse_webhook(payload):
 class WhatsAppChannel:
     name = 'whatsapp'
 
-    def __init__(self, config: WhatsAppConfig, graph: GraphClient | None = None, now=None):
+    def __init__(self, config: WhatsAppConfig, graph: GraphClient | None = None, now=None, hash_key=None):
         self.config = config
+        self.hash_key = hash_key or config.app_secret   # PATIENT_HASH_KEY keeps patient keys across rotations
         self.graph = graph or GraphClient(config)
         self.now = now or (lambda: datetime.now(timezone.utc))
         self._numbers: dict[str, str] = {}     # contact hash -> phone number, in memory only
@@ -266,13 +274,13 @@ class WhatsAppChannel:
     @classmethod
     def from_env(cls):
         config = WhatsAppConfig.from_env()
-        return cls(config) if config else None
+        return cls(config, hash_key=read_env('PATIENT_HASH_KEY')) if config else None
 
     def allowed(self, number):
         return number in self.config.test_numbers
 
     def contact(self, number):
-        key = hmac.new(self.config.app_secret.encode(), number.encode(), hashlib.sha256).hexdigest()[:16]
+        key = patient_key_for_number(number, self.hash_key)     # also the patient's memory key (D-118)
         self._numbers[key] = number
         return key
 

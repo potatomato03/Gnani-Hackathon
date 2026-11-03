@@ -171,3 +171,21 @@ def test_visits_lists_approved_runs_and_starting_one_resumes_it(tmp_path):
     assert client.get("/visits").json()[-1]["conversation_id"] == conv["id"]
     assert client.post(f"/visits/{run['visit_id']}/start?restart=true").json()["id"] != conv["id"]
     assert client.post("/visits/nope/start").status_code == 404
+
+
+
+def test_web_start_can_ask_for_the_language_first(client):
+    conv = client.post("/demo/visits/fam-001-a/start?ask_language=true").json()
+    assert conv["messages"][0]["kind"] == "question" and conv["language_chosen"] is False
+    conv = client.post(f"/conversations/{conv['id']}/messages", json={"button": "lang_en-IN"}).json()
+    assert conv["language"] == "en-IN" and conv["messages"][-1]["kind"] == "summary"
+
+
+def test_patient_memory_is_listed_locally_and_hidden_from_the_tunnel(client):
+    conv = client.post("/demo/visits/fam-001-a/start").json()
+    client.post(f"/conversations/{conv['id']}/messages", json={"text": "DOCTOR"})
+    key = "sim-" + conv["patient_id"]
+    memory = client.get(f"/patients/{key}/memory").json()
+    assert "request" in [i["kind"] for i in memory["items"]] and memory["documents"] == []
+    assert client.get(f"/patients/{key}/memory", headers={"cf-ray": "x"}).status_code == 403
+    assert client.get("/patients/..%2Fescape/memory").status_code in (404, 422)
