@@ -23,6 +23,7 @@ from ..exports.patient_box import build_patient_box
 from ..exports.pdf.render import html_to_pdf, render_html
 from ..reference import load_reference
 from ..resolve import ResolutionRefused, resolve
+from ..standard import load_rules
 from ..speech.prisma import LANGUAGE_CODES, RATE, decode_audio
 from . import auth, knowledge
 from .clinical import initial_steps
@@ -440,7 +441,7 @@ async def create_run(request: Request, encounter_id: str):
         conn.execute('insert into app.runs (id, encounter_id, source_id, source_version, steps, config, created_by) '
                      'values (%s, %s, %s, %s, %s, %s, %s)',
                      (run_id, encounter_id, source['id'], source['version'], Jsonb(initial_steps(source['kind'])),
-                      Jsonb({'pipeline': 'extract-v3/report-v2', 'provider': state['settings'].llm_provider}),
+                      Jsonb({'pipeline': 'extract-v4/report-v3', 'provider': state['settings'].llm_provider}),
                       session['user_id']))
         conn.execute("update app.encounters set state = 'processing' where id = %s", (encounter_id,))
         audit(conn, session['user_id'], session['organisation_id'], 'run.queued', 'run', run_id)
@@ -494,7 +495,7 @@ def envelope(conn, session, encounter, row):
                        approval={'id': approval['id'], 'approver_id': approval['approver_id'],
                                  'approver_name': approval['approver_name'],
                                  'approved_at': approval['approved_at'].isoformat()} if approval else None,
-                       artifacts=artifacts, suggestions=suggestions)
+                       artifacts=artifacts, suggestions=suggestions, rules=load_rules(REPO_ROOT))
 
 
 @app.get('/api/v1/encounters/{encounter_id}/report')

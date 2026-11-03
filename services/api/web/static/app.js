@@ -655,9 +655,17 @@ async function showReview(encounter, view) {
             s.sound_alike_sibling ? h('span', { class: 'chip miss', text: 'Sound-alike: check which' }) : '',
             s.strength_match === false ? h('span', { class: 'chip off', text: 'Strength differs from what was said' }) : '',
             s.chosen_before ? h('span', { class: 'chip iris', text: `You chose this before (${s.chosen_before}×)` }) : ''),
-          s.reason ? h('p', { class: 'muted small', text: s.reason }) : ''),
-        h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => openEditor('choose_product', med.id, card, issue, s) }, 'Use this'))));
+          s.reason ? h('p', { class: 'muted small', text: s.reason }) : '',
+          s.standard?.length ? h('p', { class: 'muted small', text: 'Also sets the standard: ' + s.standard.map(p => p.text).join(' · ') }) : ''),
+        h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => submit([
+          { action: 'choose_product', target: med.id, value: { product_id: s.product_id }, reason: `Heard “${med.spoken_name}”; meant ${s.label}.` },
+          ...standardItems(med, s.standard)]) }, 'Use this'))));
   }
+
+  // Standard instructions fill only what the doctor left unsaid, and only when accepted (runbook D-115).
+  const standardItems = (med, items) => (items || []).map(p => ({ action: p.action, target: med.id, value: p.value, reason: p.reason }));
+  const withStandard = view.medication_views.filter(m => m.standard?.length);
+  const standardText = m => m.standard.map(p => p.text).join(' · ');
 
   // Approval panel
   let approvePanel;
@@ -695,14 +703,24 @@ async function showReview(encounter, view) {
       h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) + '. Approval, files and delivery have separate states; nothing has been sent to the patient.' }), files);
   }
 
-  // Report sections
-  const reportPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'Report' }), h('p', { text: 'Select a line to see what it is based on.' })),
-    Object.keys(view.section_names).filter(s => report.sections[s]?.length).map(s => h('div', { class: 'section' },
-      h('h4', { text: view.section_names[s] }),
-      report.sections[s].map((line, i) => { const ref = `${s}:${i}`;
-        return h('button', { class: 'line' + (flaggedLine(ref) ? ' flagged' : '') + (ui.selectedLine === ref ? ' sel' : ''), type: 'button', dataset: { ref }, onclick: () => showLine(ref) },
-          h('span', { text: line.text }), h('span', { class: 'cite', text: line.cites.join(', ') || 'no source' })); }))),
-    report.current_medicines.length ? [h('h4', { text: 'Current medicines' }), report.current_medicines.map(t => h('p', { text: t }))] : '',
+  // Report, under the headings of an outpatient summary. A section's sentences run on as one paragraph; each
+  // stays selectable, so its sources are one click away. Advice reads one sentence a line, and review closes it.
+  const sentence = t => /[.!?]$/.test(t.trim()) ? t.trim() : t.trim() + '.';
+  const lineEl = (s, i, line) => { const ref = `${s}:${i}`;
+    return h('span', { class: 'line' + (flaggedLine(ref) ? ' flagged' : '') + (ui.selectedLine === ref ? ' sel' : ''), role: 'button', tabindex: '0',
+      dataset: { ref }, onclick: () => showLine(ref), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showLine(ref); } } },
+      h('span', { text: sentence(line.text) }), h('span', { class: 'cite', text: line.cites.join(', ') || 'no source' })); };
+  const reportPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'Report' }), h('p', { text: 'Select a sentence to see what it is based on.' })),
+    h('p', { class: 'opening', text: `Patient seen in the outpatient clinic on ${fmtDate(report.header.visit_date)}.` }),
+    view.report_groups.map(([title, sections]) => {
+      const lines = sections.flatMap(s => (report.sections[s] || []).map((line, i) => lineEl(s, i, line)));
+      const current = title === 'Present problem' && report.current_medicines.length
+        ? h('div', { class: 'section' }, h('h4', { text: 'Current medicines' }), report.current_medicines.map(t => h('p', { text: t }))) : '';
+      if (!lines.length) return current;
+      if (title === 'Review') return h('div', { class: 'section closing' }, lines);
+      return [h('div', { class: 'section ' + (title === 'Treatment advised' ? 'advice' : 'prose') }, h('h4', { text: title }),
+        title === 'Treatment advised' ? lines : h('p', {}, lines.flatMap((el, i) => i ? [' ', el] : [el]))), current];
+    }),
     report.not_discussed.length ? h('p', { class: 'not-discussed', text: 'Not discussed: ' + report.not_discussed.join(', ') + '.' }) : '');
 
   // Medicines
@@ -715,6 +733,8 @@ async function showReview(encounter, view) {
         const cell = h('td', {},
           h('span', { class: 'mname', text: m.row.label }), h('span', { class: 'how', text: m.row.detail }),
           m.row.flags.length ? h('div', { class: 'attrs' }, m.row.flags.map(f => h('span', { class: 'chip miss', text: f.replaceAll('_', ' ') }))) : '',
+          canEdit && m.standard?.length ? h('div', { class: 'standard' }, h('span', { class: 'chip iris', text: 'Standard' }), standardText(m),
+            h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => submit(standardItems(m, m.standard)) }, 'Accept')) : '',
           h('div', { class: 'acts' },
             canEdit ? ['choose_product', 'set_dose', 'set_timing', 'set_food', 'set_duration', ...(m.speaker_unclear ? ['confirm_order'] : []), 'remove_medicine']
               .filter(a => a !== 'choose_product' || m.match !== 'exact' || m.candidates.length > 1)
@@ -726,6 +746,11 @@ async function showReview(encounter, view) {
   // Issues
   const issuesPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'To review' }),
     h('p', { text: view.issue_views.length ? `${view.blocking_count} blocking · ${view.issue_views.length - view.blocking_count} warnings` : 'Nothing flagged' })),
+    canEdit && withStandard.length ? h('div', { class: 'standard-all' }, h('b', { text: 'Standard instructions for what wasn’t said' }),
+      withStandard.map(m => h('p', { text: `${m.product_label || m.spoken_name}: ${standardText(m)}` })),
+      h('p', { class: 'muted small', text: 'Usual directions for these medicines. Not yet reviewed by a clinician.' }),
+      h('button', { class: 'btn btn-dark btn-sm', type: 'button', onclick: () => submit(withStandard.flatMap(m => standardItems(m, m.standard))) },
+        withStandard.length > 1 ? `Accept all ${withStandard.length}` : 'Accept')) : '',
     view.issue_views.map(issue => {
       const card = h('div', { class: 'issue ' + issue.severity },
         h('span', { class: 'sev', text: issue.severity === 'block' ? 'Must fix' : 'Warning' }), h('b', { text: issue.title }),

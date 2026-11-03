@@ -102,9 +102,15 @@ def plus(*items):
     return CHECKED.model_copy(update={"kept": CHECKED.kept + list(items)})
 
 
-def test_line_mixing_absent_and_present_items_blocks():
-    line = ReportLine(text="Sore throat for 3 days, no fever", cites=["x1", "x2"])
-    assert "mixed_negation" in codes(fields(chief_complaints=[line], history_present_illness=[]))
+def test_one_sentence_may_join_present_and_absent_findings():
+    # Outpatient summaries read "sore throat for 3 days, no fever"; one fact per line read as machine output.
+    line = ReportLine(text="The patient presents with sore throat for 3 days, with no fever.", cites=["x1", "x2"])
+    assert codes(fields(chief_complaints=[line], history_present_illness=[])) == set()
+
+
+def test_an_absent_finding_in_a_joined_sentence_still_needs_its_negative():
+    line = ReportLine(text="The patient presents with sore throat for 3 days and fever.", cites=["x1", "x2"])
+    assert "negation_mismatch" in codes(fields(chief_complaints=[line], history_present_illness=[]))
 
 
 def test_relatives_condition_written_as_the_patients_blocks():

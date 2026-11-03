@@ -55,6 +55,11 @@ def test_dose(phrase, want):
     ("ज़रूरत पड़ने पर", AsNeeded(type="as_needed")),
     ("ज़रूरत पड़ने पर, दिन में चार बार से ज़्यादा नहीं", AsNeeded(type="as_needed", max_per_day=4)),
     ("now and then", None),
+    ("thrice daily", Frequency(type="frequency", times=3, period="day")),
+    ("QID", Frequency(type="frequency", times=4, period="day")),
+    ("roz", Frequency(type="frequency", times=1, period="day")),
+    ("रोज़", Frequency(type="frequency", times=1, period="day")),
+    ("HS", Grid(type="grid", m="0", a="0", e="0", n="1")),
 ])
 def test_timing(phrase, want):
     assert parse_timing(phrase) == want

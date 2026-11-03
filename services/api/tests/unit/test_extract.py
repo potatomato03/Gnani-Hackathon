@@ -21,9 +21,16 @@ def test_prompt_keeps_laterality_empty_unless_a_side_is_spoken():
     # Both models filled a side for a plural like "tonsils"; qwen3:8b filled one on every item (runbook C-35).
     from voicerx.pipeline.extract import SYSTEM
 
-    assert PROMPT_VERSION == "extract-v3"
+    assert PROMPT_VERSION == "extract-v4"
     assert "laterality is null unless the quote itself names a side" in SYSTEM
     assert "A plural body part" in SYSTEM
+
+
+def test_prompt_tells_tests_from_therapy_and_review():
+    # Physiotherapy and a later re-examination were extracted as orders and printed under "Tests ordered".
+    from voicerx.pipeline.extract import SYSTEM
+
+    assert "physiotherapy" in SYSTEM and "follow_up" in SYSTEM
 
 
 def test_extract_asks_for_the_extraction_schema_with_the_prompt_version():

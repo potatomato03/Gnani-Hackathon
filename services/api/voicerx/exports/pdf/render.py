@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 from jinja2 import Environment, FileSystemLoader
-from ...pipeline.assemble import DISPLAY_NAMES
+from ...pipeline.assemble import DISPLAY_NAMES, REPORT_GROUPS
 
 IST = timezone(timedelta(hours=5, minutes=30), 'IST')
 
@@ -16,8 +16,11 @@ def render_html(report, box):
         IST).strftime('%d-%b-%Y %H:%M IST')
     # Hex escapes keep arbitrary approver names safe inside a CSS string.
     from markupsafe import Markup
+    # Lines run on as a paragraph, so each ends as a sentence.
+    env.filters['sentence'] = lambda text: text.strip() + ('' if text.strip()[-1:] in '.!?' else '.')
     env.filters['css_string'] = lambda value: Markup('"' + ''.join('\\' + format(ord(c), 'x') + ' ' for c in str(value)) + '"')
-    return env.get_template('report.html.j2').render(report=report, box=box, names=DISPLAY_NAMES)
+    return env.get_template('report.html.j2').render(report=report, box=box, names=DISPLAY_NAMES,
+                                                             groups=REPORT_GROUPS)
 
 
 def find_browser():

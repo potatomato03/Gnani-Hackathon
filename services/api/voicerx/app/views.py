@@ -5,7 +5,9 @@ The canonical report passes through unchanged; everything the screen needs besid
 from uuid import uuid4
 
 from ..contracts.report import MODEL_SECTIONS, Resolution
-from ..pipeline.assemble import DISPLAY_NAMES, product_label, table_medicines
+from ..pipeline.assemble import DISPLAY_NAMES, REPORT_GROUPS, product_label, table_medicines
+from ..standard import proposals
+from .catalog import parse_composition
 
 SCHEMA_VERSION = 1
 TITLES = {
@@ -71,8 +73,16 @@ def _actions(issue, kind, cited_by):
     return actions
 
 
+# A stored suggestion's form, from its label when it predates the form being stored: "PAN-D CAP (...)".
+LABEL_FORMS = {'TAB': 'tablet', 'CAP': 'capsule'}
+
+
+def suggestion_form(suggestion):
+    return suggestion.get('form') or LABEL_FORMS.get(suggestion['label'].split(' (')[0].split()[-1], 'other')
+
+
 def report_view(report, encounter_id, patient_id, organisation_id, catalog, capabilities, approval=None, artifacts=(),
-                suggestions=None):
+                suggestions=None, rules=None):
     medication_ids = {m.id for m in report.checked.medications}
     cited_by = {}
     line_refs = []
@@ -94,20 +104,30 @@ def report_view(report, encounter_id, patient_id, organisation_id, catalog, capa
     rows = dict(zip((m.id for m in table_medicines(report.checked)), report.medicines))
     medication_views = []
     for rx in report.checked.medications:
+        product = products.get(rx.product_id) if rx.match == 'exact' else None
+        prescribed = rules is not None and rx.action in ('start', 'change', 'continue')
+        offered = (suggestions or {}).get(rx.id, {}).get('items', []) if rx.match != 'exact' else []
         medication_views.append({
             **rx.model_dump(mode='json'),
             'product_label': product_label(products[rx.product_id]) if rx.product_id in products else None,
             'candidates': [{'id': pid, 'label': product_label(products[pid])} for pid in rx.candidate_ids if pid in products],
             'row': rows[rx.id].model_dump(mode='json') if rx.id in rows else None,
             'issue_uids': [v['uid'] for v in issue_views if v['target'] == rx.id],
-            # Offered only while the doctor still has to choose; once a product is set they are history.
-            'suggestions': (suggestions or {}).get(rx.id, {}).get('items', []) if rx.match != 'exact' else []})
+            # What the doctor left unsaid, filled from the standard instructions on one click (runbook D-115).
+            'standard': proposals(rx, [c.ingredient for c in product.components], product.form, rules)
+            if prescribed and product else [],
+            # Offered only while the doctor still has to choose; once a product is set they are history. Each
+            # carries the standard instructions choosing it would bring, so one confirmation settles both.
+            'suggestions': [{**s, 'standard': proposals(rx, [c.ingredient for c in parse_composition(s['composition'])],
+                                                        suggestion_form(s), rules) if prescribed else []}
+                            for s in offered]})
     blocking = sum(i.severity == 'block' for i in report.issues)
     return {
         'schema_version': SCHEMA_VERSION, 'encounter_id': encounter_id, 'patient_id': patient_id,
         'organisation_id': organisation_id, 'status': report.status, 'version': report.version,
         'content_hash': report.content_hash, 'report': report.model_dump(mode='json'),
-        'section_names': DISPLAY_NAMES, 'line_refs': line_refs, 'findings': findings,
+        'section_names': DISPLAY_NAMES, 'report_groups': [[title, sections] for title, sections in REPORT_GROUPS],
+        'line_refs': line_refs, 'findings': findings,
         'medication_views': medication_views, 'issue_views': issue_views, 'blocking_count': blocking,
         'can_approve': report.status == 'draft' and blocking == 0 and bool(capabilities.get('approve')),
         'capabilities': capabilities, 'approval': approval, 'artifacts': list(artifacts),

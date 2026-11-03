@@ -45,14 +45,14 @@ def check_report(fields, checked, reference):
                 continue
             assertions = {x.assertion for x in cited}
             negative = has_word(text, NEGATION)
-            if assertions == {'absent'} and not negative:
+            # One sentence may join present and absent findings ("sore throat for 3 days, no fever"), as
+            # outpatient summaries do; each absent finding still needs its negative written.
+            if 'absent' in assertions and not negative:
                 flag('negation_mismatch')
             if 'unknown' in assertions and not has_word(text, {'unknown', 'uncertain', 'unclear', 'not recorded', 'not stated', 'not known'}):
                 flag('negation_mismatch')
             if assertions == {'present'} and negative and not any(has_word(x.quote, NEGATION_WORDS) for x in cited):
                 flag('negation_mismatch')
-            if {'present', 'absent'} <= assertions:
-                flag('mixed_negation')
             relative = has_word(text, RELATIVES)
             if (any(x.subject != 'patient' for x in cited) and not relative) or (all(x.subject == 'patient' for x in cited) and relative):
                 flag('subject_mismatch')

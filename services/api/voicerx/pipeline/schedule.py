@@ -93,8 +93,12 @@ def parse_timing(phrase):
     grid = _grid(text)
     if grid:
         return grid
-    known = {'once daily': 1, 'once a day': 1, 'od': 1, 'daily': 1, 'twice daily': 2, 'twice a day': 2, 'bd': 2,
-             'tds': 3, 'three times daily': 3}
+    # "Daily" alone is once a day, never morning and evening: that is twice daily (runbook D-115).
+    known = {'once daily': 1, 'once a day': 1, 'od': 1, 'daily': 1, 'roz': 1, 'रोज़': 1, 'रोज': 1,
+             'twice daily': 2, 'twice a day': 2, 'bd': 2, 'bid': 2, 'tds': 3, 'tid': 3, 'three times daily': 3,
+             'thrice daily': 3, 'thrice a day': 3, 'qid': 4, 'qds': 4, 'four times daily': 4}
+    if text.strip() == 'hs':
+        return Grid(m='0', a='0', e='0', n='1')
     if text.strip() in known:
         return Frequency(times=known[text.strip()], period='day')
     if any(w in text for w in ('दिन में', 'రోజుకి', 'times a day', 'times daily')):

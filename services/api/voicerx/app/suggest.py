@@ -228,6 +228,7 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, doctor_id, f
     for index, (candidate, product) in enumerate(ranked):
         pid = candidate.entry.id
         suggestions.append({'product_id': pid, 'label': product_label(product), 'composition': composition_text(product),
+                            'form': product.form,
                             'tier': 'formulary' if pid in formulary else candidate.entry.tier,
                             'sound': candidate.score, 'strength_match': candidate.strength_match,
                             'fit': facts[pid]['fit'], 'class': facts[pid]['class'], 'category': facts[pid]['category'],

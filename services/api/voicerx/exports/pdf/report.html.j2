@@ -14,7 +14,10 @@ h1 { font-size: 21pt; font-weight: 650; margin: 12px 0 3px; color: #134d53; }
 h2 { font-size: 11pt; color: #134d53; margin: 13px 0 4px; break-after: avoid; }
 p { margin: 3px 0; }
 section { break-inside: avoid; }
-.not-discussed { font-size: 9pt; color: #596970; margin-top: 12px; }
+.opening { margin: 4px 0 2px; }
+section p { text-align: justify; }
+p.advice { margin: 3px 0 6px; }
+p.review { font-weight: 700; margin-top: 14px; }
 .medicines { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 9pt; table-layout: fixed; }
 .medicines th { color: white; background: #215e64; padding: 7px 4px; text-align: center; }
 .medicines th:first-child { width: 60%; text-align: left; }
@@ -34,17 +37,18 @@ section { break-inside: avoid; }
 {% if report.status == 'draft' %}<div class="watermark">DRAFT, NOT APPROVED</div>{% endif %}
 <div class="footer">{{ footer }}</div>
 <div class="banner">SYNTHETIC DATA</div>
-<h1>Outpatient consultation</h1><div class="subtitle">{{ report.header.clinic_name }}</div>
+<h1>Outpatient summary</h1><div class="subtitle">{{ report.header.clinic_name }}</div>
 <table class="identity"><tr><td><b>{{ report.header.patient_name }}</b><br>{{ report.header.age }} years (approx.) · {{ report.header.sex }}<br>{{ report.header.patient_id }} · {{ report.header.mrn }}</td><td><b>{{ report.header.doctor_name }}</b><br>Registration: {{ report.header.doctor_reg_no }}<br>Visit: {{ report.header.visit_date.strftime('%d-%b-%Y') }}</td></tr></table>
 <div class="allergies">{{ report.header.allergy_text }}</div>
-{% for section, lines in report.sections.items() %}
-{% if lines %}<section><h2>{{ names[section] }}</h2>{% for line in lines %}<p>{{ line.text }}</p>{% endfor %}</section>{% endif %}
-{% if section == 'history_present_illness' and report.current_medicines %}<section><h2>Current medicines</h2>{% for line in report.current_medicines %}<p>{{ line }}</p>{% endfor %}</section>{% endif %}
-{% endfor %}
-{% if report.not_discussed %}<p class="not-discussed">Not discussed: {{ report.not_discussed|join(', ') }}.</p>{% endif %}
-{% if report.medicines %}<h2>Medicine instructions</h2><table class="medicines"><thead><tr><th>Medicine</th><th>Morning</th><th>Afternoon</th><th>Evening</th><th>Night</th></tr></thead><tbody>
+<p class="opening">Patient seen in the outpatient clinic on {{ report.header.visit_date.strftime('%d-%b-%Y') }}.</p>
+{% for title, sections in groups %}{% set ns = namespace(lines=[]) %}{% for s in sections %}{% set ns.lines = ns.lines + report.sections.get(s, []) %}{% endfor %}
+{% if title == 'Review' %}{% for line in ns.lines %}<p class="review">{{ line.text|sentence }}</p>{% endfor %}
+{% elif ns.lines %}<section><h2>{{ title }}</h2>{% if title == 'Treatment advised' %}{% for line in ns.lines %}<p class="advice">{{ line.text|sentence }}</p>{% endfor %}{% else %}<p>{{ ns.lines|map(attribute='text')|map('sentence')|join(' ') }}</p>{% endif %}</section>{% endif %}
+{% if title == 'Present problem' and report.current_medicines %}<section><h2>Current medicines</h2>{% for line in report.current_medicines %}<p>{{ line }}</p>{% endfor %}</section>{% endif %}
+{% if title == 'Treatment advised' and report.medicines %}<h2>Prescription</h2><table class="medicines"><thead><tr><th>Medicine</th><th>Morning</th><th>Afternoon</th><th>Evening</th><th>Night</th></tr></thead><tbody>
 {% for row in report.medicines %}<tr><td><b>{{ row.label }}</b><div class="detail">{{ row.detail }}</div>{% if row.flags %}<div class="flag">{{ row.flags|join(', ') }}</div>{% endif %}</td>{% for slot in row.grid %}<td>{{ slot }}</td>{% endfor %}</tr>{% endfor %}
 </tbody></table>{% endif %}
+{% endfor %}
 {% if box %}<div class="box" lang="{{ box.language }}"><h2>{{ box.title }}</h2>{% for row in box.rows %}<p>{{ row }}</p>{% endfor %}<p class="note">{{ box.official_note }}</p>{% if box.note %}<p class="note">{{ box.note }}</p>{% endif %}</div>{% endif %}
 {% if report.issues %}<div class="issues"><h2>Review required</h2>{% for issue in report.issues %}<p class="{% if issue.severity == 'block' %}flag{% endif %}">{{ issue.severity|upper }} · {{ issue.target }} · {{ issue.message }}</p>{% endfor %}</div>{% endif %}
 <p class="note">Prototype: formulary entries and allergy class rules have not been clinically reviewed.</p>

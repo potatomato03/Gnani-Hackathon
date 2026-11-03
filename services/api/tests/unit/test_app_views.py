@@ -5,6 +5,7 @@ import pytest
 from conftest import make_draft, resolved_medicine
 from voicerx.app.views import CorrectionRefused, build_resolutions, report_view
 from voicerx.reference import load_reference
+from voicerx.standard import load_rules
 from conftest import REPO_ROOT
 
 REF = load_reference(REPO_ROOT)
@@ -12,9 +13,10 @@ NOW = datetime(2026, 11, 3, 6, 0, tzinfo=timezone.utc)
 ACTOR = {'id': 'doc-001', 'display_name': 'Dr Parth Shan'}
 
 
-def view(draft):
+def view(draft, suggestions=None):
     return report_view(draft, encounter_id='enc-1', patient_id='pat-001', organisation_id='clinic-001',
-                       catalog=REF.products, capabilities={'resolve': True, 'approve': True})
+                       catalog=REF.products, capabilities={'resolve': True, 'approve': True},
+                       suggestions=suggestions, rules=load_rules(REPO_ROOT))
 
 
 def test_every_issue_is_shown_with_actions_that_fit_its_target():
@@ -72,3 +74,24 @@ def test_malformed_corrections_are_refused_before_reaching_the_engine(item, mess
 def test_an_empty_batch_is_refused():
     with pytest.raises(CorrectionRefused, match='at least one'):
         build_resolutions([], ACTOR, NOW)
+
+
+def test_a_medicine_offers_its_standard_instructions_for_what_was_left_unsaid():
+    [med] = view(make_draft([resolved_medicine(dose=None, food=None)]))['medication_views']
+    assert {p['action']: p['value'] for p in med['standard']} == {
+        'set_dose': {'amount': '1', 'unit': 'tablet'}, 'set_food': {'food': 'after_food'}}
+
+
+def test_each_suggestion_carries_the_standard_instructions_it_would_bring():
+    rx = resolved_medicine(match='unmatched', product_id=None, candidate_ids=[], spoken_name='Pandee', dose=None, food=None)
+    pan_d = {'product_id': 'in-2', 'label': 'PAN-D CAP (DOMPERIDONE+PANTOPRAZOLE) 30MG+40MG', 'tier': 'indian',
+             'composition': 'Domperidone (30mg) + Pantoprazole (40mg)', 'form': 'capsule'}
+    [med] = view(make_draft([rx]), suggestions={'rx1': {'heard': 'Pandee', 'items': [pan_d]}})['medication_views']
+    assert med['standard'] == []
+    assert {p['action']: p['value'] for p in med['suggestions'][0]['standard']} == {
+        'set_dose': {'amount': '1', 'unit': 'capsule'}, 'set_food': {'food': 'before_food'}}
+
+
+def test_the_view_lists_the_summary_headings_in_order():
+    groups = view(make_draft([resolved_medicine()]))['report_groups']
+    assert groups[0] == ['Present problem', ['chief_complaints', 'history_present_illness']]

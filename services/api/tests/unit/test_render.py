@@ -43,8 +43,19 @@ def test_medicine_label_and_detail_line_are_printed(draft_report):
     assert "1 tablet, when needed, after food, for 3 days, start not stated" in html
 
 
-def test_empty_sections_are_listed_as_not_discussed(draft_report):
-    assert "Not discussed:" in render_html(draft_report, None)
+def test_the_pdf_reads_as_an_outpatient_summary(draft_report):
+    # Headings follow a hospital outpatient summary; a section's lines run on as one paragraph.
+    html = render_html(draft_report, None)
+    assert "Outpatient summary" in html and "Patient seen in the outpatient clinic on 05-Oct-2026." in html
+    assert "Present problem" in html and "Sore throat for 3 days. No fever." in html
+    assert "Not discussed:" not in html and "Assessment" not in html
+
+
+def test_follow_up_closes_the_summary_in_bold(draft_report):
+    from voicerx.contracts.report import ReportLine
+    sections = {**draft_report.sections, "follow_up": [ReportLine(text="Review after five days.", cites=["x1"])]}
+    html = render_html(draft_report.model_copy(update={"sections": sections}), None)
+    assert '<p class="review">Review after five days.</p>' in html
 
 
 def test_approved_footer_shows_version_fingerprint_and_approver(approved_report):

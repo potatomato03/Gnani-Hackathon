@@ -210,6 +210,19 @@ textarea.input { resize: vertical; line-height: 1.55; }
 .line .cite { font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
 .line.sel .cite { color: var(--accent); }
 .not-discussed { margin-top: 14px; font-size: 13px; color: var(--ink-3); }
+.opening { margin: 0 0 4px; color: var(--ink-2); }
+.prose p { margin: 0; line-height: 1.75; }
+.prose .line, .closing .line { display: inline; width: auto; padding: 2px 1px; margin: 0; cursor: pointer; }
+.prose .line .cite, .closing .line .cite { display: none; }
+.prose .line.flagged, .closing .line.flagged { box-shadow: none; text-decoration: underline dotted var(--risk); text-underline-offset: 4px; }
+.advice .line { cursor: pointer; }
+.closing { margin-top: 16px; }
+.closing .line { display: block; font-weight: 600; }
+.standard-all { padding: 10px 12px; margin-bottom: 12px; border-radius: var(--radius); background: var(--accent-bg); }
+.standard-all b { display: block; font-size: 14px; font-weight: 500; }
+.standard-all p { margin: 2px 0; font-size: 13px; }
+.standard-all .btn { margin-top: 8px; }
+.meds .standard { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: var(--ink-2); }
 
 .meds { width: 100%; border-collapse: collapse; }
 .meds th { text-align: left; font-weight: 500; font-size: 12px; color: var(--ink-3); padding: 0 8px 8px 0; border-bottom: 1px solid var(--line); }

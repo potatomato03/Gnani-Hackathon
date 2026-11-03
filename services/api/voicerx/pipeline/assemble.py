@@ -8,6 +8,12 @@ from .check_extraction import medicine_issues
 
 DISPLAY_NAMES = dict(zip(MODEL_SECTIONS, ['Complaints', 'History', 'Vitals', 'Examination', 'Results', 'Tests ordered',
     'Diagnosis', 'Advice', 'Referrals', 'Plan', 'Follow-up']))
+# How the report reads: the headings of a hospital outpatient summary, each over the stored sections it
+# gathers. Storage keeps the eleven sections, so older reports, approvals and exports are unchanged.
+REPORT_GROUPS = [('Present problem', ['chief_complaints', 'history_present_illness']),
+                 ('Objective findings & investigations', ['vitals', 'examination', 'investigation_results']),
+                 ('Assessment', ['diagnoses']), ('Treatment advised', ['advice', 'plan']),
+                 ('Tests ordered', ['investigations_ordered']), ('Referrals', ['referrals']), ('Review', ['follow_up'])]
 FOOD_TEXT = {'after_food': 'after food', 'before_food': 'before food', 'with_food': 'with food', 'empty_stomach': 'empty stomach'}
 
 

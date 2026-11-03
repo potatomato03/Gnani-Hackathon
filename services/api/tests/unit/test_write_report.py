@@ -20,5 +20,12 @@ def test_prompt_writes_provisional_only_for_provisional_items():
     # typed-groq-1 put "Provisional:" on four plainly stated diagnoses (runbook C-37).
     from voicerx.pipeline.write_report import PROMPT_VERSION, SYSTEM
 
-    assert PROMPT_VERSION == "report-v2"
+    assert PROMPT_VERSION == "report-v3"
     assert "Never write 'Provisional' for a stated item" in SYSTEM
+
+
+def test_prompt_asks_for_connected_sentences_without_added_meaning():
+    from voicerx.pipeline.write_report import SYSTEM
+
+    assert "The patient presents with" in SYSTEM and "one fact per line" not in SYSTEM.lower()
+    assert "never add causes" in SYSTEM

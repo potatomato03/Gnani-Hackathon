@@ -88,3 +88,12 @@ def test_draft_freezes_the_records_and_products_it_used(draft_report):
     assert (draft_report.version, draft_report.predecessor_hash, draft_report.resolutions) == (1, None, [])
     assert draft_report.record_snapshot["patient"] == REF.patients["pat-001"]
     assert set(draft_report.products_used) == {"p-dolo-650"}
+
+
+def test_every_report_section_shows_under_exactly_one_summary_heading():
+    from voicerx.contracts.report import MODEL_SECTIONS
+    from voicerx.pipeline.assemble import REPORT_GROUPS
+    shown = [s for _, sections in REPORT_GROUPS for s in sections]
+    assert sorted(shown) == sorted(MODEL_SECTIONS)
+    assert [title for title, _ in REPORT_GROUPS][:4] == ['Present problem', 'Objective findings & investigations',
+                                                         'Assessment', 'Treatment advised']

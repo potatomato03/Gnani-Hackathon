@@ -1,0 +1,52 @@
+# How common medicines are usually taken, by ingredient, to fill what a doctor leaves unsaid (runbook D-115).
+# A value is only ever proposed, marked "standard", and applied when the doctor accepts it; what was said
+# always wins. Not reviewed by a clinician: needs a doctor's sign-off before real use.
+#   food: before_food | after_food | with_food | empty_stomach (left out when it does not matter)
+#   once_daily: morning | afternoon | evening | night, the time for a medicine said once a day
+#   source: label = the product label's directions (openFDA or Indian pack insert); practice = usual
+#           Indian prescribing where the label leaves it open
+reviewed: false
+rules:
+  # Pain and fever
+  - {ingredients: [paracetamol, acetaminophen], food: after_food, source: practice}
+  - {ingredients: [ibuprofen], food: after_food, source: label}
+  - {ingredients: [diclofenac], food: after_food, source: practice}
+  - {ingredients: [aceclofenac], food: after_food, source: practice}
+  - {ingredients: [naproxen], food: after_food, source: label}
+  # Acid and nausea
+  - {ingredients: [pantoprazole], food: before_food, once_daily: morning, source: practice}
+  - {ingredients: [rabeprazole], food: before_food, once_daily: morning, source: practice}
+  - {ingredients: [omeprazole], food: before_food, once_daily: morning, source: label}
+  - {ingredients: [esomeprazole], food: before_food, once_daily: morning, source: label}
+  - {ingredients: [domperidone], food: before_food, source: label}
+  # Allergy and asthma
+  - {ingredients: [levocetirizine], once_daily: night, source: label}
+  - {ingredients: [cetirizine], once_daily: night, source: practice}
+  - {ingredients: [montelukast], once_daily: night, source: label}
+  # Heart, blood pressure and cholesterol
+  - {ingredients: [telmisartan], once_daily: morning, source: practice}
+  - {ingredients: [amlodipine], once_daily: morning, source: practice}
+  - {ingredients: [losartan], once_daily: morning, source: practice}
+  - {ingredients: [hydrochlorothiazide], once_daily: morning, source: practice}
+  - {ingredients: [furosemide], once_daily: morning, source: practice}
+  - {ingredients: [atorvastatin], once_daily: night, source: practice}
+  - {ingredients: [rosuvastatin], once_daily: night, source: practice}
+  - {ingredients: [simvastatin], once_daily: night, source: label}
+  - {ingredients: [aspirin], food: after_food, source: practice}
+  # Diabetes and thyroid
+  - {ingredients: [metformin], food: with_food, source: label}
+  - {ingredients: [glimepiride], food: with_food, once_daily: morning, source: label}
+  - {ingredients: [gliclazide], food: with_food, once_daily: morning, source: label}
+  - {ingredients: [thyroxine, levothyroxine], food: empty_stomach, once_daily: morning, source: label}
+  # Steroids
+  - {ingredients: [prednisolone], food: after_food, once_daily: morning, source: practice}
+  - {ingredients: [methylprednisolone], food: after_food, once_daily: morning, source: practice}
+  - {ingredients: [deflazacort], food: after_food, once_daily: morning, source: practice}
+  # Antibiotics
+  - {ingredients: [clavulanic acid], food: with_food, source: label}
+  - {ingredients: [cefpodoxime], food: with_food, source: label}
+  - {ingredients: [cefuroxime], food: with_food, source: label}
+  - {ingredients: [doxycycline], food: after_food, source: practice}
+  - {ingredients: [metronidazole], food: after_food, source: practice}
+  # Supplements
+  - {ingredients: [calcium carbonate], food: after_food, source: practice}
