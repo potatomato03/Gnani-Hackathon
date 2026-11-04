@@ -28,6 +28,41 @@ def test_stalled_browser_is_killed_with_its_children_and_never_hangs(monkeypatch
     assert calls[0]["stdout"] is subprocess.DEVNULL and calls[0]["stderr"] is subprocess.DEVNULL
 
 
+def test_a_browser_that_makes_no_pdf_falls_back_to_the_next(monkeypatch, tmp_path):
+    # 4 Nov: Edge mid-update exited at once with no PDF, so every WhatsApp message failed while Chrome worked (C-65).
+    from pathlib import Path
+
+    from voicerx.exports.pdf import render
+
+    tried = []
+
+    class Browser:
+        pid = 1
+
+        def __init__(self, command, **options):
+            tried.append(command[0])
+            if command[0].endswith("chrome.exe"):
+                target = next(c for c in command if c.startswith("--print-to-pdf=")).split("=", 1)[1]
+                Path(target).write_bytes(b"%PDF-1.7 test")
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(render, "browsers", lambda: [Path("msedge.exe"), Path("chrome.exe")])
+    monkeypatch.setattr(render.subprocess, "Popen", Browser)
+    pdf = html_to_pdf("<p>x</p>", tmp_path / "r.pdf")
+    assert pdf.read_bytes().startswith(b"%PDF") and tried == ["msedge.exe", "chrome.exe"]
+
+
+def test_pdf_browser_comes_first_and_chrome_is_a_windows_candidate(monkeypatch, tmp_path):
+    from voicerx.exports.pdf import render
+    chosen = tmp_path / "my-browser.exe"
+    chosen.write_bytes(b"")
+    monkeypatch.setenv("PDF_BROWSER", str(chosen))
+    assert render.browsers()[0] == chosen and find_browser() == chosen
+    assert any("Google/Chrome" in c for c in render.CANDIDATES)
+
+
 def test_draft_shows_synthetic_banner_and_draft_watermark(draft_report):
     html = render_html(draft_report, None)
     assert "SYNTHETIC DATA" in html and "DRAFT, NOT APPROVED" in html

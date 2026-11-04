@@ -20,19 +20,43 @@ def render_html(report, box):
     return env.get_template('report.html.j2').render(report=report, box=box, names=DISPLAY_NAMES)
 
 
+_X86, _PF = os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)'), os.environ.get('PROGRAMFILES', 'C:/Program Files')
+CANDIDATES = [f'{_X86}/Microsoft/Edge/Application/msedge.exe', f'{_PF}/Microsoft/Edge/Application/msedge.exe',
+              f'{_PF}/Google/Chrome/Application/chrome.exe', f'{_X86}/Google/Chrome/Application/chrome.exe',
+              f"{os.environ.get('LOCALAPPDATA', '')}/Google/Chrome/Application/chrome.exe",
+              '/usr/bin/chromium', '/usr/bin/google-chrome']
+
+
+class NoPdf(RuntimeError):
+    pass
+
+
+def browsers():
+    """Installed browsers in the order tried: PDF_BROWSER, then Edge, then Chrome (C-65)."""
+    found = [Path(c) for c in [os.environ.get('PDF_BROWSER'), *CANDIDATES] if c and Path(c).is_file()]
+    return list(dict.fromkeys(found))
+
+
 def find_browser():
-    candidates = [os.environ.get('PDF_BROWSER'),
-        str(Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft/Edge/Application/msedge.exe'),
-        str(Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Microsoft/Edge/Application/msedge.exe'),
-        '/usr/bin/chromium', '/usr/bin/google-chrome']
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file():
-            return Path(candidate)
-    raise FileNotFoundError('no headless browser; set PDF_BROWSER')
+    found = browsers()
+    if not found:
+        raise FileNotFoundError('no headless browser; set PDF_BROWSER')
+    return found[0]
 
 
 def html_to_pdf(html, out_pdf: Path):
-    browser = find_browser()
+    """A browser that exits without a PDF (Edge mid-update, 4 Nov) hands over to the next one. A stalled one is
+    killed and raised, not retried: another 90 s wait helps no one."""
+    *others, last = browsers() or [find_browser()]
+    for browser in others:
+        try:
+            return _print(browser, html, out_pdf)
+        except NoPdf:
+            continue
+    return _print(last, html, out_pdf)
+
+
+def _print(browser, html, out_pdf):
     out_pdf = Path(out_pdf).resolve()
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pdf-', dir=out_pdf.parent, ignore_cleanup_errors=True) as temporary:
@@ -53,7 +77,7 @@ def html_to_pdf(html, out_pdf: Path):
             _kill_tree(process)
             raise RuntimeError('headless browser timed out') from None
         if returncode or not target.exists() or not target.read_bytes().startswith(b'%PDF'):
-            raise RuntimeError('headless browser failed to produce a PDF')
+            raise NoPdf('headless browser failed to produce a PDF')
         target.replace(out_pdf)
     return out_pdf
 

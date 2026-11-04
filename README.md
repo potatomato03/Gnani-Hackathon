@@ -33,7 +33,7 @@ docs/                     Decisions, eval results, contributions
 
 Copy `.env.example` to `.env` and fill in your keys. Keys stay on the backend and never go in git.
 
-Install `services/api/requirements.txt` in a Python 3.12 environment. Gemini is tried first; the configured local Ollama model is the fallback. PDF rendering uses installed Edge/Chromium, or the browser executable specified by `PDF_BROWSER`.
+Install `services/api/requirements.txt` in a Python 3.12 environment. Gemini is tried first; the configured local Ollama model is the fallback. PDF rendering uses the browser in `PDF_BROWSER`, else installed Edge, Chrome or Chromium; a browser that makes no PDF hands over to the next.
 
 From this repository root in PowerShell (the existing environment is at `../.venv`):
 
