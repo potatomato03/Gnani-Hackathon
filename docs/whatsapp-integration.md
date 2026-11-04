@@ -225,3 +225,34 @@ fallback, taper/stopped medicines and spoken delivery requests. Syntax and key-l
 PDF, requested Hindi audio and a grounded medication answer are verified separately above. Browser automation
 was unavailable for the latest UI, so its underlying authenticated APIs and JavaScript syntax were checked;
 the earlier dashboard screenshots do not count as visual verification of the new Between visits panel.
+
+## Clinic approval copies to the demo owner
+
+The optional `WHATSAPP_CLINIC_REPORT_ORG` and `WHATSAPP_CLINIC_REPORT_NUMBER` settings send a clinic copy of
+newly approved synthetic reports to the explicitly configured, allowlisted test recipient. These settings
+stay in the ignored `.env`; they do not change a patient's WhatsApp contact or follow-up consent. Migration
+`008_clinic_report_delivery.sql` adds private, RLS-enabled recipient-window and delivery-job tables.
+
+Approval queues two separate jobs: the archived approved PDF, followed by a Prescription voice button.
+The button is bound to that PDF's approval, version, language and recipient. Tapping it queues audio only for
+that approved prescription, even after another patient's report is approved. A clinic copy is still possible
+when a synthetic patient has not joined the bot; it is not represented as delivery to that patient. If a
+verified patient PDF would go to this same clinic-copy number, that duplicate PDF job is suppressed.
+
+Each job records provider acceptance separately from signed sent/delivered/read receipts. The PDF job commits
+before its voice-option job sends, so retrying a failed option does not resend a successfully sent PDF.
+Failed jobs stop after three attempts. The approved-report screen shows their status and offers a scoped,
+CSRF-protected Retry failed WhatsApp delivery control. Accepted/read jobs are never reset by that control.
+STOP also stops clinic copies; START REPORTS resumes future copies. Duplicate inbound events cannot extend
+the 24-hour reply window. Outside that window, jobs wait for a new message; no business template is assumed.
+Use the button attached to the relevant report's option message when reviewing several patients' PDFs.
+
+API routes: `GET /api/v1/encounters/{id}/clinic-reports` and
+`POST /api/v1/encounters/{id}/clinic-reports/retry`. Both retain organisation scope; retry requires clinician
+permission. The original consented patient-follow-up workflow remains separate.
+
+The current local clinic-copy target was configured privately to the user's already-authorized test number.
+The latest approved synthetic report was queued. Live verification is currently blocked: Meta rejects the
+actual media-upload POST and webhook-subscription POST with HTTP 400, OAuth code 200, API access blocked.
+The local API and approved webhook-only relay are reachable. The supplied Meta credentials were not rotated.
+Do not claim this newly queued clinic copy was delivered until signed receipts confirm it.

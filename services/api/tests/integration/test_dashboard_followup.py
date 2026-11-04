@@ -17,7 +17,7 @@ from psycopg.types.json import Jsonb
 import pytest
 from fastapi.testclient import TestClient
 
-from voicerx.app import auth, followup, followup_routes, journey, main
+from voicerx.app import auth, clinic_reports, followup, followup_routes, journey, main
 from voicerx.app.config import load_settings
 from voicerx.agent.whatsapp import GraphClient, WhatsAppChannel, WhatsAppConfig
 from voicerx.agent.memory import LocalMemoryStore
@@ -35,7 +35,7 @@ def world(monkeypatch, tmp_path, draft_report):
             def transaction():
                 with conn.transaction():
                     yield conn
-            for module in (main, followup, followup_routes, journey):
+            for module in (main, followup, followup_routes, journey, clinic_reports):
                 monkeypatch.setattr(module, 'transaction', transaction)
             suffix = uuid4().hex[:10]
             org, other, doc, patient, encounter = [p + suffix for p in ('org-', 'other-', 'doc-', 'pat-', 'enc-')]

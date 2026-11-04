@@ -851,6 +851,12 @@ async function showReview(encounter, view) {
       h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) }));
   } else {
     const files = h('div', { class: 'row' });
+    const clinicStatus = h('div', { class: 'stack', role: 'status' });
+    const drawClinic = jobs => clinicStatus.replaceChildren(...jobs.map(j => h('p', { class: 'muted small',
+      text: `WhatsApp clinic copy · ${j.kind === 'report_pdf' ? 'PDF' : j.kind === 'voice_option' ? 'Voice option' : 'Requested audio'}: ${j.state.replaceAll('_', ' ')}${j.error ? ' · ' + j.error : ''}` })),
+      jobs.some(j => j.state === 'failed') && view.capabilities.resolve ? h('button', { class: 'btn btn-line btn-sm', type: 'button',
+        onclick: async () => { try { const r = await api(`/encounters/${encounter.id}/clinic-reports/retry`, { method: 'POST' }); drawClinic(r.items); } catch (e) { fail(e); } } }, 'Retry failed WhatsApp delivery') : '');
+    drawClinic(view.clinic_deliveries || []);
     const drawFiles = artifacts => files.replaceChildren(...artifacts.map(a => a.state === 'ready'
       ? h('a', { class: 'btn btn-line btn-sm', href: `/api/v1/artifacts/${a.id}/download` }, a.kind === 'report_pdf' ? 'Download approved PDF' : 'Download FHIR bundles')
       : h('span', { class: 'chip ' + (a.state === 'failed' ? 'miss' : 'muted'), text: `${a.kind === 'report_pdf' ? 'PDF' : 'FHIR'}: ${a.state}` })));
@@ -865,7 +871,7 @@ async function showReview(encounter, view) {
     approvePanel = h('section', { class: 'panel stack' },
       h('div', { class: 'approved' }, svg(ICON.check), h('span', {}, h('b', { text: `Approved version ${view.version}` }),
         ` by ${view.approval?.approver_name || 'the doctor'}, ${view.approval ? fmtTime(view.approval.approved_at) : ''}`)),
-      h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) + '. Follow-up and delivery have their own status.' }), files,
+      h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) + '. Follow-up and delivery have their own status.' }), files, clinicStatus,
       h('a', { class: 'btn btn-line', href: `#/followup/${encounter.id}` }, 'Open patient follow-up'));
   }
 

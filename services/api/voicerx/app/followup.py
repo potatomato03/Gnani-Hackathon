@@ -31,6 +31,7 @@ from ..pipeline.assemble import content_hash
 from .config import REPO_ROOT
 from .db import all_rows, audit, one, transaction
 from .journey import Journey, deliveries, inherit_channel, link_channel, menu, queue
+from .clinic_reports import ClinicReports
 
 log = logging.getLogger('voicerx.followup')
 AUTO = object()
@@ -63,7 +64,7 @@ def context(conn, encounter_id):
     return visit_for(encounter, ApprovedReport.model_validate(row['report']), patient)
 
 
-def initialize(conn, encounter, approved, patient):
+def initialize(conn, encounter, approved, patient, clinic_copy_contact=None):
     """Called in the approval transaction. Failure of eligibility never reverses approval."""
     existing = one(conn, 'select * from app.followups where encounter_id = %s and version = %s',
                    (encounter['id'], approved.version))
@@ -79,7 +80,8 @@ def initialize(conn, encounter, approved, patient):
                'values (%s,%s,%s,%s,%s,%s) returning *',
                (conv.id, encounter['id'], approved.version, visit.clinic_id, conv.patient_id,
                 Jsonb(conv.model_dump(mode='json'))))
-    queue(conn,conv,'report_pdf','approval')
+    if not clinic_copy_contact or conv.contact != clinic_copy_contact:
+        queue(conn,conv,'report_pdf','approval')
     return row
 
 
@@ -126,6 +128,7 @@ class FollowupService:
                        if memory is AUTO else memory)
         self.lock = threading.RLock()
         self.journey = Journey(self)
+        self.clinic_reports = ClinicReports(self)
         client = None
         if nlu is AUTO or reader is AUTO:
             try:
@@ -195,14 +198,17 @@ class FollowupService:
             if invitation:
                 data['join_hash'] = sha256(invitation.group(1).encode()).hexdigest()
                 data['text'] = None
-            conn.execute('insert into app.whatsapp_events (id, payload) values (%s,%s) on conflict do nothing',
+            inserted=one(conn,'insert into app.whatsapp_events (id, payload) values (%s,%s) on conflict do nothing returning id',
                          (item.message_id, Jsonb(data)))
+            if inserted:
+                self.clinic_reports.touch(conn,data)
             count += 1
         # Receipt updates are signed too, and can never promote accepted to delivered without Meta's event.
         ranks = {'accepted': 0, 'sent': 1, 'delivered': 2, 'read': 3, 'failed': 4}
         for entry in payload.get('entry', []):
             for change in entry.get('changes', []):
                 for receipt in change.get('value', {}).get('statuses', []):
+                    self.clinic_reports.receipt(conn,receipt)
                     row = one(conn, 'select * from app.whatsapp_receipts where message_id = %s for update',
                               (receipt.get('id'),))
                     status = receipt.get('status')
@@ -235,6 +241,8 @@ class FollowupService:
 
     def handle(self, conn, event):
         item = event['payload']
+        if self.clinic_reports.receive(conn,item):
+            return
         contact = item['sender']
         joining = item.get('join_hash')
         if joining:
@@ -319,7 +327,7 @@ class FollowupService:
                 conn.execute("update app.whatsapp_events set state = 'done', attempts = attempts + 1, updated_at = now() where id = %s",
                              (event['id'],))
                 return True
-        return self.journey.tick() or self.scheduled()
+        return self.clinic_reports.tick() or self.journey.tick() or self.scheduled()
 
     def scheduled(self):
         with self.lock, transaction() as conn:

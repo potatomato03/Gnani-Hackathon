@@ -39,6 +39,7 @@ from .views import CorrectionRefused, build_resolutions, report_view
 from .worker import TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
 from .followup import FollowupService, initialize as initialize_followup
 from .followup_routes import install as install_followup_routes
+from .clinic_reports import deliveries as clinic_deliveries
 from ..agent.gate import GateRefused
 
 log = logging.getLogger('voicerx.app')
@@ -496,12 +497,14 @@ def envelope(conn, session, encounter, row):
     approval = approval_of(conn, encounter['id'], report.version) if report.status == 'approved' else None
     artifacts = [{**a, 'created_at': a['created_at'].isoformat(), 'updated_at': a['updated_at'].isoformat()}
                  for a in artifacts_of(conn, encounter['id'], report.version)] if approval else []
-    return report_view(report, encounter['id'], encounter['patient_id'], encounter['organisation_id'], REFERENCE.products,
+    result = report_view(report, encounter['id'], encounter['patient_id'], encounter['organisation_id'], REFERENCE.products,
                        auth.capabilities(session),
                        approval={'id': approval['id'], 'approver_id': approval['approver_id'],
                                  'approver_name': approval['approver_name'],
                                  'approved_at': approval['approved_at'].isoformat()} if approval else None,
                        artifacts=artifacts, suggestions=suggestions, rules=load_rules(REPO_ROOT))
+    result['clinic_deliveries'] = clinic_deliveries(conn,encounter['id'],report.version)
+    return result
 
 
 @app.get('/api/v1/encounters/{encounter_id}/report')
@@ -608,9 +611,11 @@ async def post_approval(request: Request, encounter_id: str):
                          ('art-' + uuid.uuid4().hex[:12], encounter_id, approval_id, approved.version, kind))
         conn.execute("update app.encounters set state = 'approved', approved_version = %s where id = %s",
                      (approved.version, encounter_id))
+        patient = get_patient(conn, session['organisation_id'], encounter['patient_id'])
+        clinic_job = state['followup'].clinic_reports.queue_approval(conn,encounter,approved,patient,approval_id)
         try:
-            initialize_followup(conn, encounter, approved,
-                                get_patient(conn, session['organisation_id'], encounter['patient_id']))
+            initialize_followup(conn, encounter, approved, patient,
+                                clinic_copy_contact=clinic_job['recipient'] if clinic_job else None)
         except GateRefused:
             pass  # Approval succeeds even when consent/language/synthetic eligibility prevents follow-up.
         audit(conn, session['user_id'], session['organisation_id'], 'draft.approved', 'encounter', encounter_id,
@@ -627,6 +632,30 @@ def list_artifacts(request: Request, encounter_id: str):
         rows = artifacts_of(conn, encounter_id)
     return {'items': [{**a, 'created_at': a['created_at'].isoformat(), 'updated_at': a['updated_at'].isoformat()}
                       for a in rows]}
+
+
+@app.get('/api/v1/encounters/{encounter_id}/clinic-reports')
+def clinic_report_status(request: Request, encounter_id: str):
+    session=session_of(request)
+    with transaction() as conn:
+        encounter=get_encounter(conn,session['organisation_id'],encounter_id)
+        if encounter is None:
+            raise not_found('visit')
+        return {'items':clinic_deliveries(conn,encounter_id,encounter['approved_version'])}
+
+
+@app.post('/api/v1/encounters/{encounter_id}/clinic-reports/retry')
+def retry_clinic_reports(request: Request, encounter_id: str):
+    session=session_of(request);auth.require(session,'resolve')
+    with transaction() as conn:
+        encounter=get_encounter(conn,session['organisation_id'],encounter_id,lock=True)
+        if encounter is None:
+            raise not_found('visit')
+        conn.execute("update app.clinic_report_jobs set state='pending',attempts=0,error=null,provider_id=null,not_before=now(),"
+                     "updated_at=now() where encounter_id=%s and version=%s and state='failed'",
+                     (encounter_id,encounter['approved_version']))
+        audit(conn,session['user_id'],session['organisation_id'],'clinic_report.retry','encounter',encounter_id)
+        return {'items':clinic_deliveries(conn,encounter_id,encounter['approved_version'])}
 
 
 @app.get('/api/v1/artifacts/{artifact_id}/download')
