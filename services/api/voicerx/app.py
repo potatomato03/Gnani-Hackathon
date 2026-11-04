@@ -79,10 +79,10 @@ def default_nlu(state_dir: Path, memory):
 
 
 def default_reader(state_dir: Path):
-    """Reads a report the patient sends (D-119): one try per model, 60 s each (a photo takes longer than a
-    chat message). None when no provider is configured."""
+    """Reads a report the patient sends (D-119): one try per model, 30 s each and 90 s in all (a report takes
+    longer than a chat message). None when no provider is configured."""
     try:
-        client = build_client(ENV_FILE, state_dir / 'llm-cache', quick=True, timeout=60)
+        client = build_client(ENV_FILE, state_dir / 'llm-cache', quick=True, timeout=30, budget=90)
     except (ValueError, OSError):
         return None
     return lambda data, mime: read_document(data, mime, client)

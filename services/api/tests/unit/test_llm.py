@@ -280,5 +280,5 @@ def test_attachments_change_the_cache_key_and_skip_text_only_providers(tmp_path)
 def test_document_reads_get_a_longer_quick_timeout(tmp_path):
     env = tmp_path / ".env"
     env.write_text("GEMINI_API_KEY=k\n", encoding="utf-8")
-    assert {c.timeout for c in build_client(env, tmp_path, quick=True, timeout=60).clients} == {60}
-    assert {c.timeout for c in build_client(env, tmp_path, quick=True).clients} == {15}
+    assert {c.timeout for c in build_client(env, tmp_path, quick=True, timeout=30).clients} == {30}
+    assert {c.timeout for c in build_client(env, tmp_path, quick=True).clients} == {10}

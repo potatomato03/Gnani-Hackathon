@@ -214,9 +214,10 @@ class FallbackClient:
         raise QuotaExhausted('all configured providers unavailable')
 
 
-def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeout=None):
-    """quick=True is for chat messages: one try per key, a 15 s timeout, no waiting, and a second Gemini
-    model when the first is busy (gemini-3.8-flash returned 503 "high demand" on 4 Nov)."""
+def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeout=None, budget=None):
+    """quick=True is for chat messages: one try per key, no waiting, and the fallback models when one is busy
+    (gemini-3.8-flash returned 503 or ran past 60 s on 4 Nov). timeout is per request (default 10 s) and budget
+    the whole call (default 25 s); the budget must leave room for a fallback after one slow model."""
     from .gemini import DEFAULT_MODEL, GeminiAdapter
     from .ollama import OllamaAdapter
     from .openai_compat import OpenAICompatAdapter
@@ -225,7 +226,7 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeou
         if line.strip() and not line.lstrip().startswith('#') and '=' in line:
             key, value = line.split('=', 1)
             settings[key.strip()] = value.strip().strip('\"\'')
-    options = ({'max_transient': 1, 'timeout': timeout or 15, 'cooldown': 60, 'sleep': lambda seconds: None,
+    options = ({'max_transient': 1, 'timeout': timeout or 10, 'cooldown': 60, 'sleep': lambda seconds: None,
                 'repair': False} if quick else {})
     clients = []
     keys = [settings[k] for k in ('GEMINI_API_KEY', 'GEMINI_API_KEY_2') if settings.get(k)]
@@ -242,4 +243,4 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeou
         clients.append(ModelClient(OllamaAdapter(settings['OLLAMA_MODEL'], settings.get('OLLAMA_HOST', 'http://localhost:11434')), ['local'], cache_dir, **options))
     if not clients:
         raise ValueError('no configured provider')
-    return FallbackClient(clients, budget=(timeout or 15) if quick else None)
+    return FallbackClient(clients, budget=(budget or 25) if quick else None)

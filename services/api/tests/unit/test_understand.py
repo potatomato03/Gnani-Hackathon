@@ -148,7 +148,7 @@ def test_gemini_model_and_fallback_come_from_env(tmp_path):
     env.write_text("GEMINI_API_KEY=k\nGEMINI_MODEL=gemini-a\nGEMINI_FALLBACK_MODEL=gemini-b\n", encoding="utf-8")
     assert [c.adapter.model for c in build_client(env, tmp_path, quick=True).clients] == ["gemini-a", "gemini-b"]
     quick = build_client(env, tmp_path, quick=True).clients[0]
-    assert (quick.max_transient, quick.timeout) == (1, 15)
+    assert (quick.max_transient, quick.timeout) == (1, 10)
 
 
 
@@ -204,6 +204,18 @@ def test_quick_fallback_moves_on_after_invalid_output(tmp_path):
 def test_quick_build_client_has_a_budget(tmp_path):
     env = tmp_path / ".env"
     env.write_text("GEMINI_API_KEY=k\n", encoding="utf-8")
-    assert build_client(env, tmp_path, quick=True).budget == 15
-    assert build_client(env, tmp_path, quick=True, timeout=60).budget == 60
+    chat = build_client(env, tmp_path, quick=True)
+    assert (chat.budget, {c.timeout for c in chat.clients}) == (25, {10})
+    report = build_client(env, tmp_path, quick=True, timeout=30, budget=90)
+    assert (report.budget, {c.timeout for c in report.clients}) == (90, {30})
     assert build_client(env, tmp_path).budget is None
+
+
+def test_a_slow_first_model_still_leaves_time_for_the_fallback(tmp_path):
+    """Live, 4 Nov: gemini-3.8-flash took over 60 s on a report while 3.5 answered; with budget == timeout the
+    fallback never ran."""
+    env = tmp_path / ".env"
+    env.write_text("GEMINI_API_KEY=k\n", encoding="utf-8")
+    for client in (build_client(env, tmp_path, quick=True), build_client(env, tmp_path, quick=True, timeout=30,
+                                                                         budget=90)):
+        assert client.budget >= 2 * max(c.timeout for c in client.clients)
