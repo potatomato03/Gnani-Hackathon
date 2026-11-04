@@ -89,13 +89,14 @@ def retry_delay(headers, attempt):
 
 class ModelClient:
     def __init__(self, adapter, keys, cache_dir: Path, transport=None, sleep=time.sleep, max_transient=6,
-                 timeout=300, cooldown=None, clock=time.monotonic):
+                 timeout=300, cooldown=None, clock=time.monotonic, repair=True):
         """max_transient: tries per key on 429/5xx. A chat message uses 1 and a short timeout, so a busy
         provider falls back to the rules in seconds instead of minutes (runbook D-115). cooldown: seconds a
         key that was busy or unreachable rests before it is tried again; None means for the rest of the run.
         A daily quota always ends the key for the run."""
         self.adapter, self.keys, self.cache_dir = adapter, keys, Path(cache_dir)
         self.max_transient, self.timeout, self.cooldown, self.clock = max_transient, timeout, cooldown, clock
+        self.allow_repair = repair      # chat: no second "fix your JSON" request; the next model is tried instead
         self.transport = transport or partial(globals()['transport'], timeout=timeout)
         self.sleep = sleep
         self.exhausted = set()
@@ -167,7 +168,7 @@ class ModelClient:
                         raise ValueError('credential appeared in response')
                     parsed = schema.model_validate_json(reply)
                 except (ValueError, KeyError, TypeError, ValidationError) as error:
-                    if repair:
+                    if repair or not self.allow_repair:
                         raise ModelOutputInvalid(f'{self.adapter.name}: invalid response after repair') from None
                     repair = True
                     # Do not include raw provider data or credentials in errors or logs.
@@ -191,17 +192,25 @@ class ModelClient:
 
 
 class FallbackClient:
-    def __init__(self, clients):
-        self.clients = clients
+    def __init__(self, clients, budget=None, clock=time.monotonic):
+        """budget: seconds after which no further provider is started (chat and documents, D-115), and an
+        invalid reply then moves on to the next provider instead of failing. None: the pipeline's behaviour."""
+        self.clients, self.budget, self.clock = clients, budget, clock
 
     def generate(self, system, user, schema, prompt_version, attachments=()):
+        started = self.clock()
         for client in self.clients:
             if attachments and not getattr(client.adapter, 'supports_attachments', False):
                 continue
+            if self.budget is not None and self.clock() - started >= self.budget:
+                break
             try:
                 return client.generate(system, user, schema, prompt_version, attachments)
             except QuotaExhausted:
                 continue
+            except ModelOutputInvalid:
+                if self.budget is None:
+                    raise
         raise QuotaExhausted('all configured providers unavailable')
 
 
@@ -216,8 +225,8 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeou
         if line.strip() and not line.lstrip().startswith('#') and '=' in line:
             key, value = line.split('=', 1)
             settings[key.strip()] = value.strip().strip('\"\'')
-    options = ({'max_transient': 1, 'timeout': timeout or 15, 'cooldown': 60, 'sleep': lambda seconds: None}
-               if quick else {})
+    options = ({'max_transient': 1, 'timeout': timeout or 15, 'cooldown': 60, 'sleep': lambda seconds: None,
+                'repair': False} if quick else {})
     clients = []
     keys = [settings[k] for k in ('GEMINI_API_KEY', 'GEMINI_API_KEY_2') if settings.get(k)]
     if keys and only in (None, 'gemini'):
@@ -233,4 +242,4 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeou
         clients.append(ModelClient(OllamaAdapter(settings['OLLAMA_MODEL'], settings.get('OLLAMA_HOST', 'http://localhost:11434')), ['local'], cache_dir, **options))
     if not clients:
         raise ValueError('no configured provider')
-    return FallbackClient(clients)
+    return FallbackClient(clients, budget=(timeout or 15) if quick else None)

@@ -118,3 +118,26 @@ def test_safe_memory_reads_include_what_fell_back(tmp_path):
     assert safe.add_document(document("k1")) is True              # primary refused it; kept locally
     assert [d.sha256[0] for d in safe.documents("k1")] == ["a"]
     assert [i.id for i in safe.recent("k1")] == ["a"]
+
+
+
+def test_safe_memory_rests_supabase_after_a_failure(tmp_path):
+    now = [0.0]
+
+    class Counting(BrokenStore):
+        calls = 0
+
+        def __getattr__(self, name):
+            def fail(*args, **kwargs):
+                Counting.calls += 1
+                raise psycopg.OperationalError("paused")
+            return fail
+
+    safe = SafeMemory(Counting(None), LocalMemoryStore(tmp_path), cooldown=300, clock=lambda: now[0])
+    safe.add([item("a", "k1")])
+    safe.recent("k1")
+    safe.add([item("b", "k1")])
+    assert Counting.calls == 1                                  # one failure, then the local store only
+    now[0] += 301
+    safe.recent("k1")
+    assert Counting.calls == 2

@@ -349,14 +349,17 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
         if int(request.headers.get('content-length') or 0) > DOCUMENT_BYTES:
             raise HTTPException(413, 'the file is larger than 10 MB')
         data = await request.body()   # held in memory only; never written to disk
-        with lock:
-            conv = conversation(conversation_id)
-            typed_here(conv)
-            try:
-                keep_document(conv, data, request.headers.get('content-type', ''))
-            except GateRefused as refusal:
-                raise HTTPException(409, f'not sent: {refusal}') from None
-            return view(conv)
+
+        def work():   # a model read takes seconds: off the event loop, so webhooks are still answered
+            with lock:
+                conv = conversation(conversation_id)
+                typed_here(conv)
+                try:
+                    keep_document(conv, data, request.headers.get('content-type', ''))
+                except GateRefused as refusal:
+                    raise HTTPException(409, f'not sent: {refusal}') from None
+                return view(conv)
+        return await asyncio.to_thread(work)
 
     @app.get('/clinic/tasks')
     def clinic_tasks():

@@ -9,6 +9,7 @@ import hmac
 import json
 import logging
 import re
+import time
 from pathlib import Path
 
 import psycopg
@@ -143,14 +144,20 @@ class SafeMemory:
     what was written locally, so nothing that fell back goes missing.
     ponytail: writes made during an outage stay local and aren't copied up later; add a sync if outages matter."""
 
-    def __init__(self, primary, fallback):
-        self.primary, self.fallback = primary, fallback
+    def __init__(self, primary, fallback, cooldown=300, clock=time.monotonic):
+        """cooldown: seconds Supabase rests after a failure, so a paused project doesn't cost a 10 s connect
+        timeout on every message."""
+        self.primary, self.fallback, self.cooldown, self.clock = primary, fallback, cooldown, clock
+        self.resting_until = 0.0
 
     def _try(self, name, *args):
+        if self.clock() < self.resting_until:
+            return getattr(self.fallback, name)(*args)
         try:
             return getattr(self.primary, name)(*args)
         except (psycopg.Error, OSError) as error:
             log.warning('patient memory: Supabase unavailable (%s), using the local store', type(error).__name__)
+            self.resting_until = self.clock() + self.cooldown
             return getattr(self.fallback, name)(*args)
 
     def add(self, items):

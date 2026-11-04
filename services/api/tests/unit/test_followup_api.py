@@ -200,7 +200,8 @@ def test_web_upload_reads_a_report_for_the_doctor(tmp_path):
     conv = client.post("/demo/visits/fam-004-a/start").json()
     done = client.post(f"/conversations/{conv['id']}/documents", content=b"%PDF-1.4 x",
                        headers={"Content-Type": "application/pdf"}).json()
-    assert done["tasks"][-1]["kind"] == "document" and "X-ray report" in done["messages"][-1]["text"]
+    assert done["tasks"][-1]["kind"] == "document" and "X-ray report" in done["tasks"][-1]["note"]
+    assert "X-ray report" not in done["messages"][-1]["text"]          # model-read text never goes to the patient
     assert client.post(f"/conversations/{conv['id']}/documents", content=b"x" * 10_000_001,
                        headers={"Content-Type": "application/pdf"}).status_code == 413
     memory = client.get(f"/patients/sim-{conv['patient_id']}/memory").json()

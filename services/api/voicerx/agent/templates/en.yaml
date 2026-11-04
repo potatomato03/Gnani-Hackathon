@@ -53,7 +53,7 @@ replies:
   upload_hint: 'Please send your report here as a PDF or a clear photo. I will save it for {doctor} to review. (Test bot: send synthetic reports only.)'
   language_set: 'Okay, I will reply in English from now on.'
   language_unavailable: 'Sorry, I can only reply in Hindi or English for now.'
-  document_received: 'Thank you. I have saved your {report} and sent it to {doctor} to review. I cannot explain report results; the doctor will.'
+  document_received: 'Thank you. I have saved your report and sent it to {doctor} to review. I cannot explain report results; the doctor will.'
   document_unreadable: 'Sorry, I could not read that file. Please send a clear photo or a PDF, or reply DOCTOR.'
   document_not_report: 'This does not look like a medical report, so I have not saved it. Please send a lab report, scan report or prescription.'
   document_refused: 'Sorry, I can only take a PDF (up to 20 pages) or a JPG, PNG or WEBP photo, under 10 MB.'

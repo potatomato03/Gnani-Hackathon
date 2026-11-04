@@ -81,3 +81,12 @@ def test_typed_language_word_counts_as_a_choice(visits):
 def test_greeting_offers_the_menu(dolo):
     receive(dolo, text="namaste ji", nlu=fixed(intent="greeting", quote="namaste"))
     assert [b.id for b in last(dolo).buttons] == MENU
+
+
+
+def test_a_warning_sign_in_the_language_answer_still_turns_urgent(visits):
+    conv = start(visits["fam-001-a"], "c4", ask_language=True)
+    record = receive(conv, text="hindi please, my lips are puffing up",
+                     nlu=fixed(intent="change_language", language="hi-IN", warning_signs=["severe_allergy"],
+                               quote="lips are puffing up"))
+    assert record.action == "urgent" and last(conv).kind == "urgent"

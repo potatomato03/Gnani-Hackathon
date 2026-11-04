@@ -186,15 +186,15 @@ def receive(conv: Conversation, text: str | None = None, button: str | None = No
         _task(conv, 'callback', record, f'Patient asked to speak to the clinic: «{text}».')
         _reply(conv, record, 'text', replies['callback'])
         return record
+    reading = nlu(conv, text) if nlu and not conv.stopped else None
+    if reading is not None and reading.warning_signs:     # a model may add a warning sign, never remove one
+        return _urgent(conv, text, source, reading.warning_signs)
     if not conv.language_chosen:
         chosen = [lang for lang in offered_languages(conv) if contains(text, LANGUAGE_WORDS.get(lang, []))]
         if len(chosen) == 1:
             record = _record(conv, text, source, 'recorded', [])
             _set_language(conv, chosen[0], record)
             return record
-    reading = nlu(conv, text) if nlu else None
-    if reading is not None and reading.warning_signs:     # a model may add a warning sign, never remove one
-        return _urgent(conv, text, source, reading.warning_signs)
     awaiting = conv.awaiting
     if awaiting and awaiting.question == 'side_effect_detail':
         answer = FollowUpAnswer(question='side_effect_detail', value='described', quote=text)

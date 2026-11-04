@@ -149,3 +149,61 @@ def test_gemini_model_and_fallback_come_from_env(tmp_path):
     assert [c.adapter.model for c in build_client(env, tmp_path, quick=True).clients] == ["gemini-a", "gemini-b"]
     quick = build_client(env, tmp_path, quick=True).clients[0]
     assert (quick.max_transient, quick.timeout) == (1, 15)
+
+
+
+# Final review fixes: the model is optional, so it must fail safe and fast
+
+def test_make_nlu_never_raises():
+    import http.client
+    from voicerx.agent.understand import make_nlu
+
+    class Broken:
+        def recent(self, key, limit):
+            raise OSError("disk")
+
+    assert make_nlu(RaisingClient(http.client.IncompleteRead(b"")))(None, "hi") is None
+    conv = type("C", (), {"patient_key": "k"})()
+    assert make_nlu(StubClient(None), Broken())(conv, "hi") is None
+
+
+def test_quick_fallback_stops_at_its_time_budget(tmp_path):
+    from voicerx.llm.client import FallbackClient
+    now = [0.0]
+
+    class Slow:
+        adapter = GeminiAdapter()
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, *args, **kwargs):
+            self.calls += 1
+            now[0] += 15
+            raise QuotaExhausted("timed out")
+
+    first, second = Slow(), Slow()
+    with pytest.raises(QuotaExhausted):
+        FallbackClient([first, second], budget=15, clock=lambda: now[0]).generate("s", "u", Ping, "v")
+    assert (first.calls, second.calls) == (1, 0)
+
+
+def test_quick_fallback_moves_on_after_invalid_output(tmp_path):
+    bad = FakeTransport([(200, {}, json.dumps({"steps": [{"type": "model_output",
+                                                         "content": [{"type": "text", "text": "{}"}]}]}))])
+    good = FakeTransport([(200, {}, json.dumps({"steps": [{"type": "model_output",
+                                                          "content": [{"type": "text", "text": '{"word": "ok"}'}]}]}))])
+    from voicerx.llm.client import FallbackClient
+    quick = dict(sleep=fail_if_called, max_transient=1, timeout=15, repair=False)
+    client = FallbackClient([ModelClient(GeminiAdapter("a"), ["k"], tmp_path, transport=bad, **quick),
+                             ModelClient(GeminiAdapter("b"), ["k"], tmp_path, transport=good, **quick)], budget=15)
+    assert client.generate("s", "u", Ping, "v")[0].word == "ok"
+    assert (bad.calls, good.calls) == (1, 1)                    # no repair request in quick mode
+
+
+def test_quick_build_client_has_a_budget(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("GEMINI_API_KEY=k\n", encoding="utf-8")
+    assert build_client(env, tmp_path, quick=True).budget == 15
+    assert build_client(env, tmp_path, quick=True, timeout=60).budget == 60
+    assert build_client(env, tmp_path).budget is None

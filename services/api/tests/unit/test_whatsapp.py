@@ -627,7 +627,7 @@ def test_a_report_pdf_is_read_saved_and_sent_to_the_doctor(talk, tmp_path):
     doc["messages"][0]["document"] = {"id": "media-in-1", "mime_type": "application/pdf", "filename": "cbc.pdf"}
     post(talk.client, doc)
     assert seen == [(b"%PDF-1.4 synthetic report", "application/pdf")]
-    assert "document" in talk.tasks() and "Complete blood count" in talk.graph.texts()[-1]
+    assert "document" in talk.tasks() and "Complete blood count" not in talk.graph.texts()[-1]   # model text: doctor only
     memory = talk.client.get(f"/patients/{talk.patient_key}/memory").json()
     assert memory["documents"][0]["reading"]["findings"][0]["flag"] == "low"
     assert [i["kind"] for i in memory["items"]].count("document_fact") == 1

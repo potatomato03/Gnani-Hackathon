@@ -7,6 +7,7 @@ a fixed reply and the doctor a `document` task; the bot never explains results. 
 import hashlib
 import io
 import json
+import logging
 from pathlib import Path
 
 from pypdf import PdfReader
@@ -16,10 +17,12 @@ from ..contracts.documents import PatientDocument, ReportReading
 from ..contracts.followup import Conversation, FollowUpRecord, MemoryItem, Message
 from ..llm.client import ModelOutputInvalid, QuotaExhausted
 from .conversation import STEP, _record, _reply, _task
+from .gate import GateRefused
 from .memory import patient_key_for_simulated
 from .templates import load_templates
 from .text import find, tokens
 
+log = logging.getLogger('voicerx.documents')
 ALLOWED = {'application/pdf', 'image/jpeg', 'image/png', 'image/webp'}
 MAX_BYTES = 10_000_000
 MAX_PAGES = 20
@@ -84,7 +87,10 @@ def _note(reading):
 def receive_document(conv: Conversation, data: bytes, mime: str, reader) -> tuple[FollowUpRecord,
                                                                                   PatientDocument | None]:
     """A report from the patient. reader(data, mime) -> (reading, method, pages), e.g. read_document bound to a
-    client; None when no model is configured."""
+    client; None when no model is configured. After STOP nothing is read (GateRefused, as for any message).
+    The patient's reply is fixed text only: what the model read goes to the doctor's task, never to the patient."""
+    if conv.stopped:
+        raise GateRefused('the patient sent STOP')
     conv.clock = conv.clock + STEP
     replies, doctor = load_templates(conv.language)['replies'], conv.doctor_name
     label = 'Sent a PDF' if mime.startswith('application/pdf') else 'Sent a photo'
@@ -98,6 +104,9 @@ def receive_document(conv: Conversation, data: bytes, mime: str, reader) -> tupl
         reply, reading = 'document_refused', None
     except (QuotaExhausted, ModelOutputInvalid):
         reply, reading = 'document_unreadable', None
+    except Exception as error:   # a reader failure the model client didn't map: still a fixed reply
+        log.warning('report not read: %s', type(error).__name__)
+        reply, reading = 'document_unreadable', None
     else:
         reply = 'document_received' if reading.is_medical_report else 'document_not_report'
     if reply != 'document_received':
@@ -110,8 +119,7 @@ def receive_document(conv: Conversation, data: bytes, mime: str, reader) -> tupl
                           sha256=hashlib.sha256(data).hexdigest(), pages=pages, method=method, reading=reading,
                           received_at=conv.clock)
     _task(conv, 'document', record, _note(reading))
-    _reply(conv, record, 'text', replies['document_received'].format(report=reading.report_type or 'report',
-                                                                      doctor=doctor))
+    _reply(conv, record, 'text', replies['document_received'].format(doctor=doctor))
     return record, doc
 
 

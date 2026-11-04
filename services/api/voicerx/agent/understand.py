@@ -4,6 +4,7 @@ The model only classifies. Its output is enum values, ids from lists we give it,
 message. Code validates all of it here, and nothing the model writes is ever sent to the patient.
 """
 import json
+import logging
 from pathlib import Path
 
 from ..contracts.followup import Conversation, MemoryItem, Understanding
@@ -13,6 +14,7 @@ from .conversation import BUTTONS, offered_languages
 from .redflags import load_rules
 from .text import find, tokens
 
+log = logging.getLogger('voicerx.understand')
 PROMPT_VERSION = 'understand-v1'
 SYSTEM = (Path(__file__).parent / 'prompts' / 'understand.md').read_text(encoding='utf-8')
 MEMORY_ITEMS = 20
@@ -77,6 +79,10 @@ def understand(client, conv: Conversation, text: str, memory: list[MemoryItem]) 
 def make_nlu(client, memory_store=None):
     """The callable the app hands to conversation.receive."""
     def nlu(conv, text):
-        memory = memory_store.recent(conv.patient_key, MEMORY_ITEMS) if memory_store and conv.patient_key else []
-        return understand(client, conv, text, memory)
+        try:
+            memory = memory_store.recent(conv.patient_key, MEMORY_ITEMS) if memory_store and conv.patient_key else []
+            return understand(client, conv, text, memory)
+        except Exception as error:   # the model is optional: any failure means the rules decide
+            log.warning('model reading skipped: %s', type(error).__name__)
+            return None
     return nlu

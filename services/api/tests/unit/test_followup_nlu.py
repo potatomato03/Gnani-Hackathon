@@ -94,3 +94,15 @@ def test_greeting_report_and_language_get_fixed_replies(dolo):
     receive(dolo, text="tamil please", nlu=fixed(intent="change_language", language=None, quote="tamil"))
     assert last(dolo).text == replies(dolo)["language_unavailable"]
     assert task_kinds(dolo) == []
+
+
+
+def test_the_model_is_not_asked_after_stop(dolo):
+    from voicerx.agent.gate import GateRefused
+    receive(dolo, text="STOP")
+    asked = []
+    try:
+        receive(dolo, text="how are you", nlu=lambda conv, text: asked.append(text))
+    except GateRefused:
+        pass
+    assert asked == []
