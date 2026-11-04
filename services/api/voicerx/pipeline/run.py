@@ -20,7 +20,7 @@ from .check_report import check_report
 from .assemble import assemble_draft
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-SIGNED = re.compile(r'approved_report\.json|report_approved\.pdf|fhir_\w+\.json|draft_report\.v\d+\.json')
+SIGNED = re.compile(r'approved_report\.json|report_approved\.pdf|fhir_\w+\.json|draft_report\.v\d+\.json|followup\.json')
 # Typed scripts, or speech-to-text output read from data/eval/results/<source>/.
 SOURCES = ('typed', 'whisper', 'prisma', 'prisma-keyterms')
 

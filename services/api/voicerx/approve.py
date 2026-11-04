@@ -26,9 +26,9 @@ def approve(draft: DraftReport, by, at):
     return ApprovedReport.model_validate({**draft.model_dump(), 'status': 'approved', 'approved_by': by.strip(), 'approved_at': at})
 
 
-def main():
+def main(argv=None):
     import argparse
-    from datetime import datetime, timezone
+    from datetime import date, datetime, timezone
     from pathlib import Path
     from .pipeline.run import save_json
     from .exports.pdf.render import render_html, html_to_pdf
@@ -37,7 +37,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('--by', required=True)
-    args = parser.parse_args()
+    parser.add_argument('--review-date', type=date.fromisoformat, default=None,
+                        help='review date explicitly confirmed by the doctor (YYYY-MM-DD)')
+    parser.add_argument('--followup', action='store_true', help='start a consented synthetic follow-up in the local simulator')
+    args = parser.parse_args(argv)
     directory = args.directory.resolve()
     draft = DraftReport.model_validate_json((directory / 'draft_report.json').read_text(encoding='utf-8'))
     # Revalidate even when reusing an earlier approval's timestamp.
@@ -65,6 +68,19 @@ def main():
     save_json(approved_path, approved)
     save_json(directory / 'fhir_status.json', {'validation': 'not officially validated'})
     print(f'Approved version {approved.version}; fingerprint {approved.content_hash[:12]}')
+    if args.review_date:
+        from .agent.visits import write_followup_settings
+        write_followup_settings(directory, args.review_date, args.by.strip(), approved.approved_at)
+        print(f'Review date confirmed: {args.review_date.isoformat()}')
+    if args.followup:
+        from .agent.gate import GateRefused
+        from .agent import visits
+        try:
+            conv = visits.start_followup(visits.load_visit(approved_path))
+        except GateRefused as refusal:
+            print(f'Follow-up not started: {refusal}')
+        else:
+            print(f'Follow-up started: conversation {conv.id} in {visits.STATE / "conversations"}')
 
 
 if __name__ == '__main__':

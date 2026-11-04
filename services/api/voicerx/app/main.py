@@ -37,6 +37,9 @@ from .catalog import standing
 from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index
 from .views import CorrectionRefused, build_resolutions, report_view
 from .worker import TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
+from .followup import FollowupService, initialize as initialize_followup
+from .followup_routes import install as install_followup_routes
+from ..agent.gate import GateRefused
 
 log = logging.getLogger('voicerx.app')
 WEB = Path(__file__).resolve().parents[2] / 'web'
@@ -69,7 +72,8 @@ async def lifespan(app):
     settings = load_settings()
     state['settings'] = settings
     open_pool(settings.database_url)
-    worker = Worker(settings)
+    state['followup'] = FollowupService(settings)
+    worker = Worker(settings, followup=state['followup'])
     state['worker'] = worker
     worker.start()
     # Load the embedding model and the product name index in the background, so the first search isn't slow.
@@ -604,6 +608,11 @@ async def post_approval(request: Request, encounter_id: str):
                          ('art-' + uuid.uuid4().hex[:12], encounter_id, approval_id, approved.version, kind))
         conn.execute("update app.encounters set state = 'approved', approved_version = %s where id = %s",
                      (approved.version, encounter_id))
+        try:
+            initialize_followup(conn, encounter, approved,
+                                get_patient(conn, session['organisation_id'], encounter['patient_id']))
+        except GateRefused:
+            pass  # Approval succeeds even when consent/language/synthetic eligibility prevents follow-up.
         audit(conn, session['user_id'], session['organisation_id'], 'draft.approved', 'encounter', encounter_id,
               {'version': approved.version, 'content_hash': approved.content_hash})
         return envelope(conn, session, encounter, report_row(conn, encounter_id, approved.version, 'approved'))
@@ -633,6 +642,13 @@ def download(request: Request, artifact_id: str):
         raise ApiError(409, 'artifact_not_ready', 'This file is not ready yet.', retryable=True)
     path = state['settings'].artifacts_dir / row['encounter_id'] / f"v{row['version']}" / row['file_name']
     if not path.is_file() or sha256(path.read_bytes()).hexdigest() != row['sha256']:
+        if row['kind']=='report_pdf':
+            with transaction() as conn:
+                archived=one(conn,'select sha256,data from app.report_files where encounter_id=%s and version=%s',
+                             (row['encounter_id'],row['version']))
+            if archived and sha256(bytes(archived['data'])).hexdigest()==archived['sha256']==row['sha256']:
+                return Response(bytes(archived['data']),media_type='application/pdf',headers={
+                    'Cache-Control':'private, no-store','Content-Disposition':f'attachment; filename="approved-v{row["version"]}.pdf"'})
         raise ApiError(410, 'artifact_changed', 'This file is missing or no longer matches its record.')
     return FileResponse(path, filename=f"{row['mrn']}-v{row['version']}-{row['file_name']}")
 
@@ -763,6 +779,8 @@ async def knowledge_search(request: Request):
 
 
 # ---------- Web app ----------
+
+install_followup_routes(app, state, session_of, ApiError)
 
 app.mount('/static', StaticFiles(directory=WEB / 'static'), name='static')
 

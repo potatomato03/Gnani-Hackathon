@@ -70,10 +70,11 @@ def save_shortlist(conn, encounter_id, conditions, items, method):
 
 
 class Worker(threading.Thread):
-    def __init__(self, settings, client=None, transcriber=None):
+    def __init__(self, settings, client=None, transcriber=None, followup=None):
         super().__init__(name='voicerx-worker', daemon=True)
         self.settings = settings
         self.client = client
+        self.followup = followup
         self.transcriber = transcriber or (lambda samples, language: transcribe(samples, language, read_env()['GNANI_API_KEY']))
         self.reference = load_reference(REPO_ROOT)
         self.stopping = threading.Event()
@@ -92,7 +93,9 @@ class Worker(threading.Thread):
                 self.stopping.wait(1.0)
 
     def tick(self):
-        return self.next_run() or self.next_artifact()
+        # Give inbound patient events a turn even while extraction/export jobs are arriving.
+        followed = self.followup.tick() if self.followup else False
+        return self.next_run() or self.next_artifact() or followed
 
     def llm(self):
         if self.client is None:
@@ -265,6 +268,10 @@ class Worker(threading.Thread):
             return True
         digest = sha256(path.read_bytes()).hexdigest()
         with transaction() as conn:
+            if artifact['kind']=='report_pdf':
+                conn.execute('insert into app.report_files(encounter_id,version,sha256,data) values(%s,%s,%s,%s) '
+                             'on conflict(encounter_id,version) do update set sha256=excluded.sha256,data=excluded.data',
+                             (artifact['encounter_id'],artifact['version'],digest,path.read_bytes()))
             conn.execute("update app.artifacts set state = 'ready', file_name = %s, sha256 = %s, error = null, "
                          'updated_at = now() where id = %s', (path.name, digest, artifact['id']))
         return True

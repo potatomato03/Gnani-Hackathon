@@ -11,6 +11,7 @@ from ..pipeline.check_extraction import said_away
 from ..pipeline.complete import bare_number
 from ..pipeline.schedule import parse_dose, parse_duration, parse_food, parse_meal, parse_timing
 from ..standard import DOSE_FORMS, proposals
+from ..resolve import CONFIRMABLE_INTERPRETATIONS
 from .catalog import parse_composition
 
 SCHEMA_VERSION = 1
@@ -45,6 +46,7 @@ VALUE_SHAPES = {
     'set_timing': {'schedule': dict}, 'set_food': {'food': str}, 'set_duration': {'value': int, 'unit': str},
     'remove_medicine': {}, 'confirm_order': {}, 'acknowledge': {'code': str}, 'edit_line': {'text': str},
     'remove_line': {}, 'add_line': {'text': str, 'cites': list}, 'dismiss_item': {},
+    'confirm_interpretation': {'code': str},
     'add_medicine': {'product_id': str, 'dose': dict, 'schedule': dict, 'food': str, 'duration': dict},
 }
 
@@ -73,7 +75,10 @@ def _actions(issue, kind, cited_by):
     elif kind == 'finding' and issue.code in TITLES:
         # A finding no line uses can be dismissed or written up; one in use is corrected through its lines.
         actions = ['edit_line', 'remove_line'] if cited_by else ['add_line', 'dismiss_item']
-    if issue.severity == 'warn':
+    confirmable = kind in ('line', 'finding') and issue.code in CONFIRMABLE_INTERPRETATIONS
+    if confirmable:
+        actions.insert(0, 'confirm_interpretation')
+    if issue.severity == 'warn' and not confirmable:
         actions.append('acknowledge')
     return actions
 

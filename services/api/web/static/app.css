@@ -319,3 +319,14 @@ textarea.input { resize: vertical; line-height: 1.55; }
   .visits button { grid-template-columns: 1fr auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* Follow-up keeps patient-reported messages distinct from the approved report. */
+.followup-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.followup-messages { margin-block: 20px; max-height: 440px; overflow-y: auto; padding: 3px; }
+.followup-message.patient { border-left: 4px solid var(--iris, #7772bc); margin-left: min(8%, 40px); }
+.followup-message.clinic { border-left: 4px solid var(--green, #50836a); margin-right: min(8%, 40px); }
+.followup-simulator, .followup-simulator label { display: grid; gap: 14px; }
+.followup-simulator .btn { justify-self: start; }
+.patient-journey { margin-block: 18px; }
+.patient-journey summary { cursor: pointer; font-weight: 600; padding-block: 8px; }
+.history-entry { padding-block: 14px; border-top: 1px solid var(--line, #ddd); }
+[hidden] { display: none !important; }

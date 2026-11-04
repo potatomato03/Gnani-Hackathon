@@ -57,6 +57,16 @@ def secret_values(folders=FOLDERS):
         values.append(value)
         if DATABASE.match(value):
             values += [_password(value), quote(_password(value), safe=''), database_url(value)]
+    # Meta is supplied as a bundle. Read individual secrets without treating its non-secret settings
+    # (model names, directories or recipient numbers) as keys, and never print the values.
+    bundle = _read('meta_bot.env', folders)
+    if bundle:
+        meta = dict(line.split('=', 1) for line in bundle.splitlines()
+                    if '=' in line and not line.lstrip().startswith('#'))
+        for name in ('WHATSAPP_TOKEN', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'PATIENT_HASH_KEY'):
+            value = meta.get(name, '').strip().strip('\"\'')
+            if value:
+                values.append(value)
     return values
 
 

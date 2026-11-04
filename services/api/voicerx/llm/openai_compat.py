@@ -10,7 +10,9 @@ class OpenAICompatAdapter:
         # Groq's edge refuses urllib's default User-Agent, so send our own.
         return self.url, {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json',
                           'User-Agent': 'voicerx'}, {
-            'model': self.model, 'temperature': 0,
+            # Reasoning and the complete JSON share this budget. Leaving it unspecified rejected an
+            # eight-minute consultation with json_validate_failed; that response needed 6,541 tokens.
+            'model': self.model, 'temperature': 0, 'max_completion_tokens': 16384,
             'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
             'response_format': {'type': 'json_schema',
                                 'json_schema': {'name': 'output', 'strict': True, 'schema': schema}}}

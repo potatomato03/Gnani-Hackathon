@@ -1,0 +1,33 @@
+# Warning signs that send a follow-up conversation straight to urgent care (runbook D-108).
+# DRAFT written by the assistant. Not reviewed by a doctor; not for clinical use until reviewed (Q-26).
+# Every list is checked whatever the patient's language, because patients code-mix.
+# Matching: whole words after Unicode normalisation (nukta and chandrabindu folded), case-insensitive.
+# A phrase is negated when a negation word stands right before it (English: "no chest pain") or right
+# after it (Hindi: "सीने में दर्द नहीं है"). Telugu and Tamil lists are not written yet.
+reviewed_by: null
+synthetic: true
+flags:
+  - id: chest_pain
+    en: [chest pain, pain in my chest, pain in the chest, chest is hurting]
+    hi: [सीने में दर्द, छाती में दर्द, सीने में तेज़ दर्द]
+    hi_latn: [seene mein dard, seene me dard, sine mein dard, chhati mein dard, chhati me dard, chest mein dard, chest me dard]
+  - id: severe_breathlessness
+    en: [cannot breathe, can't breathe, cant breathe, unable to breathe, very short of breath, struggling to breathe, more breathless, breathlessness is worse, cannot speak]
+    hi: [साँस नहीं आ रही, साँस बिल्कुल नहीं आ रही, साँस लेने में बहुत तकलीफ़, साँस ज़्यादा फूल, साँस फूल रही, बोल भी नहीं पा]
+    hi_latn: [saans nahi aa rahi, saans nahin aa rahi, sans nahi aa rahi, saans bilkul nahi, saans phool rahi, saans zyada phool, saans lene mein bahut takleef]
+  - id: fainting
+    en: [fainted, fainting, passed out, unconscious, blacked out]
+    hi: [बेहोश, बेहोशी]
+    hi_latn: [behosh, behoshi]
+  - id: severe_allergy
+    en: [face is swelling, swelling of face, face swelling, lips swelling, swollen lips, swollen face, throat swelling, throat is closing, rash all over]
+    hi: [चेहरे पर सूजन, चेहरा सूज, होंठ सूज, गले में सूजन, पूरे शरीर पर दाने]
+    hi_latn: [chehre pe sujan, chehre par sujan, chehra sooj, honth sooj, hoth sooj, gale mein sujan]
+  - id: bleeding
+    en: [vomiting blood, blood in vomit, blood in stool, black stool, coughing blood, coughing up blood]
+    hi: [खून की उल्टी, उल्टी में खून, मल में खून, खाँसी में खून, काला मल]
+    hi_latn: [khoon ki ulti, ulti mein khoon, potty mein khoon, khansi mein khoon, kala mal]
+  - id: seizure
+    en: [seizure, convulsion, fits]
+    hi: [दौरा पड़ा, झटके आ रहे]
+    hi_latn: [daura pada, jhatke aa rahe]

@@ -17,6 +17,12 @@ class ResolutionRefused(Exception):
     pass
 
 
+# A doctor can accept an existing clinical interpretation without rewriting its text. Structural/source
+# failures and medicine requirements still need their own corrections; this is not a general block override.
+CONFIRMABLE_INTERPRETATIONS = frozenset({'negation_mismatch', 'certainty_mismatch', 'laterality_mismatch',
+    'subject_mismatch', 'temporality_mismatch', 'section_mismatch', 'mixed_negation', 'speaker_unclear'})
+
+
 def resolve(draft, resolutions, reference):
     if draft.status != 'draft' or content_hash(draft) != draft.content_hash:
         raise ResolutionRefused('only an intact draft can be corrected')
@@ -38,6 +44,17 @@ def resolve(draft, resolutions, reference):
             if correction.id in seen:
                 raise ResolutionRefused('resolution ids must be unique')
             seen.add(correction.id)
+            if correction.action == 'confirm_interpretation':
+                section, _, index = correction.target.partition(':')
+                is_line = (section in MODEL_SECTIONS and index.isdigit()
+                           and int(index) < len(result.sections.get(section, [])))
+                key = (correction.target, correction.value.get('code'))
+                if (correction.target not in kept_ids and not is_line) or key[1] not in CONFIRMABLE_INTERPRETATIONS:
+                    raise ResolutionRefused('only an existing finding or line interpretation can be confirmed')
+                if not any((i.target, i.code) == key for i in result.issues):
+                    raise ResolutionRefused('that interpretation is not flagged on this draft')
+                acknowledgements.add(key)
+                continue
             if correction.action == 'acknowledge':
                 key = (correction.target, correction.value.get('code'))
                 found = [i for i in result.issues if (i.target, i.code) == key]

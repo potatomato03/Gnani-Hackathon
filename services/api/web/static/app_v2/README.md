@@ -16,7 +16,9 @@ So every feature and every fix to the workflow (sign-in, patients, recording, up
 report review and editing, the medicine picker, approval, PDF and FHIR exports) applies to both pages at once,
 and both reach the same records.
 
-The ZIP's proposed password login, hospital accounts and WhatsApp follow-ups are not implemented. Its mock data,
+The ZIP's proposed password login and hospital accounts are not implemented. Follow-up is now connected through
+the shared application script to approved visits, the local patient simulator and doctor tasks; see
+`docs/whatsapp-integration.md`. Its mock data,
 assumed API contracts and replacement prescription editor are not used.
 
 ## End-to-end verification

@@ -8,7 +8,7 @@ Built for the Gnani AI Great Indian AI Internship Challenge. Speech runs on Gnan
 
 ## Status
 
-The extraction and report pipeline is implemented on `aditya/extraction-report`: two checked model stages, deterministic medicine matching and instructions, draft PDFs, audited corrections, approval and FHIR export. The web screens, speech integration and patient voice agent remain future work. See the [runbook](runbook.md) for evaluation results and limitations.
+The extraction and report pipeline and doctor dashboard run on `aditya/extraction-report`: two checked model stages, medicine matching and instructions, audio capture, audited corrections, approval and PDF/FHIR export. The follow-up bot from `devansh/whatsapp-nlp-bot` is integrated with the same approved records, clinic sessions and database. Its local patient simulator, check-ins, report uploads and doctor tasks are available in the dashboard. A private real-phone Meta test verified JOIN, language/menu replies, read receipts, and a callback request saved to Supabase task/memory state using a synthetic visit. See [WhatsApp integration](docs/whatsapp-integration.md) for setup, verification and transport limitations, and the [runbook](runbook.md) for evaluation results.
 
 ## Layout
 
@@ -55,3 +55,4 @@ Review `draft_report.json` and `report.pdf`. `python -m voicerx.resolve --help` 
 - [Evals](docs/EVALS.md)
 - [Contributions](docs/CONTRIBUTIONS.md)
 - [Data rules and sources](data/README.md)
+- [Integrated patient follow-up and local simulator](docs/whatsapp-integration.md)

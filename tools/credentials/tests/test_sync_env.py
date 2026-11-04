@@ -52,3 +52,12 @@ def test_secret_values_include_the_bare_database_password(tmp_path):
         'postgresql://postgres.abc:[p@ss]@host.pooler.supabase.com:5432/postgres', encoding='utf-8')
     (folder / 'GNANI_API.env.txt').write_text('gnani', encoding='utf-8')
     assert {'gnani', 'p@ss', 'p%40ss'} <= set(secret_values([folder]))
+
+
+def test_meta_bundle_secrets_are_scanned_without_treating_settings_as_secrets(tmp_path):
+    (tmp_path / 'meta_bot.env').write_text(
+        'WHATSAPP_TOKEN="fake-meta-token"\nWHATSAPP_APP_SECRET=fake-app-secret\n'
+        'WHATSAPP_VERIFY_TOKEN=fake-verify-token\nPATIENT_HASH_KEY=fake-hash-key\n'
+        'GROQ_MODEL=model-name\nWHATSAPP_TEST_NUMBERS=910000000001\n', encoding='utf-8')
+    assert set(secret_values([tmp_path])) == {
+        'fake-meta-token', 'fake-app-secret', 'fake-verify-token', 'fake-hash-key'}

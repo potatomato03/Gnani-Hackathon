@@ -1,0 +1,64 @@
+{
+  "chief_complaints": [
+    {
+      "text": "Chest tightness for 2 days",
+      "cites": [
+        "x1"
+      ]
+    },
+    {
+      "text": "Wheezing, worse at night",
+      "cites": [
+        "x2"
+      ]
+    }
+  ],
+  "history_present_illness": [
+    {
+      "text": "Known asthma for 5 years",
+      "cites": [
+        "x3"
+      ]
+    }
+  ],
+  "vitals": [
+    {
+      "text": "SpO2 96%",
+      "cites": [
+        "x4"
+      ]
+    }
+  ],
+  "examination": [
+    {
+      "text": "Bilateral wheeze",
+      "cites": [
+        "x5"
+      ]
+    }
+  ],
+  "diagnoses": [
+    {
+      "text": "Acute exacerbation of asthma",
+      "cites": [
+        "x6"
+      ]
+    }
+  ],
+  "advice": [
+    {
+      "text": "Come to emergency at once if breathlessness worsens",
+      "cites": [
+        "x7"
+      ]
+    }
+  ],
+  "follow_up": [
+    {
+      "text": "Review after 1 week",
+      "cites": [
+        "x8"
+      ]
+    }
+  ]
+}

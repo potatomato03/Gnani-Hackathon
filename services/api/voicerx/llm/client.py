@@ -2,6 +2,7 @@
 from dataclasses import dataclass, asdict, replace
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from functools import partial
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -13,6 +14,8 @@ from uuid import uuid4
 from pydantic import BaseModel, ValidationError
 
 _LOCAL_LOCK = Lock()
+# Gemini models tried after GEMINI_MODEL for chat messages. On 4 Nov these answered while 3.8 and 3.7 were busy.
+QUICK_FALLBACK = 'gemini-3.5-flash,gemini-3.5-flash-lite'
 _CACHE_LOCK = Lock()
 
 
@@ -53,11 +56,11 @@ def json_schema_for(model: type[BaseModel]) -> dict:
     return expand(schema)
 
 
-def transport(url, headers, body):
+def transport(url, headers, body, timeout=300):
     request = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode('utf-8'),
                                      headers=headers, method='POST')
     try:
-        with urllib.request.urlopen(request, timeout=300) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status, dict(response.headers), response.read().decode('utf-8')
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers), error.read().decode('utf-8', 'replace')
@@ -85,20 +88,40 @@ def retry_delay(headers, attempt):
 
 
 class ModelClient:
-    def __init__(self, adapter, keys, cache_dir: Path, transport=None, sleep=time.sleep):
+    def __init__(self, adapter, keys, cache_dir: Path, transport=None, sleep=time.sleep, max_transient=6,
+                 timeout=300, cooldown=None, clock=time.monotonic, repair=True):
+        """max_transient: tries per key on 429/5xx. A chat message uses 1 and a short timeout, so a busy
+        provider falls back to the rules in seconds instead of minutes (runbook D-115). cooldown: seconds a
+        key that was busy or unreachable rests before it is tried again; None means for the rest of the run.
+        A daily quota always ends the key for the run."""
         self.adapter, self.keys, self.cache_dir = adapter, keys, Path(cache_dir)
-        self.transport = transport or globals()['transport']
+        self.max_transient, self.timeout, self.cooldown, self.clock = max_transient, timeout, cooldown, clock
+        self.allow_repair = repair      # chat: no second "fix your JSON" request; the next model is tried instead
+        self.transport = transport or partial(globals()['transport'], timeout=timeout)
         self.sleep = sleep
         self.exhausted = set()
+        self.resting = {}           # key index -> clock time it may be tried again
 
-    def generate(self, system, user, schema, prompt_version):
+    def _rest(self, index):
+        if self.cooldown is None:
+            self.exhausted.add(index)
+        else:
+            self.resting[index] = self.clock() + self.cooldown
+
+    def generate(self, system, user, schema, prompt_version, attachments=()):
+        """attachments: (mime type, bytes) pairs, e.g. a report photo (D-119); only adapters that declare
+        supports_attachments take them."""
+        if attachments and not getattr(self.adapter, 'supports_attachments', False):
+            raise QuotaExhausted(f'{self.adapter.name}: cannot read attachments')
         if self.adapter.name == 'ollama':
             with _LOCAL_LOCK:
-                return self._generate(system, user, schema, prompt_version)
-        return self._generate(system, user, schema, prompt_version)
+                return self._generate(system, user, schema, prompt_version, attachments)
+        return self._generate(system, user, schema, prompt_version, attachments)
 
-    def _generate(self, system, user, schema, prompt_version):
-        fingerprint = json.dumps([self.adapter.name, self.adapter.model, prompt_version, system, user], ensure_ascii=False)
+    def _generate(self, system, user, schema, prompt_version, attachments=()):
+        attached = [[mime, sha256(data).hexdigest()] for mime, data in attachments]
+        fingerprint = json.dumps([self.adapter.name, self.adapter.model, prompt_version, system, user, *attached],
+                                 ensure_ascii=False)
         cache_key = sha256(fingerprint.encode('utf-8')).hexdigest()
         path = self.cache_dir / (cache_key + '.json')
         if path.exists():
@@ -113,22 +136,26 @@ class ModelClient:
         repair = False
         request_user = user
         for index, key in enumerate(self.keys):
-            if index in self.exhausted:
+            if index in self.exhausted or self.resting.get(index, 0) > self.clock():
                 continue
             transient = 0
-            while transient < 6:
-                url, headers, body = self.adapter.build(system, request_user, json_schema_for(schema), key)
+            while transient < self.max_transient:
+                extra = {'attachments': attachments} if attachments else {}
+                url, headers, body = self.adapter.build(system, request_user, json_schema_for(schema), key, **extra)
                 status, response_headers, text = self.transport(url, headers, body)
                 attempts += 1
-                if status == 0 or self.adapter.is_quota_exhausted(status, response_headers, text):
+                if self.adapter.is_quota_exhausted(status, response_headers, text):
                     self.exhausted.add(index)
+                    break
+                if status == 0:
+                    self._rest(index)
                     break
                 if status == 429 or status >= 500:
                     transient += 1
-                    if transient < 6:
+                    if transient < self.max_transient:
                         self.sleep(retry_delay(response_headers, transient))
                     else:
-                        self.exhausted.add(index)
+                        self._rest(index)
                     continue
                 rejected = status != 200 and getattr(self.adapter, 'is_invalid_output', lambda s, t: False)(status, text)
                 if status != 200 and not rejected:
@@ -141,7 +168,7 @@ class ModelClient:
                         raise ValueError('credential appeared in response')
                     parsed = schema.model_validate_json(reply)
                 except (ValueError, KeyError, TypeError, ValidationError) as error:
-                    if repair:
+                    if repair or not self.allow_repair:
                         raise ModelOutputInvalid(f'{self.adapter.name}: invalid response after repair') from None
                     repair = True
                     # Do not include raw provider data or credentials in errors or logs.
@@ -165,20 +192,33 @@ class ModelClient:
 
 
 class FallbackClient:
-    def __init__(self, clients):
-        self.clients = clients
+    def __init__(self, clients, budget=None, clock=time.monotonic):
+        """budget: seconds after which no further provider is started (chat and documents, D-115), and an
+        invalid reply then moves on to the next provider instead of failing. None: the pipeline's behaviour."""
+        self.clients, self.budget, self.clock = clients, budget, clock
 
-    def generate(self, system, user, schema, prompt_version):
+    def generate(self, system, user, schema, prompt_version, attachments=()):
+        started = self.clock()
         for client in self.clients:
+            if attachments and not getattr(client.adapter, 'supports_attachments', False):
+                continue
+            if self.budget is not None and self.clock() - started >= self.budget:
+                break
             try:
-                return client.generate(system, user, schema, prompt_version)
+                return client.generate(system, user, schema, prompt_version, attachments)
             except QuotaExhausted:
                 continue
+            except ModelOutputInvalid:
+                if self.budget is None:
+                    raise
         raise QuotaExhausted('all configured providers unavailable')
 
 
-def build_client(env_path: Path, cache_dir: Path, only=None):
-    from .gemini import GeminiAdapter
+def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeout=None, budget=None):
+    """quick=True is for chat messages: one try per key, no waiting, and the fallback models when one is busy
+    (gemini-3.8-flash returned 503 or ran past 60 s on 4 Nov). timeout is per request (default 10 s) and budget
+    the whole call (default 25 s); the budget must leave room for a fallback after one slow model."""
+    from .gemini import DEFAULT_MODEL, GeminiAdapter
     from .ollama import OllamaAdapter
     from .openai_compat import OpenAICompatAdapter
     settings = {}
@@ -186,16 +226,21 @@ def build_client(env_path: Path, cache_dir: Path, only=None):
         if line.strip() and not line.lstrip().startswith('#') and '=' in line:
             key, value = line.split('=', 1)
             settings[key.strip()] = value.strip().strip('\"\'')
+    options = ({'max_transient': 1, 'timeout': timeout or 10, 'cooldown': 60, 'sleep': lambda seconds: None,
+                'repair': False} if quick else {})
     clients = []
     keys = [settings[k] for k in ('GEMINI_API_KEY', 'GEMINI_API_KEY_2') if settings.get(k)]
     if keys and only in (None, 'gemini'):
-        clients.append(ModelClient(GeminiAdapter(), keys, cache_dir))
+        fallback = settings.get('GEMINI_FALLBACK_MODEL') or (QUICK_FALLBACK if quick else '')
+        models = list(dict.fromkeys([settings.get('GEMINI_MODEL') or DEFAULT_MODEL,
+                                     *filter(None, (m.strip() for m in fallback.split(',')))]))
+        clients.extend(ModelClient(GeminiAdapter(model), keys, cache_dir, **options) for model in models)
     groq_keys = [settings[k] for k in ('GROQ_API_KEY', 'GROQ_API_KEY_2') if settings.get(k)]
     if groq_keys and only in (None, 'groq'):
         model = settings.get('GROQ_MODEL') or 'openai/gpt-oss-120b'
-        clients.append(ModelClient(OpenAICompatAdapter(model=model), groq_keys, cache_dir))
+        clients.append(ModelClient(OpenAICompatAdapter(model=model), groq_keys, cache_dir, **options))
     if settings.get('OLLAMA_MODEL') and only in (None, 'ollama'):
-        clients.append(ModelClient(OllamaAdapter(settings['OLLAMA_MODEL'], settings.get('OLLAMA_HOST', 'http://localhost:11434')), ['local'], cache_dir))
+        clients.append(ModelClient(OllamaAdapter(settings['OLLAMA_MODEL'], settings.get('OLLAMA_HOST', 'http://localhost:11434')), ['local'], cache_dir, **options))
     if not clients:
         raise ValueError('no configured provider')
-    return FallbackClient(clients)
+    return FallbackClient(clients, budget=(budget or 25) if quick else None)

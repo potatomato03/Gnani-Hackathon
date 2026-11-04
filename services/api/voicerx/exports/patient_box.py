@@ -16,11 +16,12 @@ class PatientBox:
     official_note: str = ''
 
 
-def build_patient_box(report, templates_dir: Path):
-    if report.language_pref == 'en-IN':
+def build_patient_box(report, templates_dir: Path, language=None):
+    preferred = language or report.language_pref
+    if preferred == 'en-IN':
         return None
-    language = report.language_pref.split('-')[0]
-    if language not in ('hi', 'te', 'ta'):
+    language = preferred.split('-')[0]
+    if language not in ('hi', 'te', 'ta', 'gu'):
         raise ValueError('no reviewed or draft template for this language')
     template = yaml.safe_load((templates_dir / (language + '.yaml')).read_text(encoding='utf-8'))
     ask = template['ask_doctor']
@@ -52,6 +53,6 @@ def build_patient_box(report, templates_dir: Path):
             rows.append(template['row'].format(name=name, dose=dose(rx.dose), when=timing(rx.schedule), food=food,
                                                duration=duration(rx.duration)))
     reviewed = bool(template.get('reviewed_by'))
-    return PatientBox(language=report.language_pref, title=template['title'], rows=rows,
+    return PatientBox(language=preferred, title=template['title'], rows=rows,
                       note='' if reviewed else template['unreviewed_note'], reviewed=reviewed,
                       official_note=template['official_note'])

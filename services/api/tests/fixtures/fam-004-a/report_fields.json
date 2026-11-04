@@ -1,0 +1,68 @@
+{
+  "history_present_illness": [
+    {
+      "text": "Routine follow-up for high blood pressure",
+      "cites": [
+        "x1"
+      ]
+    },
+    {
+      "text": "No chest pain",
+      "cites": [
+        "x2"
+      ]
+    },
+    {
+      "text": "No breathlessness",
+      "cites": [
+        "x3"
+      ]
+    }
+  ],
+  "vitals": [
+    {
+      "text": "BP 128/82",
+      "cites": [
+        "x4"
+      ]
+    }
+  ],
+  "investigation_results": [
+    {
+      "text": "LDL 160",
+      "cites": [
+        "x5"
+      ]
+    }
+  ],
+  "advice": [
+    {
+      "text": "Walk 30 minutes daily",
+      "cites": [
+        "x6"
+      ]
+    },
+    {
+      "text": "Reduce salt",
+      "cites": [
+        "x7"
+      ]
+    }
+  ],
+  "investigations_ordered": [
+    {
+      "text": "Repeat lipid profile after 3 months",
+      "cites": [
+        "x8"
+      ]
+    }
+  ],
+  "follow_up": [
+    {
+      "text": "Review after 3 months",
+      "cites": [
+        "x9"
+      ]
+    }
+  ]
+}

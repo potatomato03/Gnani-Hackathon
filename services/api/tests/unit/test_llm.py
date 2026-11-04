@@ -208,6 +208,7 @@ def test_groq_request_enforces_a_strict_schema():
     assert url == "https://api.groq.com/openai/v1/chat/completions"
     assert headers["Authorization"] == "Bearer q1" and body["model"] == "openai/gpt-oss-120b"
     assert body["temperature"] == 0
+    assert body["max_completion_tokens"] == 16384
     assert body["response_format"]["json_schema"]["strict"] is True
     assert body["response_format"]["json_schema"]["schema"] == json_schema_for(Outer)
 

@@ -115,6 +115,40 @@ def test_line_correction_needs_a_real_line_and_text():
             resolve(draft, [correction], REF)
 
 
+def test_confirming_correct_interpretations_preserves_text_and_evidence_and_records_review():
+    from voicerx.pipeline.assemble import content_hash
+    draft = flagged_draft()
+    draft.checked.issues = [i.model_copy(deep=True) for i in draft.issues if i.code == 'negation_mismatch']
+    draft.content_hash = content_hash(draft)
+    original = draft.model_dump(mode='json')
+    fixed = resolve(draft, [fix('confirm_interpretation', 'x2', {'code': 'negation_mismatch'}),
+        fix('confirm_interpretation', 'history_present_illness:0', {'code': 'negation_mismatch'}).model_copy(update={'id': 'r2'})], REF)
+    assert fixed.sections == draft.sections and fixed.checked.kept == draft.checked.kept
+    assert fixed.checked.transcript_sha256 == draft.checked.transcript_sha256
+    assert 'negation_mismatch' not in codes(fixed) and not fixed.checked.issues
+    assert 'section_mismatch' in codes(fixed)
+    assert fixed.version == 2 and fixed.predecessor_hash == draft.content_hash
+    assert fixed.resolutions[-1].action == 'confirm_interpretation'
+    assert fixed.resolutions[-1].by == 'Dr Test' and fixed.resolutions[-1].at == AT
+    assert draft.model_dump(mode='json') == original
+    assert approve(fixed, 'Dr Test', AT).version == 2
+
+
+def test_confirmation_clears_only_the_selected_target_and_check():
+    fixed = resolve(flagged_draft(), [fix('confirm_interpretation', 'x2', {'code': 'negation_mismatch'})], REF)
+    assert ('negation_mismatch', 'x2') not in {(i.code, i.target) for i in fixed.issues}
+    assert ('negation_mismatch', 'history_present_illness:0') in {(i.code, i.target) for i in fixed.issues}
+    assert any(i.severity == 'block' for i in fixed.issues)
+
+
+@pytest.mark.parametrize('target,code', [('rx1', 'missing_quantity'), ('rx1', 'speaker_unclear'),
+    ('x2', 'line_unsupported'), ('x2', 'certainty_mismatch'), ('missing-finding', 'negation_mismatch'),
+    ('history_present_illness:99', 'negation_mismatch')])
+def test_correct_shortcut_refuses_medicine_requirements_and_unflagged_or_unknown_targets(target, code):
+    with pytest.raises(ResolutionRefused):
+        resolve(flagged_draft(), [fix('confirm_interpretation', target, {'code': code})], REF)
+
+
 def omitted_draft():
     # Stage 2 left x2 out, so Check 2 raised a blocking omission nothing could clear (runbook C-47).
     from voicerx.contracts.issues import Issue

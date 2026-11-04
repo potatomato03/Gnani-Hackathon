@@ -151,6 +151,7 @@ function startApp() {
       h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'VoiceRx'),
       h('label', { class: 'search' }, svg(ICON.search), search),
       h('div', { class: 'me' },
+        h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { location.hash = '#/followups'; } }, 'Follow-ups'),
         h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => openReference(null) }, 'Reference'),
         h('div', { class: 'who' }, h('b', { text: session.actor.display_name }), h('span', { text: session.scope.organisation_name })),
         h('span', { class: 'avatar doc', text: initials(session.actor.display_name) }),
@@ -195,6 +196,8 @@ function route() {
   const [, kind, id] = location.hash.split('/');
   if (kind === 'patients' && id) return showPatient(id);
   if (kind === 'encounters' && id) return showEncounter(id);
+  if (kind === 'followup' && id) return showFollowup(id);
+  if (kind === 'followups') return showFollowupTasks();
   ui.patientId = null;
   main().replaceChildren(h('div', { class: 'panel first' }, h('h3', { text: 'Choose a patient' }),
     h('p', { text: 'Pick someone from the list to see their visits, or start a new visit for them.' })));
@@ -217,6 +220,7 @@ async function showPatient(id) {
           h('li', {}, allergyChip(patient)))),
         h('div', { class: 'actions' }, session.capabilities.capture ?
           h('button', { class: 'btn btn-dark', type: 'button', onclick: () => startVisit(id) }, 'Start a visit') : '')),
+      patientCommunicationPanel(patient), patientJourneyPanel(patient.id),
       h('section', { class: 'panel' },
         h('div', { class: 'ph' }, h('h3', { text: 'Visits' }), h('p', { text: encounters.length ? `${encounters.length} on record` : '' })),
         encounters.length ? h('ul', { class: 'visits' }, encounters.map(e => h('li', {},
@@ -291,7 +295,7 @@ async function showCapture(encounter) {
     process);
 
   const recordingAllowed = encounter.patient.consents?.includes('recording') ?? true;
-  main().replaceChildren(...header(encounter),
+  main().replaceChildren(...header(encounter), patientJourneyPanel(encounter.patient.id),
     h('section', { class: 'record' },
       h('div', { class: 'capture' },
         h('div', {}, mic, micLabel),
@@ -466,15 +470,17 @@ function showProcessing(encounter, run) {
 
 const ACTION_TEXT = { choose_product: 'Choose product', set_dose: 'Set dose', set_timing: 'Set timing', set_food: 'Set food',
   set_duration: 'Set duration', remove_medicine: 'Remove medicine', confirm_order: 'Accept', acknowledge: 'Accept',
-  edit_line: 'Edit line', remove_line: 'Remove line', add_line: 'Add a line', dismiss_item: 'Rule out finding' };
+  edit_line: 'Edit line', remove_line: 'Remove line', add_line: 'Add a line', dismiss_item: 'Rule out finding',
+  confirm_interpretation: 'Correct' };
 // The signed-in doctor is recorded with every change, so nothing asks for a typed reason: confirmations save in
 // one click, edits save from their fields, and the audit keeps one of these plain reasons.
 const DONE_REASON = { choose_product: 'Product chosen by the doctor.', set_dose: 'Dose set by the doctor.',
   set_timing: 'Timing set by the doctor.', set_food: 'Food timing set by the doctor.', set_duration: 'Duration set by the doctor.',
   remove_medicine: 'Removed by the doctor.', confirm_order: 'Confirmed by the doctor as their own order.',
   acknowledge: 'Reviewed and accepted by the doctor.', edit_line: 'Edited by the doctor.', remove_line: 'Removed by the doctor.',
-  add_line: 'Written by the doctor.', dismiss_item: 'Ruled out by the doctor.' };
-const ONE_CLICK = ['confirm_order', 'acknowledge'];
+  add_line: 'Written by the doctor.', dismiss_item: 'Ruled out by the doctor.',
+  confirm_interpretation: 'Confirmed correct as written by the doctor.' };
+const ONE_CLICK = ['confirm_order', 'acknowledge', 'confirm_interpretation'];
 const CONFIRM_TEXT = { remove_medicine: 'Yes, remove', remove_line: 'Yes, remove', dismiss_item: 'Yes, rule out' };
 // ---------- Medicine picker (runbook D-122): choose a medicine and its instructions without the mouse ----------
 // Search or ↓ through the visit's common choices, Enter to pick; then ↑↓ moves between rows, ←→ changes the
@@ -662,6 +668,8 @@ async function showReview(encounter, view) {
     const [section, index] = ref.split(':');
     const line = report.sections[section][Number(index)];
     const findings = line.cites.map(c => view.findings[c]).filter(Boolean);
+    const reviewIssues = view.issue_views.filter(i => (i.target === ref || line.cites.includes(i.target))
+      && i.actions.includes('confirm_interpretation'));
     put(evidence, h('div', { class: 'ph' }, h('h3', { text: 'Evidence' }), h('p', { text: view.section_names[section] })),
       h('p', { text: line.text }),
       findings.length ? findings.map(f => h('div', { class: 'finding' },
@@ -672,6 +680,10 @@ async function showReview(encounter, view) {
           h('span', { class: 'chip muted', text: 'said by ' + f.said_by }), h('span', { class: 'chip muted', text: f.id })))) :
         h('p', { class: 'err', text: 'This line cites no checked finding.' }),
       canEdit ? h('div', { class: 'row' },
+        reviewIssues.length ? h('button', { class: 'btn btn-dark btn-sm', type: 'button',
+          title: 'Confirm the flagged interpretations for this line as correct',
+          onclick: () => submit(reviewIssues.map(i => ({ action: 'confirm_interpretation', target: i.target,
+            value: { code: i.code }, reason: DONE_REASON.confirm_interpretation }))) }, 'Correct') : '',
         h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => openEditor('edit_line', ref, evidence) }, 'Edit line'),
         h('button', { class: 'btn btn-risk btn-sm', type: 'button', onclick: () => openEditor('remove_line', ref, evidence) }, 'Remove line')) : '');
     drawTranscript(findings.map(f => f.quote));
@@ -792,7 +804,7 @@ async function showReview(encounter, view) {
   // Accept saves at once; anything else opens its short form.
   function act(action, target, host, issue) {
     if (!ONE_CLICK.includes(action)) return openEditor(action, target, host, issue);
-    submit([{ action, target, value: action === 'acknowledge' ? { code: issue.code } : {}, reason: DONE_REASON[action] }]);
+    submit([{ action, target, value: ['acknowledge', 'confirm_interpretation'].includes(action) ? { code: issue.code } : {}, reason: DONE_REASON[action] }]);
   }
 
   // What was heard and what it may have been (spec 2026-11-03, part B). Never applied without a click.
@@ -853,7 +865,8 @@ async function showReview(encounter, view) {
     approvePanel = h('section', { class: 'panel stack' },
       h('div', { class: 'approved' }, svg(ICON.check), h('span', {}, h('b', { text: `Approved version ${view.version}` }),
         ` by ${view.approval?.approver_name || 'the doctor'}, ${view.approval ? fmtTime(view.approval.approved_at) : ''}`)),
-      h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) + '. Approval, files and delivery have separate states; nothing has been sent to the patient.' }), files);
+      h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) + '. Follow-up and delivery have their own status.' }), files,
+      h('a', { class: 'btn btn-line', href: `#/followup/${encounter.id}` }, 'Open patient follow-up'));
   }
 
   // Report, under the headings of an outpatient summary. A section's sentences run on as one paragraph; each
@@ -937,8 +950,9 @@ async function showReview(encounter, view) {
         withStandard.length > 1 ? `Accept all ${withStandard.length}` : 'Accept')) : '',
     view.issue_views.map(issue => {
       const card = h('div', { class: 'issue ' + issue.severity },
-        h('span', { class: 'sev', text: issue.severity === 'block' ? 'Must fix' : 'Warning' }), h('b', { text: issue.title }),
+        h('span', { class: 'sev', text: issue.actions.includes('confirm_interpretation') ? 'Needs review' : issue.severity === 'block' ? 'Must fix' : 'Warning' }), h('b', { text: issue.title }),
         h('p', { class: 'where', text: describe(issue) }),
+        issue.actions.includes('confirm_interpretation') ? h('p', { class: 'muted small', text: 'Choose Correct if this is accurate as written, or edit/remove it.' }) : '',
         issue.title !== issue.message && !issue.message.startsWith(issue.code.replaceAll('_', ' ')) ? h('p', { class: 'where', text: issue.message }) : '');
       const med = issue.target_kind === 'medicine' ? medById[issue.target] : null;
       if (canEdit && med?.suggestions?.length && PRODUCT_CODES.includes(issue.code)) card.append(suggestionList(med, card, issue));
@@ -965,6 +979,7 @@ async function showReview(encounter, view) {
 
   evidence.replaceChildren(h('h3', { text: 'Evidence' }), h('p', { class: 'muted small', text: 'Select a report line to see the quotes it rests on.' }));
   main().replaceChildren(...header(encounter, stateChip(draft ? 'in_review' : 'approved', view.blocking_count)),
+    patientJourneyPanel(encounter.patient.id),
     h('div', { class: 'review' },
       h('div', { class: 'stack' }, approvePanel, reportPanel, medsPanel, sourcePanel),
       h('div', { class: 'aside' }, issuesPanel, evidence)));
@@ -986,6 +1001,172 @@ document.addEventListener('keydown', e => {
     ui.addMedicine.open();
   }
 });
+
+// ---------- Follow-up: the real agent, with a clearly labelled synthetic patient simulator ----------
+
+function patientCommunicationPanel(patient) {
+  if (!session.capabilities.resolve) return '';
+  const phone = h('input', { class: 'input', type: 'tel', autocomplete: 'off', placeholder: 'Country code and WhatsApp number', 'aria-label': 'Patient WhatsApp number' });
+  const language = h('select', { class: 'input', 'aria-label': 'Patient native language' },
+    ['hi-IN','en-IN','ta-IN','te-IN','gu-IN'].map(code => h('option', { value: code, selected: code === patient.language_pref }, LANG[code])));
+  const consent = h('input', { type: 'checkbox' });
+  const status = h('p', { class: 'muted small', role: 'status' });
+  return h('details', { class: 'panel stack' }, h('summary', { text: 'Patient WhatsApp and native language' }),
+    h('p', { class: 'muted small', text: 'The patient verifies the connection once using the private invitation on an approved visit. Later approved reports use that same connection. This private test server accepts its configured test numbers.' }),
+    h('label', { class: 'field' }, h('span', { text: 'WhatsApp number' }), phone),
+    h('label', { class: 'field' }, h('span', { text: 'Native language for future prescriptions and requested audio' }), language),
+    h('label', { class: 'consent' }, consent, 'The patient agreed to WhatsApp delivery and follow-up.'),
+    h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
+      if (!consent.checked) { status.textContent = 'Confirm patient consent first.'; return; }
+      try { const result = await api(`/patients/${patient.id}/whatsapp-target`, { method: 'POST', body: { phone: phone.value, language: language.value, consent_confirmed: true } });
+        phone.value = ''; status.textContent = result.linked ? 'Verified WhatsApp connection retained. Preference saved for future visits.' : 'Target saved. After approval, open patient follow-up and let the patient send the private JOIN invitation once.';
+      } catch (e) { status.textContent = e.message; }
+    } }, 'Save communication preferences'), status);
+}
+
+function patientJourneyPanel(patientId) {
+  if (!session.capabilities.resolve) return '';
+  const panel = h('section', { class: 'panel stack patient-journey', 'aria-label': 'Patient history for this visit' },
+    h('h3', { text: 'Between visits' }), h('p', { class: 'muted small', text: 'Loading patient questions and lab history…' }));
+  async function load() {
+    try {
+      const data = await api(`/patients/${patientId}/journey`);
+      panel.replaceChildren(h('div', { class: 'ph' }, h('h3', { text: 'Between visits' }),
+        h('span', { class: 'chip ' + (data.whatsapp.linked && !data.whatsapp.opted_out ? 'ok' : 'muted'), text: data.whatsapp.opted_out ? 'WhatsApp stopped' : data.whatsapp.linked ? 'WhatsApp verified' : 'WhatsApp not yet linked' })),
+        h('p', { class: 'muted small', text: 'Patient-reported questions and uploaded reports across visits. These do not change the approved clinical record.' }),
+        h('details', { open: data.tasks.some(t => t.status === 'open') },
+          h('summary', { text: `Patient questions and requests · ${data.questions.length}` }),
+          ...data.questions.slice(0, 30).map(q => h('article', { class: 'history-entry' },
+            h('small', { class: 'muted', text: `${fmtTime(q.at)} · ${q.source || 'patient'} · ${q.action}` }),
+            h('p', { class: 'followup-text', text: q.question }),
+            q.reply ? h('details', {}, h('summary', { text: 'What the assistant replied' }), h('p', { class: 'followup-text', text: q.reply })) : '',
+            h('a', { href: `#/followup/${q.encounter_id}`, text: 'Conversation and doctor tasks' }))),
+          data.questions.length ? '' : h('p', { class: 'muted', text: 'No patient questions recorded yet.' })),
+        h('details', { open: data.uploads.some(u => !u.reviewed_at) }, h('summary', { text: `Lab reports and other uploads · ${data.uploads.length}` }),
+          ...data.uploads.map(u => h('article', { class: 'history-entry stack' },
+            h('small', { class: 'muted', text: fmtTime(u.received_at) + ' · ' + (u.reviewed_at ? 'Reviewed ' + fmtTime(u.reviewed_at) : 'Awaiting doctor review') }),
+            h('p', { class: 'followup-text', text: u.summary }),
+            h('div', { class: 'row' }, h('a', { class: 'btn btn-line btn-sm', href: u.download_url, text: 'Open original report' }),
+              !u.reviewed_at ? h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: async () => {
+                try { await api(`/patient-uploads/${u.id}/review`, { method: 'POST' }); await load(); } catch (e) { fail(e); }
+              } }, 'Mark reviewed') : ''))),
+          data.uploads.length ? '' : h('p', { class: 'muted', text: 'No uploaded reports yet.' })));
+    } catch (e) { panel.replaceChildren(h('h3', { text: 'Between visits' }), h('p', { class: 'err', text: e.message })); }
+  }
+  load(); return panel;
+}
+
+async function showFollowupTasks() {
+  main().replaceChildren(h('p', { class: 'muted', text: 'Loading follow-up tasks…' }));
+  try {
+    const { items } = await api('/followup/tasks');
+    main().replaceChildren(h('h1', { text: 'Patient follow-ups' }),
+      h('p', { class: 'muted', text: 'Patient-reported questions and problems. These do not change the approved prescription.' }),
+      ...items.map(t => h('section', { class: 'panel stack' }, h('span', { class: 'chip ' + (t.kind === 'urgent' ? 'miss' : 'off'), text: t.kind.replaceAll('_', ' ') }),
+        h('h3', { text: t.patient_name }), h('p', { class: 'followup-text', text: t.note }),
+        h('a', { class: 'btn btn-line', href: `#/followup/${t.encounter_id}` }, 'Open conversation'))),
+      items.length ? '' : h('p', { class: 'panel', text: 'No open follow-up tasks.' }));
+  } catch (e) { fail(e); }
+}
+
+async function showFollowup(encounterId) {
+  const base = `/encounters/${encounterId}/followup`;
+  const title = h('h1', { text: 'Patient follow-up' });
+  const status = h('p', { class: 'muted', role: 'status' });
+  const transcript = h('div', { class: 'followup-messages stack', tabindex: '0', 'aria-label': 'Follow-up conversation' });
+  const tasks = h('section', { class: 'panel stack', 'aria-label': 'Doctor follow-up tasks' });
+  const join = h('p', { class: 'followup-text' });
+  const delivery = h('section', { class: 'panel stack', 'aria-label': 'Patient delivery status' });
+  const consent = h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
+    try { await api(base + '/consent', { method: 'POST', body: { enabled: true } }); await refresh(); }
+    catch (e) { fail(e); }
+  } }, 'Record consent for synthetic follow-up');
+  consent.hidden = true;
+  const input = h('input', { class: 'input', maxlength: '2000', placeholder: 'Try DOCTOR, STOP, or a medicine question', 'aria-label': 'Simulated patient reply' });
+  const send = h('button', { class: 'btn btn-dark', type: 'submit' }, 'Send simulated reply');
+  const simulator = h('form', { class: 'panel stack followup-simulator', onsubmit: async e => {
+    e.preventDefault(); if (!input.value.trim()) return;
+    await reply({ text: input.value.trim() });
+  } }, h('h3', { text: 'Simulate the patient' }),
+  h('p', { class: 'muted small', text: 'Local synthetic conversation. No WhatsApp message is sent.' }), input, send,
+  h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
+    try { const result = await api(base + '/advance', { method: 'POST' }); if (active) { draw(result); if (!result.advanced) toast('No further scheduled check-in.'); } }
+    catch (e) { fail(e); }
+  } }, 'Simulate next scheduled check-in'));
+  const reportFile = h('input', { type: 'file', accept: 'application/pdf,image/png,image/jpeg,image/webp', 'aria-label': 'Synthetic patient report' });
+  reportFile.addEventListener('change', async () => {
+    const file = reportFile.files[0]; if (!file) return;
+    if (file.size > 10000000) { toast('Reports must be under 10 MB.', true); return; }
+    try {
+      const response = await fetch('/api/v1' + base + '/documents', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': file.type, 'X-CSRF-Token': session.csrf_token }, body: file });
+      const result = await response.json(); if (!response.ok) throw new Error(result.error?.message || 'Upload failed');
+      if (active) draw(result);
+    } catch (e) { fail(e); } finally { reportFile.value = ''; }
+  });
+  simulator.append(h('label', { class: 'stack' }, 'Send a synthetic report for doctor review', reportFile));
+  simulator.hidden = true;
+  const memory = h('section', { class: 'panel stack' }, h('h3', { text: 'Patient-reported history' }));
+  async function loadMemory() {
+    const result = await api(base + '/memory');
+    if (!active) return;
+    memory.replaceChildren(h('h3', { text: 'Patient-reported history' }),
+      h('p', { class: 'muted small', text: 'Unreviewed patient statements and uploaded report readings. These are separate from the approved visit.' }),
+      ...result.items.map(i => h('p', { class: 'followup-text', text: `${i.kind.replaceAll('_', ' ')}: ${i.text}` })),
+      ...result.documents.map(d => h('details', {}, h('summary', { text: d.reading.report_type || 'Uploaded report' }),
+        h('p', { class: 'followup-text', text: d.reading.transcription }),
+        ...d.reading.findings.map(f => h('p', { text: `${f.name}: ${f.value} ${f.unit || ''} · ${f.flag || 'flag unspecified'} · “${f.quote}”` })))));
+  }
+  let active = true;
+  ui.cleanup = () => { active = false; };
+  const start = h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
+    start.disabled = true;
+    try {
+      const result = await api(base, { method: 'POST' });
+      if (active) { join.replaceChildren(result.whatsapp_configured ? `Private invitation (valid once for 24 hours): ${result.join_command}` : '',
+        result.join_url ? h('a', { class: 'btn btn-line', href: result.join_url, target: '_blank', rel: 'noopener', text: 'Open WhatsApp connection message' }) : ''); draw(result); }
+    } catch (e) { fail(e); } finally { start.disabled = false; }
+  } }, 'Start follow-up');
+  async function reply(body) {
+    send.disabled = true;
+    try { const result = await api(base + '/messages', { method: 'POST', body }); if (active) { input.value = ''; draw(result); } }
+    catch (e) { fail(e); } finally { send.disabled = false; }
+  }
+  function draw(result) {
+    const c = result.conversation;
+    title.textContent = c ? `${c.patient_name} · Follow-up` : 'Patient follow-up';
+    consent.hidden = Boolean(c) || !result.reason?.includes('consent');
+    status.textContent = c ? `Approved visit · ${LANG[c.language] || c.language} · ${c.plan.channel === 'simulated' ? 'Local simulator · no external delivery' : 'WhatsApp · ' + result.delivery}` : result.reason;
+    delivery.replaceChildren(h('h3', { text: 'Report and requested audio' }),
+      ...(result.deliveries || []).map(job => h('p', {}, h('b', { text: job.kind === 'report_pdf' ? 'Approved PDF: ' : `Prescription audio (${LANG[job.language] || job.language}): ` }),
+        job.state.replaceAll('_', ' '), job.error ? ' · ' + job.error : '')),
+      h('p', { class: 'muted small', text: 'Approval queues the PDF. The patient can ask VOICE for their native-language prescription audio. Outside the WhatsApp reply window, delivery waits for a patient message.' }));
+    start.textContent = c ? 'Refresh private WhatsApp invitation' : 'Start follow-up';
+    start.hidden = Boolean(c?.stopped) || Boolean(c && !result.whatsapp_configured);
+    simulator.hidden = !c || c.stopped || c.plan.channel !== 'simulated';
+    transcript.replaceChildren(...(c?.messages || []).map(m => h('section', { class: `panel stack followup-message ${m.sender}` },
+      h('b', { text: m.sender === 'clinic' ? 'Clinic assistant' : 'Synthetic patient' }),
+      h('p', { class: 'followup-text', text: m.text }),
+      h('small', { class: 'muted', text: fmtTime(m.at) + (m.cites.length ? ' · Approved medicine: ' + m.cites.join(', ') : '') }),
+      ...(result.receipts || []).filter(r => r.message_ref === m.id).map(r => h('span', { class: 'chip muted', text: 'WhatsApp: ' + r.status })),
+      m.sender === 'clinic' && m === c.messages.at(-1) && c.plan.channel === 'simulated' && !c.stopped
+        ? h('div', { class: 'row' }, m.buttons.map(b => h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => reply({ button: b.id }) }, b.label))) : '')));
+    const open = (c?.tasks || []).filter(t => t.status === 'open');
+    tasks.replaceChildren(h('h3', { text: 'Doctor follow-up tasks' }), ...open.map(t => h('div', { class: 'stack' },
+      h('b', { text: t.kind.replaceAll('_', ' ') }), h('p', { class: 'followup-text', text: t.note }),
+      h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: async () => {
+        try { await api(`${base}/tasks/${t.id}/done`, { method: 'POST' }); await refresh(); } catch (e) { fail(e); }
+      } }, 'Mark reviewed'))), open.length ? '' : h('p', { class: 'muted', text: 'No open tasks.' }));
+    if (c?.stopped) status.textContent += ' · Patient stopped follow-up';
+    transcript.scrollTop = transcript.scrollHeight;
+    if (c) loadMemory().catch(fail);
+  }
+  async function refresh() { const result = await api(base); if (active) draw(result); }
+  main().replaceChildren(h('a', { class: 'crumb', href: `#/encounters/${encounterId}` }, '← Approved visit'),
+    title, status, consent, start, join, delivery, transcript, simulator, tasks, memory,
+    h('button', { class: 'btn btn-line', type: 'button', onclick: () => refresh().catch(fail) }, 'Refresh conversation'));
+  try { await refresh(); } catch (e) { fail(e); }
+}
 
 // ---------- Reference drawer (DESIGN.md section 10: beside the record, never in it) ----------
 

@@ -1,0 +1,17 @@
+# Draft fixed translation, pending independent language review.
+title: દવા કેવી રીતે લેવી
+official_note: અંગ્રેજી રિપોર્ટ સત્તાવાર રેકોર્ડ છે.
+unreviewed_note: આ અનુવાદની હજી સમીક્ષા થઈ નથી.
+ask_doctor: ડૉક્ટરને પૂછો
+slots: {m: સવારે, a: બપોરે, e: સાંજે, n: રાત્રે}
+food: {after_food: જમ્યા પછી, before_food: જમ્યા પહેલાં, with_food: જમવાની સાથે, empty_stomach: ખાલી પેટે}
+units: {tablet: ગોળી, capsule: કેપ્સ્યુલ, puff: પફ, teaspoon: ચમચી}
+frequency: 'દિવસમાં {n} વખત'
+as_needed: જરૂર પડે ત્યારે
+as_needed_max: 'જરૂર પડે ત્યારે, દિવસમાં {n} વખતથી વધુ નહીં'
+duration: {day: '{n} દિવસ', week: '{n} અઠવાડિયાં', month: '{n} મહિના'}
+row: '{name}: {dose}, {when}, {food}, {duration}'
+taper_row: '{name}: {steps}, {food}'
+taper_step: '{dose} {when} {duration}'
+then: ', પછી '
+reviewed_by: null

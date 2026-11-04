@@ -1,17 +1,23 @@
+import base64
 import json
+
+DEFAULT_MODEL = 'gemini-3.8-flash'
 
 
 class GeminiAdapter:
     name = 'gemini'
+    supports_attachments = True     # inline image and PDF parts (Interactions API docs, read 4 Nov 2026)
 
-    def __init__(self, model='gemini-3.8-flash'):
+    def __init__(self, model=DEFAULT_MODEL):
         self.model = model
 
-    def build(self, system, user, schema, key):
+    def build(self, system, user, schema, key, attachments=()):
+        parts = [{'type': 'text', 'text': system + '\n\n' + user}]
+        parts += [{'type': 'document' if mime == 'application/pdf' else 'image',
+                   'data': base64.b64encode(data).decode('ascii'), 'mime_type': mime} for mime, data in attachments]
         return ('https://generativelanguage.googleapis.com/v1beta/interactions',
                 {'Content-Type': 'application/json', 'x-goog-api-key': key},
-                {'model': self.model, 'input': [{'type': 'user_input', 'content': [
-                    {'type': 'text', 'text': system + '\n\n' + user}]}],
+                {'model': self.model, 'input': [{'type': 'user_input', 'content': parts}],
                  'response_format': {'type': 'text', 'mime_type': 'application/json', 'schema': schema}})
 
     def reply_text(self, body):

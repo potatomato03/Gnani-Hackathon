@@ -35,6 +35,20 @@ def test_an_unknown_code_shows_its_message_and_offers_no_shortcut():
     assert unknown['title'] == 'Something new' and unknown['actions'] == []
 
 
+def test_clinical_interpretation_flags_offer_correct_but_medicine_requirements_do_not():
+    from voicerx.contracts.issues import Issue
+    draft = make_draft([resolved_medicine(dose=None)])
+    draft.issues.extend([Issue(code='negation_mismatch', severity='block', target='x1', message='Check negation'),
+                         Issue(code='certainty_mismatch', severity='warn', target='chief_complaints:0', message='Check certainty')])
+    issues = {i['code']: i for i in view(draft)['issue_views']}
+    assert issues['negation_mismatch']['actions'] == ['confirm_interpretation', 'edit_line', 'remove_line']
+    assert issues['certainty_mismatch']['actions'] == ['confirm_interpretation', 'edit_line', 'remove_line']
+    assert 'confirm_interpretation' not in issues['missing_quantity']['actions']
+    [confirmation] = build_resolutions([{'action': 'confirm_interpretation', 'target': 'x1',
+        'value': {'code': 'negation_mismatch'}, 'reason': 'Confirmed correct as written by the doctor.'}], ACTOR, NOW)
+    assert confirmation.by == 'Dr Parth Shan (doc-001)' and confirmation.at == NOW
+
+
 def test_lines_get_stable_refs_and_findings_list_the_lines_citing_them():
     data = view(make_draft([resolved_medicine()]))
     assert {'id': 'chief_complaints:0', 'section': 'chief_complaints', 'index': 0} in data['line_refs']
