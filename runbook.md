@@ -929,3 +929,14 @@ D-134 committed as `f6468ea`, pushed, and deployed to production (`janani-privat
 ## 6 November 2026 — Add patient beside the list (D-135)
 
 **D-135 (user: "there's no option to add a patient").** Registering a patient was only in the top menu ("Register patient"). An **Add patient** button now sits under the Today / All patients tabs and opens the same form. It is hidden where the session cannot register. Checked locally: the button shows and opens the form. A direct load of `#/register`, which earlier showed "Cannot set properties of null", loaded correctly on both a fresh load and a reload, so that error could not be reproduced. The user's screenshot showed the tab had not been reloaded since the D-134 deploy.
+
+D-135 committed as `eec27aa`, pushed, and deployed to production (`janani-private-clinic-demo-d9d7hlftt…`).
+
+## 6 November 2026 — another visit; a slow first draft after each deploy (D-136)
+
+**User:** "there's no another visit (second visit or third visit) of a patient", and "what's the use of live streaming the audio if that preparing report page still shows up and takes 10-15 seconds … if post conversation things will take 20-30 seconds before we select the medicine then there's no incentive in this app."
+- **Another visit.** Once today's visit was approved, nothing offered a new one. The approved screen now has **Start another visit**, which starts a fresh recording; the visit is created when recording starts. The patient page opens today's unfinished visit first, else the latest one. Earlier visits stay listed below. The server already allowed several visits a day. Checked locally.
+- **Measured on the user's live visit** (`enc-c5e44ae6f3b9`, 42 s of speech): live transcription worked (the run started with both segments transcribed), but the run still took 21 s. The models need about 6 s for this transcript (extracting 4.1 s, writing 2.1 s with `gpt-oss-120b`). Low reasoning effort was not the answer: it dropped the medicine. The rest was the hosted worker building the 250,000-name medicine index during "Checking medicines and instructions": the API warms it at start, the worker daemon never did, so the first visit after every deploy paid 14–18 s.
+- **Fixed:** the hosted worker loads the index at start-up (`hosted.py` calls `main.warm_up`). The draft no longer waits for the picker's shortlist: the shortlist thread saves itself when ready, and `/shortlist` computes one if asked first. Expected: about 7 s for a short visit and about 19 s for five minutes (extracting 10 s plus writing 8 s).
+- **Open (user to choose):** how to remove the remaining model time after the doctor stops.
+- **Decided (user):** "Medicines first". During the visit the recommended medicines are updated from each newly transcribed piece; at stop the picker opens at once and the doctor picks medicines while the report is written, then they are added to the draft. Today's fixes were deployed first (user: "Yes, deploy now").

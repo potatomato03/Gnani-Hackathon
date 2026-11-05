@@ -464,7 +464,9 @@ async function openPatient(id, encId) {
   const [det, journey] = await Promise.all([api.patient(id), api.journey(id)]);
   if (state.selected !== id) return;
   const encounters = [...(det.encounters || det.visits || [])].map(adapt.encounter).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  const open = encounters.find(e => encId ? e.id === encId : e.date === TODAY_ISO());
+  // Today's unfinished visit comes first; once every visit today is approved, the latest one shows (runbook D-136).
+  const today = encounters.filter(e => e.date === TODAY_ISO());
+  const open = encId ? encounters.find(e => e.id === encId) : today.find(e => e.state !== "approved") || today[0];
   const lastApproved = encounters.find(e => e.state === "approved" && e !== open);
   const lastReport = lastApproved ? adapt.report(await api.report(lastApproved.id, lastApproved.approved_version)) : null;
   const p = adapt.patient(det.patient || det);
@@ -1167,7 +1169,7 @@ function renderApproved(box) {
     <div class="done-hero">
       <div class="seal${v.justApproved ? "" : " still"}" aria-hidden="true"><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r="36"/><path d="M22 37l9 9 19-21"/></svg></div>
       <div><h3>${fn}'s report is approved</h3><p class="hint nomargin">Approved by ${esc(a.approved_by || "")}${a.approved_at ? " at " + fmtTime(a.approved_at) : ""}. Version ${esc(r.version)}.</p></div>
-      <a class="btn btn-sun pushright" href="#/followup/${esc(v.enc)}">${ICON.chat}Open follow-up</a>
+      <div class="row pushright"><button class="btn btn-line" data-act="new-visit">${ICON.mic}Start another visit</button><a class="btn btn-sun" href="#/followup/${esc(v.enc)}">${ICON.chat}Open follow-up</a></div>
     </div>
     ${deliveryHTML(v.jobs, fn)}
     <div class="files">

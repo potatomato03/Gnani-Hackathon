@@ -25,6 +25,10 @@ def main():
         if not probe.read_bytes().startswith(b'%PDF'):
             raise RuntimeError('PDF renderer startup verification failed.')
         print('Private worker startup verified: database and PDF renderer ready.',flush=True)
+        # Load the medicine name index now, not inside the first visit after a deploy (runbook D-136).
+        from .main import warm_up
+        warm_up()
+        print('Medicine index loaded.',flush=True)
         worker=Worker(settings,followup=FollowupService(settings))
         stop=threading.Event()
         def shutdown(*_):

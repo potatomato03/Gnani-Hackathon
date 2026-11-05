@@ -140,14 +140,15 @@ class Worker(threading.Thread):
             # The suggestions and the medicine picker's shortlist need only the checked extraction, so they
             # run while the report is written (runbook D-131).
             jobs = {'found': lambda: self.suggestions(checked, transcript, context, on_step),
-                    'shortlist': lambda: self.shortlist(checked, context, patient)}
+                    'shortlist': lambda: self.save_shortlist(checked, context, patient)}
             for name, job in jobs.items():
                 threads.append(threading.Thread(name='voicerx-' + name, daemon=True,
                                                 target=lambda name=name, job=job: side.update({name: job()})))
                 threads[-1].start()
 
         def suggestions_found():
-            for thread in threads:
+            # The draft waits for the suggestions it shows; the picker's shortlist saves itself when ready.
+            for thread in threads[:1]:
                 thread.join()
             return side.get('found', {})
 
@@ -162,7 +163,6 @@ class Worker(threading.Thread):
             self.fail(run, steps, failure)
             return True
         suggestions = suggestions_found()
-        shortlist = side.get('shortlist')
         with transaction() as conn:
             conn.execute('insert into app.report_versions (encounter_id, version, status, report, content_hash, run_id, '
                          "created_by) values (%s, %s, 'draft', %s, %s, %s, %s)",
@@ -173,8 +173,6 @@ class Worker(threading.Thread):
                              'values (%s, %s, %s, %s, %s) on conflict (encounter_id, medication_id) do update set '
                              'heard = excluded.heard, suggestions = excluded.suggestions, method = excluded.method',
                              (context['id'], medication_id, heard, Jsonb(items), Jsonb(method)))
-            if shortlist:
-                save_shortlist(conn, context['id'], *shortlist)
             conn.execute("update app.encounters set state = 'in_review', current_version = %s where id = %s",
                          (draft.version, context['id']))
             conn.execute("update app.runs set state = 'succeeded', stage = null, draft_version = %s, error = null, "
@@ -197,6 +195,15 @@ class Worker(threading.Thread):
                 log.exception('matching %s failed; left for the doctor', rx.spoken_name)
                 return None
         return find
+
+    def save_shortlist(self, checked, context, patient):
+        found = self.shortlist(checked, context, patient)
+        if found:
+            try:
+                with transaction() as conn:
+                    save_shortlist(conn, context['id'], *found)
+            except Exception:
+                log.exception('saving the shortlist failed for %s', context['id'])
 
     def shortlist(self, checked, context, patient):
         """(conditions, items, method) for the medicine picker; a failure costs only the list."""
