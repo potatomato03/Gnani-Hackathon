@@ -50,6 +50,7 @@ These are build targets. They don't prove clinical reliability.
 | Set | Amount | Folder |
 |---|---|---|
 | Clinic, doctors, patients | 1 clinic, 3 doctors, 30 patients | `seed/` |
+| Hospital pharmacy stock (demo upload) | 16 synthetic items: some out of stock with same-composition brands in stock, one item outside the catalogue, one non-medicine | `seed/pharmacy_stock_demo.csv` |
 | Formulary | ~100 hand-checked products | `formulary/` |
 | Dosing phrases | 50 to 100 phrase families, with what each one does and doesn't state | `rules/` |
 | Dose, allergy and duplicate rules | Demo drugs only | `rules/` |

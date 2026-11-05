@@ -1,0 +1,17 @@
+Item Code,Item Name,Composition,Qty,Reorder Level
+SYN-0001,DOLO 650 TAB,Paracetamol (650mg),0,40
+SYN-0002,Calpol 650mg Tablet,Paracetamol (650mg),180,40
+SYN-0003,PAN 40 TAB,Pantoprazole (40mg),0,30
+SYN-0004,Pantop 40 Tablet,Pantoprazole (40mg),95,30
+SYN-0005,Pantocid Tablet,Pantoprazole (40mg),22,30
+SYN-0006,Azithral 500 Tablet,Azithromycin (500mg),60,20
+SYN-0007,Augmentin 625 Duo Tablet,Amoxycillin (500mg) + Clavulanic Acid (125mg),8,25
+SYN-0008,Clavam 625 Tablet,Amoxycillin (500mg) + Clavulanic Acid (125mg),70,25
+SYN-0009,Okacet Tablet,Cetirizine (10mg),120,30
+SYN-0010,Telma 40 Tablet,Telmisartan (40mg),45,15
+SYN-0011,Glycomet 500 SR Tablet,Metformin (500mg),200,50
+SYN-0012,Montair-LC Tablet,Montelukast (10mg) + Levocetirizine (5mg),0,20
+SYN-0013,Ondem 4 Tablet,Ondansetron (4mg),35,10
+SYN-0014,Ecosprin 75 Tablet,Aspirin (75mg),150,40
+SYN-0015,Zyxomab Synthetic 10 Tablet,Zyxomab (10mg),12,5
+SYN-0016,Surgical gauze roll,,40,10

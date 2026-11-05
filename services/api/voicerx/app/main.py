@@ -34,6 +34,7 @@ from .repo import (approval_of, artifacts_of, encounters_of, get_encounter, get_
 from ..pipeline.assemble import product_label
 from .catalog import FORMS, parse_composition
 from .catalog import standing
+from .pharmacy import StockFileError, annotate_view, import_stock, load_stock, summary as pharmacy_summary
 from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index
 from .views import CorrectionRefused, build_resolutions, report_view
 from .worker import TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
@@ -84,7 +85,7 @@ async def lifespan(app):
     close_pool()
 
 
-app = FastAPI(title='VoiceRx doctor workspace', lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title='ARDAI doctor workspace', lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def error_body(code, message, retryable=False, correlation_id=None, **extra):
@@ -504,6 +505,11 @@ def envelope(conn, session, encounter, row):
                                  'approved_at': approval['approved_at'].isoformat()} if approval else None,
                        artifacts=artifacts, suggestions=suggestions, rules=load_rules(REPO_ROOT))
     result['clinic_deliveries'] = clinic_deliveries(conn,encounter['id'],report.version)
+    if report.status == 'draft':
+        annotate_view(result, load_stock(conn, encounter['organisation_id']),
+                      {**REFERENCE.products, **report.products_used})
+    else:
+        result['pharmacy'] = None
     return result
 
 
@@ -736,8 +742,11 @@ def catalog_search(request: Request, q: str = ''):
             for c in pool.candidates(q[:80], limit=10):
                 if c.entry.id not in found or c.score > found[c.entry.id].score:
                     found[c.entry.id] = c
+        stock = load_stock(conn, session['organisation_id'])
     # Widely sold and listed products first among equally close names: typing "pan" finds PAN 40 before Panday.
-    ranked = sorted(found.values(), key=lambda c: (c.strength_match is not False, c.score + standing(c.entry)),
+    # In-stock products at the hospital pharmacy lead only among names that sound almost equally close.
+    ranked = sorted(found.values(), key=lambda c: (c.strength_match is not False, c.score + standing(c.entry)
+                                                   + (stock.bonus(c.entry) if stock else 0)),
                     reverse=True)[:10]
     # Formulary aliases are indexed under the alias ("Pan" for Pan-D); show the product's own label.
     label = lambda c: product_label(REFERENCE.products[c.entry.id]) if c.entry.id in REFERENCE.products else c.entry.name
@@ -747,7 +756,9 @@ def catalog_search(request: Request, q: str = ''):
         food, once_daily, _ = standard_for([p.ingredient for p in parse_composition(c.entry.composition)], rules)
         return {'food': food, 'once_daily': once_daily, 'form': entry_form(c.entry) or 'tablet'}
     return {'items': [{'id': c.entry.id, 'label': label(c), 'composition': c.entry.composition,
-                       'tier': c.entry.tier, 'strength_match': c.strength_match, **defaults(c)} for c in ranked]}
+                       'tier': c.entry.tier, 'strength_match': c.strength_match, **defaults(c),
+                       'stock': stock.badge(c.entry.id, c.entry.name, c.entry.composition) if stock else None}
+                      for c in ranked]}
 
 
 @app.post('/api/v1/catalog/products', status_code=201)
@@ -773,6 +784,36 @@ async def add_product(request: Request):
         audit(conn, session['user_id'], session['organisation_id'], 'catalog.product_added', 'clinic_product', product_id,
               {'name': name, 'composition': composition})
     return {'id': product_id, 'label': name, 'composition': composition, 'tier': 'clinic', 'status': 'pending_review'}
+
+
+# ---------- Hospital pharmacy stock (runbook D-126 to D-128) ----------
+
+@app.get('/api/v1/pharmacy/stock')
+def pharmacy_stock(request: Request):
+    session = session_of(request)
+    auth.require(session, 'pharmacy')  # doctors and the hospital admin; not reception
+    with transaction() as conn:
+        return pharmacy_summary(conn, session['organisation_id'])
+
+
+@app.post('/api/v1/pharmacy/stock', status_code=201)
+async def upload_pharmacy_stock(request: Request):
+    """A full stock snapshot as CSV text: {filename, csv}. It replaces the hospital's previous snapshot."""
+    session = session_of(request)
+    auth.require(session, 'pharmacy')  # doctors and the hospital admin; not reception
+    body = await request.json()
+    text = body.get('csv')
+    if not isinstance(text, str) or not text.strip():
+        raise ApiError(422, 'invalid_stock', 'Choose a stock file exported as CSV.')
+    filename = ' '.join(str(body.get('filename') or 'stock.csv').split())[:120]
+    with transaction() as conn:
+        try:
+            result = import_stock(conn, session['organisation_id'], session['user_id'], filename, text, REFERENCE.products)
+        except StockFileError as error:
+            raise ApiError(422, 'invalid_stock', str(error)) from None
+        audit(conn, session['user_id'], session['organisation_id'], 'pharmacy.stock_imported', 'organisation',
+              session['organisation_id'], {'filename': filename, 'rows': result['rows'], 'matched': result['matched']})
+    return result
 
 
 # ---------- Reference knowledge ----------

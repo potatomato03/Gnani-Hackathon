@@ -321,6 +321,9 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, formulary):
     rank_of = {pid: i for i, pid in enumerate(model_order) if pid in reasons}
     fits = sorted(f['fit'] for f in facts.values() if f['fit'] is not None)
     middle = fits[len(fits) // 2] if fits else 0
+    # The hospital pharmacy's stock breaks near-ties between equally close names (runbook D-126, D-127).
+    from .pharmacy import load_stock
+    stock = load_stock(conn, organisation_id)
 
     def blended(candidate):
         # The code decides the order; the model's rank is one input among sound, listing or popularity,
@@ -331,7 +334,8 @@ def suggest(conn, client, transcript, rx, checked, organisation_id, formulary):
                 + (PRIOR_BONUS if pid in priors else 0)
                 + (MODEL_BONUS[rank_of[pid]] if rank_of.get(pid, 9) < len(MODEL_BONUS) else 0)
                 + (FIT_WEIGHT * (fit - middle) if fit is not None else 0)
-                - (MISMATCH_PENALTY if candidate.strength_match is False else 0))
+                - (MISMATCH_PENALTY if candidate.strength_match is False else 0)
+                + (stock.bonus(candidate.entry) if stock else 0))
 
     ranked = sorted(picked, key=lambda cp: blended(cp[0]), reverse=True)
     # The matcher's own formulary candidates (Pan 40 and Pan-D for a bare "Pan") always lead, in its order.

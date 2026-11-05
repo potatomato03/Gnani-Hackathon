@@ -37,10 +37,10 @@ LIST_BODY_LIMIT, ROW_TITLE_LIMIT, MAX_ROWS, LIST_BUTTON = 4096, 24, 10, 'Menu'
 JOIN = re.compile(r'^\s*join\s+([A-Za-z0-9_\-]+)\s*$', re.IGNORECASE)
 REQUIRED = ('WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN',
             'WHATSAPP_TEST_NUMBERS')
-HELP = ('VoiceRx follow-up test bot. Synthetic data only, not for real patients.\n'
+HELP = ('ARDAI follow-up test bot. Synthetic data only, not for real patients.\n'
         'To start, send JOIN and a visit code, for example: {example}\n'
         'Visit codes: {codes}\n\n'
-        'VoiceRx फ़ॉलो-अप टेस्ट बॉट (सिर्फ़ सिंथेटिक डेटा)। शुरू करने के लिए JOIN और विज़िट कोड भेजें।')
+        'ARDAI फ़ॉलो-अप टेस्ट बॉट (सिर्फ़ सिंथेटिक डेटा)। शुरू करने के लिए JOIN और विज़िट कोड भेजें।')
 log = logging.getLogger('voicerx.whatsapp')
 
 

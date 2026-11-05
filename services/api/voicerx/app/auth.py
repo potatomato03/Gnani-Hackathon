@@ -78,7 +78,8 @@ def session_view(session):
 
 def capabilities(session):
     clinical = session['role'] == 'doctor'
-    return {'capture': clinical, 'resolve': clinical, 'approve': clinical, 'knowledge': clinical}
+    return {'capture': clinical, 'resolve': clinical, 'approve': clinical, 'knowledge': clinical,
+            'pharmacy': session['role'] in ('doctor', 'admin')}
 
 
 def require(session, capability):

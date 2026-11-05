@@ -1,6 +1,6 @@
 {% set footer %}Version {{ report.version }} · {{ report.content_hash[:12] }}{% if report.status == 'approved' %} · Approved by {{ report.approved_by }} · {{ report.approved_at|ist }}{% else %} · DRAFT, NOT APPROVED{% endif %}{% endset %}
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>VoiceRx - {{ report.case_id }}</title>
+<html lang="en"><head><meta charset="utf-8"><title>ARDAI - {{ report.case_id }}</title>
 <style>
 @page { size: A4; margin: 15mm 13mm 22mm; @bottom-left { content: {{ footer|striptags|css_string }}; font: 7.5pt sans-serif; color: #596970; width: 80%; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt sans-serif; color: #5d6873; } }
 * { box-sizing: border-box; }

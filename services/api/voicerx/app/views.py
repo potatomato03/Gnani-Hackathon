@@ -159,6 +159,8 @@ def report_view(report, encounter_id, patient_id, organisation_id, catalog, capa
             **rx.model_dump(mode='json'),
             'product_label': product_label(products[rx.product_id]) if rx.product_id in products else None,
             'product_form': products[rx.product_id].form if rx.product_id in products else None,
+            'product_composition': ' + '.join(f'{c.ingredient} {c.strength}{c.unit}'.strip()
+                                              for c in products[rx.product_id].components) if rx.product_id in products else None,
             'candidates': [{'id': pid, 'label': product_label(products[pid])} for pid in rx.candidate_ids if pid in products],
             'row': rows[rx.id].model_dump(mode='json') if rx.id in rows else None,
             'issue_uids': [v['uid'] for v in issue_views if v['target'] == rx.id],
