@@ -923,3 +923,9 @@ D-133 committed as `899519a`, pushed, and deployed to production (`janani-privat
 - The sign-in and doctor-selection cookies no longer carry `max_age`, so they end when the browser closes. The server-side session still expires after 12 hours. Browsers set to restore the previous session ("continue where you left off") may keep such cookies.
 - The shared workspace now opens on **Choose a hospital**, then the hospital's doctors, then that doctor's patients. This applies when the address has no page or just the patient list. A reload on a patient, visit or follow-up stays where it was.
 - `test_private_workspace` now checks that both cookies have no lifetime. The full suite with database tests passed. The landing change was not checked in a browser locally, because the shared-admin sign-in needs the private password; the user checks it on the live site.
+
+D-134 committed as `f6468ea`, pushed, and deployed to production (`janani-private-clinic-demo-jinxqsfkw…`).
+
+## 6 November 2026 — Add patient beside the list (D-135)
+
+**D-135 (user: "there's no option to add a patient").** Registering a patient was only in the top menu ("Register patient"). An **Add patient** button now sits under the Today / All patients tabs and opens the same form. It is hidden where the session cannot register. Checked locally: the button shows and opens the form. A direct load of `#/register`, which earlier showed "Cannot set properties of null", loaded correctly on both a fresh load and a reload, so that error could not be reproduced. The user's screenshot showed the tab had not been reloaded since the D-134 deploy.

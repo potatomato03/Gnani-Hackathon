@@ -411,6 +411,7 @@ function ensureLayout() {
       <div class="hello"><h1>${+h < 12 ? "Good morning" : +h < 17 ? "Good afternoon" : "Good evening"}${name ? ", " + esc(name) : ""}</h1><p>${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}</p></div>
       <section class="attention" id="attention" aria-label="Needs your attention" hidden></section>
       <div class="tabs" role="tablist" aria-label="Patient list"><button role="tab" data-tab="today">Today</button><button role="tab" data-tab="all">All patients</button></div>
+      ${session.capabilities?.register === false ? "" : `<a class="btn btn-line add-patient" href="#/register">${ICON.plus}Add patient</a>`}
       <ul class="plist" id="plist" aria-live="polite"></ul>
     </aside>
     <main class="main" id="main" tabindex="-1"></main></div>`;

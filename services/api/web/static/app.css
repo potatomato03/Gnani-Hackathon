@@ -495,3 +495,6 @@ html[data-motion="off"] .mic.idle .halo { animation: none; }
 .pk-opt.sel { background: var(--ink); border-color: var(--ink); color: var(--solid); }
 .pk-hint { margin: 0; font-size: .8125rem; color: var(--ink-3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 @media (max-width: 560px) { .pk-row { grid-template-columns: 1fr; gap: 6px; } }
+
+/* Add patient beside the list (runbook D-135) */
+.add-patient { width: 100%; justify-content: center; margin: 4px 0 12px; }
