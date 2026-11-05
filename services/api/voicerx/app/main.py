@@ -37,7 +37,7 @@ from .catalog import standing
 from .pharmacy import StockFileError, annotate_view, import_stock, load_stock, summary as pharmacy_summary
 from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index
 from .views import CorrectionRefused, build_resolutions, report_view
-from .worker import TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
+from .worker import NEVER, TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
 from .followup import FollowupService, initialize as initialize_followup
 from .followup_routes import install as install_followup_routes
 from .clinic_reports import deliveries as clinic_deliveries
@@ -529,11 +529,14 @@ async def create_run(request: Request, encounter_id: str):
         run_id = 'run-' + uuid.uuid4().hex[:12]
         # A recording transcribed during the visit starts with its transcript (runbook D-131).
         transcript, meta = live_transcript(conn, source) if source['kind'] == 'audio' else (None, None)
+        # Only this deployment's workers take the run; older workers never see it (runbook D-132).
         conn.execute('insert into app.runs (id, encounter_id, source_id, source_version, steps, config, created_by, '
-                     'transcript, transcript_meta) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)',
+                     "transcript, transcript_meta, pool, due_at, not_before, lease_until) "
+                     "values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s, %s)",
                      (run_id, encounter_id, source['id'], source['version'], Jsonb(initial_steps(source['kind'])),
                       Jsonb({'pipeline': 'extract-v5/report-v3', 'provider': state['settings'].llm_provider}),
-                      session['user_id'], transcript, Jsonb(meta) if meta else None))
+                      session['user_id'], transcript, Jsonb(meta) if meta else None, state['settings'].worker_pool,
+                      NEVER, NEVER))
         conn.execute("update app.encounters set state = 'processing' where id = %s", (encounter_id,))
         audit(conn, session['user_id'], session['organisation_id'], 'run.queued', 'run', run_id)
         row = one(conn, 'select * from app.runs where id = %s', (run_id,))
@@ -564,8 +567,10 @@ def retry_run(request: Request, run_id: str):
         if row['state'] not in ('failed', 'incomplete'):
             return run_view(row)
         kind = one(conn, 'select kind from app.sources where id = %s', (row['source_id'],))['kind']
-        conn.execute("update app.runs set state = 'queued', steps = %s, error = null, attempts = 0, not_before = now(), "
-                     'updated_at = now() where id = %s', (Jsonb(initial_steps(kind)), run_id))
+        # A retry belongs to the deployment the doctor retried from, even for a run an older worker failed.
+        conn.execute("update app.runs set state = 'queued', steps = %s, error = null, attempts = 0, pool = %s, "
+                     "due_at = now(), not_before = %s, lease_until = %s, pool_lease_until = null, "
+                     'updated_at = now() where id = %s', (Jsonb(initial_steps(kind)), state['settings'].worker_pool, NEVER, NEVER, run_id))
         conn.execute("update app.encounters set state = 'processing' where id = %s", (row['encounter_id'],))
         audit(conn, session['user_id'], session['organisation_id'], 'run.retried', 'run', run_id)
         return run_view(one(conn, 'select * from app.runs where id = %s', (run_id,)))

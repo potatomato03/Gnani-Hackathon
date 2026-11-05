@@ -14,6 +14,8 @@ class Settings:
     artifacts_dir: Path
     llm_provider: str | None
     allowed_origins: tuple[str, ...]
+    # Runs are processed only by workers of the deployment that created them (runbook D-132).
+    worker_pool: str = 'local'
 
 
 def today_in(timezone_name):
@@ -49,4 +51,14 @@ def load_settings(env=None):
         raise RuntimeError('Private access keys are required on hosted deployments.')
     return Settings(database_url=env['SUPABASE_DB_URL'], dev_login=env.get('APP_DEV_LOGIN', '') == '1' and not hosted,
                     artifacts_dir=Path(env.get('APP_ARTIFACTS_DIR', '/tmp/voicerx' if hosted else REPO_ROOT / 'runs/app')),
-                    llm_provider=env.get('APP_LLM_PROVIDER') or 'groq', allowed_origins=origins)
+                    llm_provider=env.get('APP_LLM_PROVIDER') or 'groq', allowed_origins=origins,
+                    worker_pool=worker_pool(env, hosted))
+
+
+def worker_pool(env, hosted):
+    """Which workers may process this deployment's runs: every hosted instance shares 'hosted'; a computer running
+    the app locally gets its own pool, so it never takes, or loses, another computer's runs (runbook D-132)."""
+    if env.get('APP_WORKER_POOL'):
+        return env['APP_WORKER_POOL'].strip()
+    import socket
+    return 'hosted' if hosted else 'local-' + socket.gethostname().lower()

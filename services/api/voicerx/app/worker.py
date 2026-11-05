@@ -3,6 +3,7 @@
 Work is claimed with a lease (FOR UPDATE SKIP LOCKED), so a crashed worker's job is picked up again when its
 lease runs out. Attempts are bounded, and a provider's daily limit waits and retries instead of failing.
 """
+from datetime import datetime, timezone
 from hashlib import sha256
 import json
 import logging
@@ -28,18 +29,22 @@ from .suggest import catalog_product, clinic_index, finder_for, shared_index, su
 
 log = logging.getLogger('voicerx.worker')
 LEASE = '10 minutes'
+# Where a pooled run keeps not_before and lease_until, out of reach of workers from before pools (runbook D-132).
+NEVER = datetime(9000, 1, 1, tzinfo=timezone.utc)
 TEMPLATES = Path(__file__).resolve().parents[1] / 'exports/templates/lang'
 
 
-def claim_run(conn):
+def claim_run(conn, pool):
+    """The next due run of this deployment's pool (runbook D-132). Pooled runs keep not_before and lease_until at
+    the year 9000 so workers from before pools never take them; due_at and pool_lease_until do that job here."""
     return one(conn, f'''
-        update app.runs set state = 'running', attempts = attempts + 1, lease_until = now() + interval '{LEASE}',
+        update app.runs set state = 'running', attempts = attempts + 1, pool_lease_until = now() + interval '{LEASE}',
                updated_at = now()
         where id = (select id from app.runs
-                    where (state in ('queued', 'retry_wait') and not_before <= now())
-                       or (state = 'running' and lease_until < now())
+                    where pool = %s and ((state in ('queued', 'retry_wait') and due_at <= now())
+                                         or (state = 'running' and pool_lease_until < now()))
                     order by created_at limit 1 for update skip locked)
-        returning *''')
+        returning *''', (pool,))
 
 
 def claim_artifact(conn):
@@ -104,7 +109,7 @@ class Worker(threading.Thread):
 
     def next_run(self):
         with transaction() as conn:
-            run = claim_run(conn)
+            run = claim_run(conn, self.settings.worker_pool)
         if run is None:
             return False
         steps = run['steps']
@@ -116,7 +121,7 @@ class Worker(threading.Thread):
                     if step['key'] == key:
                         step['state'] = state
                 with transaction() as conn:
-                    conn.execute(f"update app.runs set steps = %s, stage = %s, lease_until = now() + interval '{LEASE}', "
+                    conn.execute(f"update app.runs set steps = %s, stage = %s, pool_lease_until = now() + interval '{LEASE}', "
                                  'updated_at = now() where id = %s', (Jsonb(steps), key, run['id']))
 
         with transaction() as conn:
@@ -173,7 +178,7 @@ class Worker(threading.Thread):
             conn.execute("update app.encounters set state = 'in_review', current_version = %s where id = %s",
                          (draft.version, context['id']))
             conn.execute("update app.runs set state = 'succeeded', stage = null, draft_version = %s, error = null, "
-                         'lease_until = null, updated_at = now() where id = %s', (draft.version, run['id']))
+                         'pool_lease_until = null, updated_at = now() where id = %s', (draft.version, run['id']))
             audit(conn, None, context['organisation_id'], 'run.succeeded', 'encounter', context['id'],
                   {'run_id': run['id'], 'version': draft.version,
                    'blocking': sum(i.severity == 'block' for i in draft.issues)})
@@ -265,8 +270,8 @@ class Worker(threading.Thread):
                 step['state'] = 'pending' if waiting else 'failed'
         with transaction() as conn:
             conn.execute(
-                "update app.runs set state = %s, steps = %s, error = %s, lease_until = null, "
-                "not_before = now() + make_interval(secs => %s), updated_at = now() where id = %s",
+                "update app.runs set state = %s, steps = %s, error = %s, pool_lease_until = null, "
+                "due_at = now() + make_interval(secs => %s), updated_at = now() where id = %s",
                 ('retry_wait' if waiting else 'failed', Jsonb(steps), message, 60 * run['attempts'], run['id']))
             if not waiting:
                 conn.execute("update app.encounters set state = 'failed' where id = %s", (run['encounter_id'],))

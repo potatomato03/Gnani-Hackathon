@@ -64,3 +64,10 @@ def test_the_reference_carries_the_app_patient_not_the_seed_file():
     patient = {**REF.patients['pat-001'], 'name': 'Renamed In App'}
     reference = reference_for(REF, patient, REF.doctors['doc-001'], REF.clinic)
     assert reference.patients == {'pat-001': patient} and reference.products == REF.products
+
+
+def test_each_computer_gets_its_own_worker_pool_and_hosted_instances_share_one():
+    from voicerx.app.config import worker_pool
+    assert worker_pool({}, hosted=True) == 'hosted'
+    assert worker_pool({}, hosted=False).startswith('local-')
+    assert worker_pool({'APP_WORKER_POOL': ' demo-laptop '}, hosted=True) == 'demo-laptop'

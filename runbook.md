@@ -878,3 +878,25 @@ Free-tier options reviewed at the user's request (github.com/mnfst/awesome-free-
 The scan for secrets, phone numbers and e-mail addresses across everything committed here found only the synthetic test password in `test_private_workspace.py`.
 
 Commits: `5a59e98` is the workspace and the interface. The next commit is the live recording (D-131): `live_recordings.py`, migration 011, the run starting with the live transcript, the Prisma `transcribe_segment` refactor, the recorder sending pieces in the new interface, and their unit and database tests. Each commit's tree was tested on its own copy. Nothing is pushed.
+
+Pushed on 6 November (user: "Push them"): `20d4514`, `e82ef1c`, `5a59e98` and `6e187d5` are on `origin/aditya/extraction-report`.
+
+**Hospital display names changed (6 Nov, at the user's request).** In Supabase, the two demo hospitals now carry the display names the user chose (audited as `workspace.hospitals_renamed`); the names themselves stay out of this repository. The local `.env` `APP_PRIVATE_HOSPITALS` matches, so rerunning the setup script keeps them. The organisation IDs are unchanged, because many tables refer to them; they still contain the old names but are not shown in the app. Then, at the user's request ("Yes, update them"), the 17 draft report versions that held the old names were updated (header and record snapshot), with their content hashes recomputed after checking each stored hash first, audited as `report.hospital_name_updated`. The 3 approved reports were left unchanged: they are signed records whose hash and PDF match what was approved.
+
+## 6 November 2026 — a run failed on another machine's worker
+
+The user recorded a 61 s visit on a copy of the app showing the previous interface (test patient "Aditya" at the second demo hospital; `enc-4320f8d9a926`). The run failed at once with `FileNotFoundError` for `C:\Users\dev88\...\runs\app\...`. It was not served by this machine (no log lines, no local file). A worker on the **dev88** computer, connected to the same Supabase database, claimed the run within half a second and looked for the recording only on its own disk. That code predates the fallback that reads `app.source_files`. This is very likely also the worker that held the two live-recording test runs earlier (D-131).
+
+**Recovered:** the run was claimed directly (requeued and claimed in one statement) and processed with this session's worker. It read the recording from the database and produced the draft in 22.5 s, so the visit is now in review.
+
+**Open (team):** the dev88 machine should pull `6e187d5` or run with `APP_RUN_WORKER=0` while it shares this database. Otherwise any run can still fail this way. **Proposed:** each run records which deployment created it, and a worker claims only its own deployment's runs.
+
+## 6 November 2026 — runs stay with the deployment that created them (D-132)
+
+**D-132 (user: "Yes, build it").** A worker processes only the runs its own deployment created, so a teammate's local copy can no longer take, and fail, the hosted app's or another computer's runs.
+- **Pools.** `app.runs.pool` records the deployment. All hosted instances (API and worker daemon) share `hosted`, and a local computer gets `local-<hostname>`; this computer is `local-aditya`. `APP_WORKER_POOL` overrides the name, for example to pair a separate local worker process with a local API on another machine.
+- **Workers from before pools cannot see pooled runs.** Old workers claim on `not_before` and `lease_until`. A pooled run keeps both at 1 Jan 9000, and pooled workers use the new `due_at` and `pool_lease_until`. ('infinity' was tried first, but psycopg cannot read it into Python.) This protects runs even before the dev88 computer updates.
+- **Retry** moves a run into the pool of the deployment the doctor retried from, including a run an older worker failed.
+- **Untagged runs**, created by code from before this change, are left to old workers. None were waiting when this was applied.
+- **Consequence:** a deployment with no worker of its own (`APP_RUN_WORKER=0` and no daemon) leaves its runs queued. The hosted API and its daemon share `hosted`, so the Vercel setup is covered.
+- Migration 012 is applied to Supabase. A new database test checks the old claim query, claiming by another pool, taking back an expired lease and retry. A unit test covers the pool names. Checked end to end on the dev server: a typed visit ran in pool `local-aditya` and drafted in 9 s. The full suite with database tests passed: 883, with 3 skipped. No commit was made.
