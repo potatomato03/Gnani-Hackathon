@@ -914,3 +914,12 @@ The user tried the app and saw no live transcription and a slow "Use this record
 - **Grid amounts** are the dose per time (as in the new interface's form), and food may be left "Not said".
 - **"Quote not found" no longer shown.** `views.NOT_SHOWN` leaves `quote_not_found` out of `issue_views`. The items are already left out of the report by `check_extraction` (its guard against invented findings and medicines), and the issue stays in the stored report for audit. Other checks are unchanged. The doctor adds anything missing with the picker or edits a sentence by clicking it.
 - Checked on the dev server with a test draft: Space opened the picker with Paracetamol 500, Brufen 400 and Pantocid (Dolo 650 left out as already prescribed). Keys alone added Brufen 400 at 1-1-0-1, after food, for 7 days (version 2), and the picker reopened as "Medicine 3". Esc closed it, and Edit reopened Brufen's values. A draft with 3 stored "quote not found" checks showed none. The full suite with database tests passed: 884, with 3 skipped. Not yet committed or deployed.
+
+D-133 committed as `899519a`, pushed, and deployed to production (`janani-private-clinic-demo-hzuh3xco0…`, aliased to the main URL).
+
+## 6 November 2026 — open on Hospitals; sign-in ends with the browser (D-134)
+
+**D-134 (user: "there's no authorization nothing, this is the landing page; i want to go to the hospital page first then doctors then patients").** Opening the site went straight to the last chosen doctor's patients. The sign-in cookie lasted 2 hours even after the browser closed, and the app reopened on the doctor already chosen.
+- The sign-in and doctor-selection cookies no longer carry `max_age`, so they end when the browser closes. The server-side session still expires after 12 hours. Browsers set to restore the previous session ("continue where you left off") may keep such cookies.
+- The shared workspace now opens on **Choose a hospital**, then the hospital's doctors, then that doctor's patients. This applies when the address has no page or just the patient list. A reload on a patient, visit or follow-up stays where it was.
+- `test_private_workspace` now checks that both cookies have no lifetime. The full suite with database tests passed. The landing change was not checked in a browser locally, because the shared-admin sign-in needs the private password; the user checks it on the live site.

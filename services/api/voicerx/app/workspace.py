@@ -104,8 +104,8 @@ def install(app,state,session_of,ApiError):
         if selected_doctors is not None:
             view['workspace']={'hospital':{'id':member['id'],'name':member['name']},'items':selected_doctors}
         response=JSONResponse(view)
-        response.set_cookie(auth.COOKIE,token,httponly=True,samesite='strict',secure=request.url.scheme=='https',
-                            max_age=7200,path='/')
+        # Ends with the browser, like the sign-in cookie (runbook D-134).
+        response.set_cookie(auth.COOKIE,token,httponly=True,samesite='strict',secure=request.url.scheme=='https',path='/')
         return response
 
     @app.post('/api/v1/patients',status_code=201)

@@ -1392,6 +1392,9 @@ addEventListener("DOMContentLoaded", async () => {
   $("#app").hidden = false; $("#demoBadge").hidden = !window.VoiceRxMock;
   if (!reduce) { $("#app").classList.add("entering"); setTimeout(() => $("#app").classList.remove("entering"), 520); }
   renderShell();
+  // The shared workspace opens on its hospitals, then doctors, then that doctor's patients (runbook D-134).
+  // A reload deeper in (a patient, a visit, a follow-up) stays where it was.
+  if (session.admin && ["", "#", "#/", "#/patients"].includes(location.hash)) { state.hospital = null; history.replaceState(null, "", "#/workspace"); }
   if (session.doctor) await loadTasks();
   route();
 });

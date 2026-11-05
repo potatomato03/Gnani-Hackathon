@@ -276,7 +276,9 @@ async def password_login(request:Request):
     if not account:
         raise ApiError(429 if limited else 401,'sign_in_failed','Sign-in failed. Try again later.' if limited else 'Invalid username or password.')
     response=JSONResponse(auth.session_view(current))
-    response.set_cookie(auth.COOKIE,token,httponly=True,samesite='strict',secure=request.url.scheme=='https',max_age=7200,path='/')
+    # A browser-session cookie: closing the browser means signing in again (runbook D-134). The server-side
+    # session still expires on its own.
+    response.set_cookie(auth.COOKIE,token,httponly=True,samesite='strict',secure=request.url.scheme=='https',path='/')
     return response
 
 

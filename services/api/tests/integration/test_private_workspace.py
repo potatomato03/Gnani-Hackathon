@@ -54,6 +54,7 @@ def test_password_login_origin_csrf_logout_and_persisted_limits(world,monkeypatc
     assert response.status_code==200 and response.json()['workspace_admin']
     cookie=response.headers['set-cookie'].lower()
     assert 'httponly' in cookie and 'samesite=strict' in cookie
+    assert 'max-age' not in cookie and 'expires' not in cookie  # ends with the browser (runbook D-134)
     assert client.get('/api/v1/me').status_code==200
     assert client.post('/api/v1/auth/logout').status_code==403
     assert client.post('/api/v1/auth/logout',headers={'X-CSRF-Token':response.json()['csrf_token']}).status_code==204
@@ -106,6 +107,7 @@ def test_hierarchy_onboarding_registration_encryption_and_hospital_boundaries(wo
     assert w['client'].post('/api/v1/workspace/select',json={'hospital_id':foreign}).status_code==404
     selected=w['client'].post('/api/v1/workspace/select',json={'hospital_id':w['other']})
     assert selected.status_code==200
+    assert 'max-age' not in selected.headers['set-cookie'].lower()
     assert selected.json()['workspace']['hospital']['id']==w['other']
     assert all(item['id']==w['doc'] for item in selected.json()['workspace']['items'])
     w['client'].headers['X-CSRF-Token']=selected.json()['csrf_token']
