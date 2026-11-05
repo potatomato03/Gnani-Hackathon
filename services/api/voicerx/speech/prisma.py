@@ -88,26 +88,37 @@ def _post(api_key):
     return post
 
 
+def transcribe_segment(samples, language, texts, post):
+    """One piece of at most 29 seconds, sent with the text before it; '' when it holds no speech."""
+    fields = {'model': 'prisma-v3.0', 'language_code': LANGUAGE_CODES.get(language, 'hi-IN,en-IN'), 'format': 'codemix'}
+    previous = ' '.join(texts)[-PREVIOUS_TEXT:]
+    if previous:
+        fields['previous_text'] = previous
+    status, reply = post(fields, wav_bytes(samples))
+    if status != 200:
+        raise PrismaError(f'Prisma answered {status}: {str(reply.get("error", ""))[:200]}',
+                          transient=status == 429 or status >= 500)
+    if reply.get('truncated'):
+        raise PrismaError('Prisma truncated a segment; the recording was not transcribed in full.')
+    return reply.get('transcript', '').strip()
+
+
+def transcript_meta(language, segment_count, seconds, **extra):
+    return {'provider': 'gnani-prisma', 'model': 'prisma-v3.0', 'format': 'codemix',
+            'language_code': LANGUAGE_CODES.get(language, 'hi-IN,en-IN'), 'segments': segment_count,
+            'seconds': round(seconds, 1), **extra}
+
+
 def transcribe(samples, language, api_key, post=None):
     """The whole recording's transcript, and what was sent: segments, seconds, language code."""
     post = post or _post(api_key)
-    code = LANGUAGE_CODES.get(language, 'hi-IN,en-IN')
     texts = []
-    for start, end in segments(samples):
-        fields = {'model': 'prisma-v3.0', 'language_code': code, 'format': 'codemix'}
-        previous = ' '.join(texts)[-PREVIOUS_TEXT:]
-        if previous:
-            fields['previous_text'] = previous
-        status, reply = post(fields, wav_bytes(samples[start:end]))
-        if status != 200:
-            raise PrismaError(f'Prisma answered {status}: {str(reply.get("error", ""))[:200]}',
-                              transient=status == 429 or status >= 500)
-        if reply.get('truncated'):
-            raise PrismaError('Prisma truncated a segment; the recording was not transcribed in full.')
-        if reply.get('transcript', '').strip():
-            texts.append(reply['transcript'].strip())
+    parts = segments(samples)
+    for start, end in parts:
+        text = transcribe_segment(samples[start:end], language, texts, post)
+        if text:
+            texts.append(text)
     text = ' '.join(texts)
     if not text:
         raise PrismaError('Prisma found no speech in the recording.')
-    return text, {'provider': 'gnani-prisma', 'model': 'prisma-v3.0', 'format': 'codemix', 'language_code': code,
-                  'segments': len(segments(samples)), 'seconds': round(len(samples) / RATE, 1)}
+    return text, transcript_meta(language, len(parts), len(samples) / RATE)

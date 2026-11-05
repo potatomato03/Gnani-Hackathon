@@ -876,3 +876,5 @@ Free-tier options reviewed at the user's request (github.com/mnfst/awesome-free-
 - The two unpushed commits were reworded (runbook lines only; contents otherwise identical) and are now `20d4514` and `e82ef1c`. No pushed commit ever named them.
 
 The scan for secrets, phone numbers and e-mail addresses across everything committed here found only the synthetic test password in `test_private_workspace.py`.
+
+Commits: `5a59e98` is the workspace and the interface. The next commit is the live recording (D-131): `live_recordings.py`, migration 011, the run starting with the live transcript, the Prisma `transcribe_segment` refactor, the recorder sending pieces in the new interface, and their unit and database tests. Each commit's tree was tested on its own copy. Nothing is pushed.

@@ -44,6 +44,7 @@ from .clinic_reports import deliveries as clinic_deliveries
 from .workspace import install as install_workspace
 from .private_access import authenticate
 from .audio_uploads import install as install_audio_uploads
+from .live_recordings import install as install_live_recordings, live_transcript
 from ..agent.gate import GateRefused
 
 log = logging.getLogger('voicerx.app')
@@ -526,11 +527,13 @@ async def create_run(request: Request, encounter_id: str):
         if source is None:
             raise ApiError(422, 'unknown_source', 'That source version is not part of this visit.')
         run_id = 'run-' + uuid.uuid4().hex[:12]
-        conn.execute('insert into app.runs (id, encounter_id, source_id, source_version, steps, config, created_by) '
-                     'values (%s, %s, %s, %s, %s, %s, %s)',
+        # A recording transcribed during the visit starts with its transcript (runbook D-131).
+        transcript, meta = live_transcript(conn, source) if source['kind'] == 'audio' else (None, None)
+        conn.execute('insert into app.runs (id, encounter_id, source_id, source_version, steps, config, created_by, '
+                     'transcript, transcript_meta) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)',
                      (run_id, encounter_id, source['id'], source['version'], Jsonb(initial_steps(source['kind'])),
                       Jsonb({'pipeline': 'extract-v5/report-v3', 'provider': state['settings'].llm_provider}),
-                      session['user_id']))
+                      session['user_id'], transcript, Jsonb(meta) if meta else None))
         conn.execute("update app.encounters set state = 'processing' where id = %s", (encounter_id,))
         audit(conn, session['user_id'], session['organisation_id'], 'run.queued', 'run', run_id)
         row = one(conn, 'select * from app.runs where id = %s', (run_id,))
@@ -939,6 +942,7 @@ async def knowledge_search(request: Request):
 install_followup_routes(app, state, session_of, ApiError)
 install_workspace(app,state,session_of,ApiError)
 install_audio_uploads(app,session_of,ApiError,store_audio,AUDIO_TYPES,LANGUAGE_CODES)
+install_live_recordings(app, session_of, ApiError, store_audio, AUDIO_TYPES, LANGUAGE_CODES)
 
 app.mount('/static', StaticFiles(directory=WEB / 'static'), name='static')
 

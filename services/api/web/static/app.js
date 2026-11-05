@@ -88,6 +88,10 @@ const live = {
     }
     return http("POST", `/audio-uploads/${id}/complete`, {});
   },
+  // A recording sent in pieces while the visit goes on, so its transcript is ready when it stops (D-131).
+  liveBegin: (enc, type, language) => http("POST", `/encounters/${enc}/live-recordings`, { media_type: type, language, recording_consent: true }),
+  livePart: (id, part, blob, final) => http("PUT", `/live-recordings/${id}/parts/${part}${final ? "?final=true" : ""}`, blob, { headers: { "Content-Type": "application/octet-stream" } }),
+  liveComplete: id => http("POST", `/live-recordings/${id}/complete`, {}),
   startRun: (enc, src) => http("POST", `/encounters/${enc}/runs`, { source_id: src.source_id ?? src.id, source_version: src.source_version ?? src.version }).then(adapt.run),
   run: id => http("GET", `/runs/${id}`).then(adapt.run),
   retry: id => http("POST", `/runs/${id}/retry`).then(adapt.run),
@@ -612,6 +616,7 @@ function renderVisit() {
         <canvas class="live-wave" id="liveWave" aria-hidden="true"></canvas>
         <div class="row"><button class="btn btn-dark" id="stopBtn">Stop recording</button><button class="btn btn-line" id="pauseBtn">${v.paused ? ICON.play + "Resume" : ICON.pause + "Pause"}</button><button class="btn btn-quiet" id="discardBtn">Discard</button></div>
         <p class="hint">${mic.fake ? "Microphone isn't available here, so this is a pretend recording for the demo." : "Speak normally. Recording stops by itself after 20 minutes."}</p>
+        <p class="hint" id="liveNote" aria-live="polite">${liveNote(mic.live)}</p>
       </div></div>`;
     $("#stopBtn").onclick = $("#micStop").onclick = stopRecording;
     $("#pauseBtn").onclick = togglePause;
@@ -624,7 +629,7 @@ function renderVisit() {
       ${v.url ? `<audio controls src="${v.url}"></audio>` : ""}
       <div class="row mt"><button class="btn btn-dark" id="useRec">Create report</button><button class="btn btn-line" id="redo">Record again</button></div>`;
     $("#useRec").onclick = () => submitAudio(v.blob);
-    $("#redo").onclick = () => { if (v.url) URL.revokeObjectURL(v.url); Object.assign(v, { phase: "idle", blob: null, url: null }); renderVisit(); };
+    $("#redo").onclick = () => { if (v.url) URL.revokeObjectURL(v.url); Object.assign(v, { phase: "idle", blob: null, url: null, live: null }); renderVisit(); };
     return;
   }
   if (["uploading", "processing", "failed"].includes(v.phase)) {
@@ -645,14 +650,49 @@ function renderVisit() {
 }
 
 /* -------- Recording -------- */
-const mic = { stream: null, ctx: null, analyser: null, data: null, rec: null, chunks: [], raf: 0, tick: 0, start: 0, pausedAt: 0, pausedTotal: 0, fake: false, auto: 0 };
+const mic = { stream: null, ctx: null, analyser: null, data: null, rec: null, chunks: [], raf: 0, tick: 0, start: 0, pausedAt: 0, pausedTotal: 0, fake: false, auto: 0, live: null, liveTimer: 0 };
+/* While the visit goes on, the recording so far goes to the server every 10 seconds and is transcribed there,
+   so the report starts as soon as the doctor stops. If anything here fails, the recording is uploaded whole
+   when the report is created, as before. */
+const LIVE_EVERY = 10000;
+function liveStart(encReady, type, language) {
+  const L = { id: null, part: 0, queue: [], chain: Promise.resolve(), ok: true, finished: false, status: null };
+  L.ready = encReady.then(enc => api.liveBegin(enc, type, language)).then(r => { L.id = r.id; }).catch(() => { L.ok = false; });
+  return L;
+}
+function liveSend(L, final) {
+  if (!L?.ok) return Promise.resolve();
+  const pieces = L.queue.splice(0);
+  if (!pieces.length && !final) return L.chain;
+  L.chain = L.chain.then(async () => {
+    await L.ready; if (!L.ok) return;
+    const blob = new Blob(pieces, { type: "application/octet-stream" });
+    for (let tries = 1; ; tries++) {
+      try { L.status = await api.livePart(L.id, L.part, blob, final); L.part++; L.finished = !!L.status.finished; break; }
+      catch (x) {
+        // A piece that cannot be taken ends the head start; the whole file is uploaded at the end instead.
+        if (tries >= 3 || [404, 409, 413, 422].includes(x.status)) { L.ok = false; break; }
+        await new Promise(r => setTimeout(r, 1500 * tries));
+      }
+    }
+    const el = $("#liveNote"); if (el) el.textContent = liveNote(L);
+  });
+  return L.chain;
+}
+const liveNote = L => L?.ok && L.status?.transcribed_s ? `Writing it down as you talk: ${fmtClock(L.status.transcribed_s * 1000)} so far.` : "";
 async function startRecording() {
-  const v = state.visit; mic.fake = false; mic.chunks = []; mic.rec = null;
+  const v = state.visit; mic.fake = false; mic.chunks = []; mic.rec = null; mic.live = null; v.live = null;
   try {
     mic.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     mic.ctx = new AudioContext(); mic.analyser = mic.ctx.createAnalyser(); mic.analyser.fftSize = 256;
     mic.ctx.createMediaStreamSource(mic.stream).connect(mic.analyser); mic.data = new Uint8Array(mic.analyser.frequencyBinCount);
-    mic.rec = new MediaRecorder(mic.stream); mic.rec.ondataavailable = e => e.data.size && mic.chunks.push(e.data); mic.rec.start(1000);
+    mic.rec = new MediaRecorder(mic.stream);
+    mic.rec.ondataavailable = e => { if (e.data.size) { mic.chunks.push(e.data); mic.live?.queue.push(e.data); } };
+    if (api.liveBegin) {
+      mic.live = liveStart(ensureEncounter(), (mic.rec.mimeType || "audio/webm").split(";")[0], v.language || "hinglish");
+      clearInterval(mic.liveTimer); mic.liveTimer = setInterval(() => liveSend(mic.live, false), LIVE_EVERY);
+    }
+    mic.rec.start(1000);
   } catch (_) {
     if (!window.VoiceRxMock) { toast("Microphone permission is needed to record. You can upload a file or type instead."); return; }
     mic.fake = true;
@@ -689,7 +729,7 @@ function drawLive() {
   mic.raf = requestAnimationFrame(drawLive);
 }
 function stopMic() {
-  cancelAnimationFrame(mic.raf); clearInterval(mic.tick); clearTimeout(mic.auto);
+  cancelAnimationFrame(mic.raf); clearInterval(mic.tick); clearTimeout(mic.auto); clearInterval(mic.liveTimer);
   try { if (mic.rec && mic.rec.state !== "inactive") mic.rec.stop(); } catch (_) {}
   mic.stream?.getTracks().forEach(t => t.stop()); mic.ctx?.close().catch(() => {});
   mic.stream = mic.ctx = mic.analyser = null;
@@ -699,24 +739,33 @@ async function stopRecording() {
   let blob;
   if (mic.rec) { const done = new Promise(r => mic.rec.onstop = r); stopMic(); await done; blob = new Blob(mic.chunks, { type: mic.rec.mimeType || "audio/webm" }); }
   else { stopMic(); blob = new Blob([new Uint8Array(64)], { type: "audio/webm" }); }
+  const L = mic.live; mic.live = null;
   if (ms < 2000) { toast("That was too short. Record at least 2 seconds."); v.phase = "idle"; renderVisit(); return; }
+  // The last piece goes now, while the doctor listens back; the report can start without another upload.
+  if (L?.ok) { liveSend(L, true); v.live = L; }
   Object.assign(v, { phase: "review-audio", blob, url: mic.fake ? null : URL.createObjectURL(blob), duration: fmtClock(ms) });
   renderVisit();
 }
 
 /* -------- Submit and process -------- */
-async function ensureEncounter() {
+function ensureEncounter() {
+  // Recording now creates the visit as it starts, so a second call waits for the first rather than making another.
   const v = state.visit;
-  if (!v.enc) { const e = await api.createEncounter(state.patient.id); v.enc = e.id ?? e.encounter_id; history.replaceState(null, "", `#/encounters/${v.enc}`); state.guard = location.hash; }
-  return v.enc;
+  if (v.enc) return Promise.resolve(v.enc);
+  return v.encReady ||= api.createEncounter(state.patient.id).then(e => {
+    v.enc = e.id ?? e.encounter_id; history.replaceState(null, "", `#/encounters/${v.enc}`); state.guard = location.hash; return v.enc;
+  }).catch(x => { v.encReady = null; throw x; });
 }
 async function submitAudio(blob) {
   const v = state.visit;
   if (blob.size > 40 * 1024 * 1024) { toast("That file is over 40 MB. Use a shorter recording."); return; }
   v.phase = "uploading"; v.run = null; v.upPct = 0; renderVisit();
+  const L = blob === v.blob ? v.live : null; v.live = null;
   try {
     const enc = await ensureEncounter();
-    const src = await api.audioSource(enc, blob, v.language || "hinglish", pct => { v.upPct = pct; renderVisit(); });
+    let src = null;
+    if (L) { await L.chain; if (L.ok && L.finished) src = await api.liveComplete(L.id).catch(() => null); }
+    src = src || await api.audioSource(enc, blob, v.language || "hinglish", pct => { v.upPct = pct; renderVisit(); });
     await startProcessing(enc, src);
   } catch (x) { v.phase = "failed"; v.error = x.message; renderVisit(); }
 }
