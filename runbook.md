@@ -952,3 +952,12 @@ D-136 committed as `f4bb077`, pushed, and deployed to production (`janani-privat
 - **Measured locally** (90 s of the synthetic consultation): the list was made during the visit (cough, sore throat, fever, two medicines). After stopping, the picker was open and focused within 2.5 s; Brufen was picked with the keyboard while extraction ran; the draft arrived 15 s after the stop with Brufen already added (version 2).
 - **Not yet:** a pick is held in the browser only, so closing the page before the draft lands loses it. The draft's own medicine wording and the picked medicines are not reconciled beyond the product match.
 - 885 passed, 3 skipped. A unit test covers the once-a-minute, one-at-a-time refresh; the live recording database test checks that the refresh is offered with the transcript so far.
+
+D-137 committed as `382965d`, pushed, and deployed to production (`janani-private-clinic-demo-dbhf3808c…`).
+
+## 6 November 2026 — the report waits for the medicines (D-138)
+
+**D-138 (user, after trying D-137 live: "now it seems real time … don't want the doc to see what's happening in the background, remove that processing steps … hold the report till doc selects the meds … as soon as he has selected the med, the whole preview is available").**
+- After the stop, the visit screen shows only **Pick <patient>'s medicines**: the open picker, the medicines picked so far, and **Done, show the report**. The progress steps are gone, and polls no longer redraw anything the doctor sees.
+- A report that finishes while the doctor is still picking is held in the browser (`v.ready`). **Esc** in the empty picker, or the Done button, ends picking: a ready report opens at once, whole, with the picked medicines added. Otherwise a short "Putting <patient>'s report together" shows until it lands. Failures still show at once, with Try again.
+- Checked locally with typed visits. The report finished while Dolo 650 was being picked and stayed hidden; Esc opened it at once at version 2 with Dolo 650 added. Pressing Done straight away showed the short wait and then the report 8.8 s later. Only `app.js` and `app.css` changed, so the Python suite was not rerun.

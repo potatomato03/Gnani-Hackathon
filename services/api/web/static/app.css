@@ -499,13 +499,11 @@ html[data-motion="off"] .mic.idle .halo { animation: none; }
 /* Add patient beside the list (runbook D-135) */
 .add-patient { width: 100%; justify-content: center; margin: 4px 0 12px; }
 
-/* Medicines first (runbook D-137): pick medicines beside the report's progress */
-.proc-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 28px; align-items: start; }
+/* Medicines first (runbook D-137, D-138): pick medicines; the report follows */
 .proc-meds h3 { margin: 0 0 4px; }
-.proc-side { padding: 16px 18px; border-radius: var(--r-m); background: var(--sunk); }
-.proc-side h4 { margin: 0 0 10px; font-size: .9375rem; color: var(--ink-2); }
-.proc-side .proc { margin: 0 0 12px; }
 .pending { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
 .pending li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--r-s); background: var(--solid); border: 1px solid var(--line); }
 .pending li > span { display: grid; gap: 2px; }
-@media (max-width: 860px) { .proc-grid { grid-template-columns: 1fr; } }
+.proc-meds .ph-row { align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.finishing { display: flex; align-items: center; gap: 16px; padding: 18px 0; }
+.finishing h3 { margin: 0; }
