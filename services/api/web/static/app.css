@@ -473,3 +473,25 @@ html[data-motion="off"] .mic.idle .halo { animation: none; }
 .stock-note svg { flex: none; margin-top: 2px; }
 .stock-table td { vertical-align: top; }
 .pick .chip { margin-left: auto; }
+
+/* Keyboard medicine picker (runbook D-133) */
+.kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; padding: 1px 6px; margin-left: 4px; border: 1px solid var(--line-2); border-radius: 4px; color: var(--ink-3); background: var(--solid); }
+.picker { margin: 12px 0; padding: 16px; border-radius: var(--r-m); background: var(--sunk); border: 1px solid var(--iris); display: grid; gap: 10px; outline: none; }
+.picker:focus, .picker:focus-within { box-shadow: 0 0 0 3px var(--iris-soft); }
+.pk-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pk-list { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; display: grid; gap: 2px; }
+.pk-item { display: grid; gap: 2px; padding: 9px 12px; border-radius: var(--r-s); cursor: pointer; }
+.pk-item:hover { background: var(--solid); }
+.pk-item.active { background: var(--solid); box-shadow: inset 3px 0 0 var(--iris); }
+.pk-sub { color: var(--ink-3); font-size: .875rem; }
+.pk-group { min-height: 20px; padding: 0 8px; margin-right: 8px; font-size: .75rem; background: var(--iris-soft); color: var(--ink-2); }
+.pk-chosen { display: grid; gap: 2px; }
+.pk-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; padding: 6px 8px; border-radius: var(--r-s); }
+.pk-row.active { background: var(--solid); box-shadow: inset 3px 0 0 var(--iris); }
+.pk-label { font-size: .875rem; color: var(--ink-2); }
+.pk-row.active .pk-label { color: var(--ink); font-weight: 600; }
+.pk-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+.pk-opt { min-height: 34px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--solid); color: var(--ink-2); font-size: .875rem; }
+.pk-opt.sel { background: var(--ink); border-color: var(--ink); color: var(--solid); }
+.pk-hint { margin: 0; font-size: .8125rem; color: var(--ink-3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 560px) { .pk-row { grid-template-columns: 1fr; gap: 6px; } }

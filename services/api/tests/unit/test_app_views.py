@@ -119,3 +119,12 @@ def test_an_instruction_said_away_from_its_medicine_can_be_used_in_one_click():
     assert card['message'] == 'Said away from this medicine: duration “for three days”'
     assert card['uses'] == [{'label': 'Use “for three days”',
                              'item': {'action': 'set_duration', 'value': {'value': 3, 'unit': 'day'}}}]
+
+
+def test_a_quote_not_in_the_transcript_is_kept_in_the_report_but_not_shown():
+    from voicerx.contracts.issues import Issue
+    draft = make_draft([resolved_medicine()])
+    draft.issues.append(Issue(code='quote_not_found', severity='warn', target='f-dropped', message='quote not found'))
+    shown = view(draft)
+    assert all(i['code'] != 'quote_not_found' for i in shown['issue_views'])
+    assert any(i.code == 'quote_not_found' for i in draft.issues)  # still in the stored report, for audit

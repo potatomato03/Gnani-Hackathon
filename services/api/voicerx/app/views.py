@@ -15,6 +15,10 @@ from ..resolve import CONFIRMABLE_INTERPRETATIONS
 from .catalog import parse_composition
 
 SCHEMA_VERSION = 1
+# Not shown to the doctor (runbook D-133): an item whose quote is not in the transcript is already left out of the
+# report, and the doctor corrects any sentence by clicking it, so a card saying so only adds noise. The issue stays
+# in the stored report for audit.
+NOT_SHOWN = {'quote_not_found'}
 TITLES = {
     'unmatched_product': 'Medicine not recognised', 'ambiguous_product': 'Choose the exact product',
     'fuzzy_product_match': 'Check the medicine name', 'missing_quantity': 'Dose not stated',
@@ -139,6 +143,8 @@ def report_view(report, encounter_id, patient_id, organisation_id, catalog, capa
     by_id = {rx.id: rx for rx in report.checked.medications}
     issue_views = []
     for number, issue in enumerate(report.issues):
+        if issue.code in NOT_SHOWN:
+            continue
         kind = _target_kind(issue.target, medication_ids, findings)
         issue_views.append({'uid': f'i{number}', 'code': issue.code, 'severity': issue.severity, 'target': issue.target,
                             'target_kind': kind, 'title': TITLES.get(issue.code, issue.message),

@@ -836,7 +836,7 @@ function renderReview(box) {
   v.reveal = false;
   box.querySelectorAll("[data-fix]").forEach(b => b.onclick = () => {
     const i = r.issue_views.find(x => x.id === b.dataset.fix), a = i.actions[+b.dataset.k], v = state.visit;
-    if (a.edit) { Object.assign(v, { editing: a.edit, adding: false, newMed: null }); renderVisit(); $("#medEdit")?.scrollIntoView({ block: "center" }); return; }
+    if (a.edit) { const med = r.medication_views.find(m => m.id === a.edit); if (med) openPicker(med); return; }
     if (a.find) { Object.assign(v, { adding: true, replacing: a.find, editing: null, newMed: null }); renderVisit(); return; }
     if (a.line) { const t = box.querySelector(`.sent[data-ref="${CSS.escape(a.line)}"]`); t?.click(); t?.closest(".rgroup")?.querySelector("[data-line=edit]")?.click(); return; }
     applyFix(a.resolutions.map(x => ({ reason: `Answered: ${i.title}`, ...x })), b);
@@ -844,6 +844,8 @@ function renderReview(box) {
   $("#approveBtn").onclick = approve;
   wireReport(box, r, true);
   wireAddMedicine(box);
+  // The picker survives a redraw; after adding a medicine it opens again for the next one (until Esc).
+  if (v.chainPicker) { v.chainPicker = false; openPicker(); } else drawPicker();
 }
 function stockNoteHTML(r) {
   if (!r.pharmacy) return "";
@@ -858,9 +860,9 @@ function reportHTML(r, editable) {
     ${r.report_groups.map(g => `<section class="rgroup"><h4>${esc(g.heading)}</h4>
       <p>${g.lines.map(l => `<button class="sent" data-ref="${esc(l.ref)}" aria-expanded="false">${esc(l.text)}</button>`).join(" ")}</p>
       <div class="evidence" hidden aria-live="polite"></div></section>`).join("")}
-    <section class="rgroup"><div class="ph-row"><h4>Medicines</h4>${editable ? `<button class="btn btn-line btn-small" data-act="add-med">${ICON.plus}Add medicine</button>` : ""}</div>
+    <section class="rgroup"><div class="ph-row"><h4>Medicines</h4>${editable ? `<button class="btn btn-line btn-small" data-act="add-med" title="Shortcut: space bar">${ICON.plus}Add medicine <kbd class="kbd">Space</kbd></button>` : ""}</div>
       ${editable && state.visit?.replacing ? `<p class="hint">Choose the medicine for "${esc(r.all_meds?.[state.visit.replacing]?.label || "")}".</p>` : ""}
-      ${editable && state.visit?.newMed ? `<div class="medit add"><p class="hint m0"><b>${esc(state.visit.newMed.label)}</b> ${esc(state.visit.newMed.composition)}</p>${editorHTML(state.visit.newMed)}</div>` : editable && state.visit?.adding ? addMedHTML() : ""}${medsHTML(r.medication_views, editable)}</section>
+      ${editable && state.visit?.newMed ? `<div class="medit add"><p class="hint m0"><b>${esc(state.visit.newMed.label)}</b> ${esc(state.visit.newMed.composition)}</p>${editorHTML(state.visit.newMed)}</div>` : editable && state.visit?.adding ? addMedHTML() : ""}${editable ? `<div id="pickerHost"></div>` : ""}${medsHTML(r.medication_views, editable)}</section>
   </div>`;
 }
 function medsHTML(meds, editable) {
@@ -917,6 +919,160 @@ function showPicks(list) {
   const ul = $("#medResults"); if (!ul) return;
   ul.innerHTML = list.length ? list.map(p => `<li><button class="pick" data-product="${esc(p.id ?? p.product_id)}" data-label="${esc(p.label || p.name || p.brand)}" data-comp="${esc(p.composition || "")}" data-form="${esc(p.form || "")}" data-food="${esc(p.food || "")}"><b>${esc(p.label || p.name || p.brand)}</b><span>${esc(p.composition || p.generic || "")}${p.group ? " · " + esc(p.group) : ""}</span>${stockChip(p.stock)}</button></li>`).join("") : `<li class="hint">No medicine found. Check the spelling.</li>`;
 }
+/* -------- Keyboard medicine picker (runbook D-122, brought back in D-133) --------
+   Space on the review screen opens it with this visit's common choices (narrowed from the findings). Type or
+   ↓ ↑ to choose and Enter to pick; then ↑ ↓ moves between the rows, ← → changes the value, Enter adds the
+   medicine and opens the next one, Esc steps back, and Esc again closes. Edit opens the same rows. */
+const PK_DAYS = [1, 2, 3, 5, 7, 10, 14, 21, 30, 60, 90];
+const PK_TIMES = [["1", "Once"], ["2", "Twice"], ["3", "Three times"], ["4", "Four times"], ["sos", "When needed"]];
+const PK_WHEN = { "1": ["m", "a", "e", "n"], "2": ["mn", "me", "ma", "an"], "3": ["man", "men"], "4": ["maen"], sos: [""] };
+const PK_SLOT = { m: "Morning", a: "Afternoon", e: "Evening", n: "Night" };
+const PK_FOOD = [["", "Not said"], ["after_food", "After food"], ["before_food", "Before food"], ["with_food", "With food"], ["empty_stomach", "Empty stomach"]];
+const PK_ONCE = { morning: "m", afternoon: "a", evening: "e", night: "n" };
+const pkWhenText = w => w ? w.split("").map(s => PK_SLOT[s]).join(" + ") : "As needed";
+function openPicker(med) {
+  const v = state.visit; if (!v || v.phase !== "review" || !$("#pickerHost")) return;
+  Object.assign(v, { editing: null, adding: false, newMed: null, replacing: null });
+  v.picker = { med: med || null, q: "", options: [], active: 0, chosen: null, rows: [], row: 0,
+    taken: v.report.medication_views.map(m => m.product_id).filter(Boolean), number: v.report.medication_views.length + 1 };
+  if (med) pkStart(v.picker, { product_id: med.product_id, label: med.label, composition: med.composition, form: med.form, food: med.food }, med);
+  drawPicker();
+  $("#pickerHost")?.scrollIntoView({ block: "nearest" });
+  if (!med && !(v.shortlists || {})[v.enc]) {
+    v.shortlists ||= {};
+    api.shortlist(v.enc).then(s => { v.shortlists[v.enc] = { conditions: s?.conditions || [], items: items(s) }; })
+      .catch(x => { v.shortlists[v.enc] = { conditions: [], items: [] }; toast(x.message); })
+      .finally(() => { if (state.visit?.picker && !state.visit.picker.chosen) { if (!$("#pkQ")) drawPicker(); else pkRefresh(); } });
+  } else if (!med) pkRefresh();
+}
+function closePicker() { const v = state.visit; if (v) v.picker = null; drawPicker(); }
+function pkStart(p, o, current) {
+  const s = current?.raw_schedule;
+  const slots = s?.type === "grid" ? "maen".split("").filter(k => Number(s[k]) > 0).join("") : "";
+  const times = s?.type === "as_needed" ? "sos" : slots ? String(slots.length) : s?.type === "frequency" ? String(Math.min(s.times, 4)) : o.once_daily ? "1" : "2";
+  const days = current?.duration ? daysOf(current.duration) : 5, unit = unitOf(o);
+  const doses = unit === "mL" ? ["2.5", "5", "7.5", "10", "15"] : ["0.5", "1", "2", "3", "4"];
+  const dose = current?.dose?.amount || (unit === "mL" ? "5" : "1");
+  const when = slots && slots.length === Number(times) && PK_WHEN[times].includes(slots) ? slots
+    : times === "1" && PK_ONCE[o.once_daily] ? PK_ONCE[o.once_daily] : PK_WHEN[times][0];
+  p.chosen = o; p.row = 0;
+  p.rows = [
+    { key: "days", label: "Days", values: [...new Set([...PK_DAYS, days])].sort((a, b) => a - b), value: days, text: d => `${d} day${d > 1 ? "s" : ""}` },
+    { key: "times", label: "Times a day", values: PK_TIMES.map(t => t[0]), value: times, text: t => Object.fromEntries(PK_TIMES)[t] },
+    { key: "when", label: "Which time", values: PK_WHEN[times], value: when, text: pkWhenText },
+    { key: "dose", label: "Dose", values: [...new Set([...doses, dose])], value: dose, text: d => `${d === "0.5" ? "½" : d} ${unit}${unit !== "mL" && Number(d) > 1 ? "s" : ""}` },
+    { key: "food", label: "Food", values: PK_FOOD.map(f => f[0]), value: current ? (current.food || "") : (o.food || ""), text: f => Object.fromEntries(PK_FOOD)[f] },
+  ];
+}
+function pkSet(p, r, value) {
+  r.value = value;
+  if (r.key === "times") { const w = p.rows[2]; w.values = PK_WHEN[value]; w.value = value === "1" && PK_ONCE[p.chosen.once_daily] ? PK_ONCE[p.chosen.once_daily] : PK_WHEN[value][0]; }
+}
+let pkTimer;
+function pkRefresh() {
+  const v = state.visit, p = v?.picker; if (!p || p.chosen) return;
+  const q = p.q.trim().toLowerCase(), common = (v.shortlists?.[v.enc]?.items || []).filter(o => !p.taken.includes(o.product_id)
+    && (!q || `${o.label} ${o.composition || ""} ${o.group || ""}`.toLowerCase().includes(q)));
+  p.options = common; p.active = 0; pkDrawList();
+  clearTimeout(pkTimer);
+  if (q.length < 2) return;
+  pkTimer = setTimeout(async () => {
+    try {
+      const found = items(await api.catalog(q)), seen = new Set(common.map(o => o.product_id));
+      if (state.visit?.picker !== p || p.chosen || p.q.trim().toLowerCase() !== q) return;
+      p.options = [...common, ...found.filter(x => !seen.has(x.id ?? x.product_id)).map(x => ({ product_id: x.id ?? x.product_id, label: x.label || x.name,
+        composition: x.composition || "", form: x.form, food: x.food, once_daily: x.once_daily, why: x.stock ? "Pharmacy: " + STOCK_TEXT[x.stock.status] : "" }))];
+      p.active = Math.min(p.active, Math.max(p.options.length - 1, 0)); pkDrawList();
+    } catch (x) { toast(x.message); }
+  }, 200);
+}
+function pkDrawList() {
+  const v = state.visit, p = v?.picker, ul = $("#pkList"); if (!p || !ul) return;
+  const loaded = v.shortlists?.[v.enc];
+  ul.innerHTML = p.options.map((o, i) => `<li class="pk-item${i === p.active ? " active" : ""}" role="option" aria-selected="${i === p.active}" data-pk="${i}">
+      <span>${o.group ? `<span class="chip pk-group">${esc(o.group)}</span>` : ""}<b>${esc(o.label)}</b></span><span class="pk-sub">${esc([o.composition, o.why].filter(Boolean).join(" · "))}</span></li>`).join("")
+    || `<li class="hint m0">${p.q.trim().length > 1 ? "Searching…" : loaded ? "No common choices for this visit. Type a name." : "Loading the common choices…"}</li>`;
+  ul.querySelector(".active")?.scrollIntoView({ block: "nearest" });
+}
+function drawPicker() {
+  const v = state.visit, p = v?.picker, host = $("#pickerHost"); if (!host) return;
+  if (!p) { host.innerHTML = ""; return; }
+  if (!p.chosen) {
+    const conditions = v.shortlists?.[v.enc]?.conditions || [];
+    host.innerHTML = `<div class="picker" id="picker">
+      <div class="pk-head"><b>Medicine ${p.number}</b><span class="hint m0">Enter adds it and opens the next · Esc when done</span></div>
+      ${conditions.length ? `<p class="hint m0">Common for ${esc(conditions.slice(0, 4).join(", "))}</p>` : ""}
+      <input class="input" id="pkQ" type="search" autocomplete="off" aria-label="Find a medicine" placeholder="Type a medicine, or press ↓ for the common choices" value="${esc(p.q)}">
+      <ul class="pk-list" id="pkList" role="listbox" aria-label="Medicines"></ul>
+      <p class="pk-hint">↓ ↑ choose · Enter pick · Esc close</p></div>`;
+    const input = $("#pkQ"); input.oninput = () => { p.q = input.value; pkRefresh(); };
+    pkDrawList(); input.focus();
+    return;
+  }
+  host.innerHTML = `<div class="picker" id="picker" tabindex="-1" aria-label="Instructions for ${esc(p.chosen.label)}">
+    <div class="pk-chosen"><b>${esc(p.chosen.label)}</b><span class="pk-sub">${esc(p.chosen.composition || "")}</span></div>
+    ${p.rows.map((r, i) => `<div class="pk-row${i === p.row ? " active" : ""}"><span class="pk-label">${esc(r.label)}</span><div class="pk-opts">
+      ${r.values.map(x => `<button type="button" tabindex="-1" class="pk-opt${x === r.value ? " sel" : ""}" data-pkrow="${i}" data-pkval="${esc(String(x))}">${esc(r.text(x))}</button>`).join("")}</div></div>`).join("")}
+    <p class="pk-hint">↑ ↓ row · ← → change · Enter ${p.med ? "save" : "add"} · Esc ${p.med ? "close" : "back"}</p></div>`;
+  host.querySelector(".pk-row.active .sel")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  $("#picker").focus({ preventScroll: true });
+}
+function pkSave() {
+  const v = state.visit, p = v.picker, get = k => p.rows.find(r => r.key === k).value, when = get("when"), amount = get("dose");
+  const dose = { amount, unit: unitOf(p.chosen) }, food = get("food"), duration = { value: get("days"), unit: "day" };
+  const schedule = get("times") === "sos" ? { type: "as_needed" } : { type: "grid", ...Object.fromEntries(["m", "a", "e", "n"].map(k => [k, when.includes(k) ? amount : "0"])) };
+  if (!p.med) {
+    // Adding one opens the picker again for the next medicine, until Esc.
+    v.picker = null; v.chainPicker = true;
+    return applyFix([{ action: "add_medicine", target: "new", value: { product_id: p.chosen.product_id, dose, schedule, food, duration }, reason: "Added by the doctor." }]);
+  }
+  const m = p.med, changes = [];
+  if (m.dose?.amount !== dose.amount || m.dose?.unit !== dose.unit) changes.push({ action: "set_dose", value: dose, reason: "Dose set by the doctor." });
+  if (JSON.stringify(m.raw_schedule) !== JSON.stringify(schedule)) changes.push({ action: "set_timing", value: { schedule }, reason: "Timing set by the doctor." });
+  if (food && food !== m.food) changes.push({ action: "set_food", value: { food }, reason: "Food timing set by the doctor." });
+  if (daysOf(m.duration) !== duration.value) changes.push({ action: "set_duration", value: duration, reason: "Duration set by the doctor." });
+  v.picker = null;
+  if (!changes.length) { drawPicker(); return toast("Nothing changed."); }
+  applyFix(changes.map(c => ({ ...c, target: m.id })));
+}
+document.addEventListener("keydown", e => {
+  const v = state.visit, p = v?.picker;
+  if (!p) {
+    // Space opens the picker on the review screen, unless the doctor is typing or has a button or link selected.
+    const tag = document.activeElement?.tagName;
+    if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && v?.phase === "review" && $("#pickerHost")
+        && !["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "SUMMARY"].includes(tag) && !document.querySelector("dialog[open]")) {
+      e.preventDefault(); openPicker();
+    }
+    return;
+  }
+  if (!e.target.closest?.("#picker")) return;
+  if (!p.chosen) {
+    if (e.key === "ArrowDown") { e.preventDefault(); p.active = Math.min(p.active + 1, p.options.length - 1); pkDrawList(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); p.active = Math.max(p.active - 1, 0); pkDrawList(); }
+    else if (e.key === "Enter") { e.preventDefault(); if (p.options[p.active]) { pkStart(p, p.options[p.active]); drawPicker(); } }
+    else if (e.key === "Escape") { e.preventDefault(); closePicker(); }
+    // The space that opened the picker, or one pressed before typing, shows the common choices instead of a blank.
+    else if (e.key === " " && !e.target.value) e.preventDefault();
+    return;
+  }
+  const r = p.rows[p.row], i = r.values.indexOf(r.value);
+  if (e.key === "ArrowDown") { e.preventDefault(); p.row = (p.row + 1) % p.rows.length; drawPicker(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); p.row = (p.row + p.rows.length - 1) % p.rows.length; drawPicker(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); pkSet(p, r, r.values[Math.min(i + 1, r.values.length - 1)]); drawPicker(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); pkSet(p, r, r.values[Math.max(i - 1, 0)]); drawPicker(); }
+  else if (e.key === "Enter") { e.preventDefault(); pkSave(); }
+  else if (e.key === "Escape") { e.preventDefault(); if (p.med) closePicker(); else { p.chosen = null; drawPicker(); } }
+});
+document.addEventListener("mousedown", e => {
+  const p = state.visit?.picker; if (!p) return;
+  const item = e.target.closest("[data-pk]"), opt = e.target.closest("[data-pkrow]");
+  if (item) { e.preventDefault(); const o = p.options[+item.dataset.pk]; if (o) { pkStart(p, o); drawPicker(); } }
+  else if (opt) {
+    e.preventDefault(); p.row = +opt.dataset.pkrow; const r = p.rows[p.row];
+    pkSet(p, r, r.values.find(x => String(x) === opt.dataset.pkval)); drawPicker();
+  }
+});
 function wireReport(box, r, editable) {
   box.querySelectorAll(".sent").forEach(b => b.onclick = () => {
     const sec = b.closest(".rgroup"), ev = sec.querySelector(".evidence"), open = b.getAttribute("aria-expanded") === "true";
@@ -937,7 +1093,7 @@ function wireReport(box, r, editable) {
     };
   });
   if (!editable) return;
-  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => { Object.assign(state.visit, { editing: b.dataset.edit, newMed: null, adding: false }); renderVisit(); $("#medEdit select")?.focus(); });
+  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openPicker(r.medication_views.find(m => m.id === b.dataset.edit)));
   box.querySelectorAll("[data-std]").forEach(b => b.onclick = () => {
     const m = r.medication_views.find(x => x.id === b.dataset.std);
     applyFix(m.standard.map(p => ({ action: p.action, target: m.id, value: p.value, reason: p.reason })), b);
@@ -1201,7 +1357,7 @@ function onMainClick(e) {
     cancel() { v.phase = "idle"; renderVisit(); },
     "cancel-edit"() { Object.assign(v, { editing: null, newMed: null }); renderVisit(); },
     "remove-med"() { v.editing = null; applyFix([{ action: "remove_medicine", target: act.dataset.med, reason: "Removed by the doctor." }], act); },
-    "add-med"() { v.adding = true; v.editing = null; renderVisit(); },
+    "add-med"() { openPicker(); },
     "close-add"() { Object.assign(v, { adding: false, replacing: null }); renderVisit(); },
     async shortlist() { act.disabled = true; act.textContent = "Loading"; try { showPicks(items(await api.shortlist(v.enc))); } catch (x) { toast(x.message); } act.disabled = false; act.textContent = "Show common choices"; },
     json() { downloadJSON(v.report); },
