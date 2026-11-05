@@ -23,7 +23,7 @@ from .db import audit, one, transaction
 from .repo import approved_reports, clinic_record, doctor_record, parse_report, patient_record, report_row
 from ..pipeline.complete import load_generics
 from ..standard import load_rules
-from .shortlist import conditions_of, make_shortlist
+from .shortlist import conditions_in, make_shortlist
 from .suggest import catalog_product, clinic_index, finder_for, shared_index, suggest
 
 log = logging.getLogger('voicerx.worker')
@@ -55,9 +55,9 @@ def is_adult(patient, visit_date):
     return bool(patient.get('birth_year')) and visit_date.year - patient['birth_year'] >= 18
 
 
-def shortlist_for(conn, client, draft, organisation_id, formulary, adult):
+def shortlist_for(conn, client, checked, organisation_id, formulary, adult):
     pools = [shared_index(conn, formulary), clinic_index(conn, organisation_id)]
-    conditions = conditions_of(draft)
+    conditions = conditions_in(checked)
     lookup = lambda pid: catalog_product(conn, organisation_id, pid, formulary)
     items, method = make_shortlist(client, conditions, pools, load_generics(REPO_ROOT), load_rules(REPO_ROOT), lookup, adult)
     return conditions, items, method
@@ -108,14 +108,16 @@ class Worker(threading.Thread):
         if run is None:
             return False
         steps = run['steps']
+        writing = threading.Lock()
 
         def on_step(key, state):
-            for step in steps:
-                if step['key'] == key:
-                    step['state'] = state
-            with transaction() as conn:
-                conn.execute(f"update app.runs set steps = %s, stage = %s, lease_until = now() + interval '{LEASE}', "
-                             'updated_at = now() where id = %s', (Jsonb(steps), key, run['id']))
+            with writing:  # suggestions report from their own thread
+                for step in steps:
+                    if step['key'] == key:
+                        step['state'] = state
+                with transaction() as conn:
+                    conn.execute(f"update app.runs set steps = %s, stage = %s, lease_until = now() + interval '{LEASE}', "
+                                 'updated_at = now() where id = %s', (Jsonb(steps), key, run['id']))
 
         with transaction() as conn:
             context = one(conn, '''
@@ -127,16 +129,35 @@ class Worker(threading.Thread):
             history = approved_reports(conn, context['patient_id'], before_encounter=context['id'])
         reference = reference_for(self.reference, patient_record(patient), doctor_record(doctor, clinic['id']),
                                   clinic_record(clinic))
+        side, threads = {}, []
+
+        def suggest_meanwhile(checked):
+            # The suggestions and the medicine picker's shortlist need only the checked extraction, so they
+            # run while the report is written (runbook D-131).
+            jobs = {'found': lambda: self.suggestions(checked, transcript, context, on_step),
+                    'shortlist': lambda: self.shortlist(checked, context, patient)}
+            for name, job in jobs.items():
+                threads.append(threading.Thread(name='voicerx-' + name, daemon=True,
+                                                target=lambda name=name, job=job: side.update({name: job()})))
+                threads[-1].start()
+
+        def suggestions_found():
+            for thread in threads:
+                thread.join()
+            return side.get('found', {})
+
         try:
             transcript = context['text'] if context['kind'] == 'typed' else self.transcript(run, context, on_step)
             draft = process_typed(context['id'], transcript, patient['id'], doctor['id'], context['visit_date'],
                                   self.llm(), reference, current_ids(history), on_step, rules=load_rules(REPO_ROOT),
-                                  generics=load_generics(REPO_ROOT), finder=self.finder(context, patient))
+                                  generics=load_generics(REPO_ROOT), finder=self.finder(context, patient),
+                                  on_checked=suggest_meanwhile)
         except StageFailed as failure:
+            suggestions_found()
             self.fail(run, steps, failure)
             return True
-        suggestions = self.suggestions(draft, transcript, context, on_step)
-        shortlist = self.shortlist(draft, context, patient)
+        suggestions = suggestions_found()
+        shortlist = side.get('shortlist')
         with transaction() as conn:
             conn.execute('insert into app.report_versions (encounter_id, version, status, report, content_hash, run_id, '
                          "created_by) values (%s, %s, 'draft', %s, %s, %s, %s)",
@@ -172,20 +193,20 @@ class Worker(threading.Thread):
                 return None
         return find
 
-    def shortlist(self, draft, context, patient):
+    def shortlist(self, checked, context, patient):
         """(conditions, items, method) for the medicine picker; a failure costs only the list."""
         try:
             with transaction() as conn:
-                return shortlist_for(conn, self.llm(), draft, context['organisation_id'], self.reference.products,
+                return shortlist_for(conn, self.llm(), checked, context['organisation_id'], self.reference.products,
                                      is_adult(patient, context['visit_date']))
         except Exception:
             log.exception('shortlist failed for %s', context['id'])
             return None
 
-    def suggestions(self, draft, transcript, context, on_step):
+    def suggestions(self, checked, transcript, context, on_step):
         """Ranked suggestions for every medicine not matched exactly. A failure here costs the suggestions,
         never the draft."""
-        unclear = [m for m in draft.checked.medications if m.match != 'exact']
+        unclear = [m for m in checked.medications if m.match != 'exact']
         if not unclear:
             on_step('suggesting', 'skipped')
             return {}
@@ -194,7 +215,7 @@ class Worker(threading.Thread):
         try:
             with transaction() as conn:
                 for rx in unclear:
-                    items, method = suggest(conn, self.llm(), transcript, rx, draft.checked,
+                    items, method = suggest(conn, self.llm(), transcript, rx, checked,
                                             context['organisation_id'], self.reference.products)
                     found[rx.id] = (rx.spoken_name, items, method)
         except Exception:

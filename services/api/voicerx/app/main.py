@@ -722,7 +722,7 @@ def encounter_shortlist(request: Request, encounter_id: str):
         if row is None and encounter['current_version']:
             draft = parse_report(report_row(conn, encounter_id, encounter['current_version'], None))
             patient = one(conn, 'select birth_year from app.patients where id = %s', (encounter['patient_id'],))
-            shortlist = shortlist_for(conn, state['worker'].llm(), draft, session['organisation_id'], REFERENCE.products,
+            shortlist = shortlist_for(conn, state['worker'].llm(), draft.checked, session['organisation_id'], REFERENCE.products,
                                       is_adult(patient, encounter['visit_date']))
             save_shortlist(conn, encounter_id, *shortlist)
             row = {'conditions': shortlist[0], 'items': shortlist[1]}

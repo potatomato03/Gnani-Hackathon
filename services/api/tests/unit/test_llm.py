@@ -252,3 +252,85 @@ def test_build_client_uses_both_groq_keys_in_order(tmp_path):
     env = tmp_path / ".env"
     env.write_text("GROQ_API_KEY=q1\nGROQ_API_KEY_2=q2\n", encoding="utf-8")
     assert build_client(env, tmp_path, only="groq").clients[0].keys == ["q1", "q2"]
+
+
+# ---- Per-minute limits: switch keys instead of sleeping; overflow to Mistral (runbook D-130) ----
+
+MINUTE_LIMIT = (429, {"retry-after": "7"}, '{"error":{"message":"Rate limit reached on tokens per minute (TPM)"}}')
+
+
+class Clock:
+    def __init__(self):
+        self.now, self.slept = 1000.0, []
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def groq_keys(tmp_path, responses, keys=("q1", "q2"), **options):
+    from voicerx.llm.openai_compat import OpenAICompatAdapter
+
+    transport, clock = FakeTransport(responses), Clock()
+    client = ModelClient(OpenAICompatAdapter(), list(keys), tmp_path, transport=transport, sleep=clock.sleep,
+                         clock=clock, **options)
+    return client, transport, clock
+
+
+def test_minute_limit_moves_to_the_second_key_without_sleeping(tmp_path):
+    client, transport, clock = groq_keys(tmp_path, [MINUTE_LIMIT, groq_reply({"items": []})])
+    _, meta = client.generate("s", "u", Outer, "v1")
+    assert meta.key_index == 1 and len(transport.calls) == 2 and clock.slept == []
+
+
+def test_a_limited_key_is_skipped_until_its_retry_after(tmp_path):
+    client, transport, clock = groq_keys(tmp_path, [MINUTE_LIMIT, groq_reply({"items": []}), groq_reply({"items": []}),
+                                                    groq_reply({"items": []})])
+    client.generate("s", "u1", Outer, "v1")
+    _, meta = client.generate("s", "u2", Outer, "v1")
+    assert meta.key_index == 1                      # key 1 is still inside its 7 seconds
+    clock.now += 8
+    _, meta = client.generate("s", "u3", Outer, "v1")
+    assert meta.key_index == 0
+
+
+def test_when_every_key_is_limited_the_last_provider_waits_only_as_long_as_needed(tmp_path):
+    client, transport, clock = groq_keys(tmp_path, [MINUTE_LIMIT, MINUTE_LIMIT, groq_reply({"items": []})])
+    _, meta = client.generate("s", "u", Outer, "v1")
+    assert meta.key_index == 0 and clock.slept == [7.0]
+
+
+def test_with_an_overflow_provider_a_limited_groq_hands_over_at_once(tmp_path):
+    from voicerx.llm.openai_compat import mistral
+
+    groq_client, _, clock = groq_keys(tmp_path / "g", [MINUTE_LIMIT, MINUTE_LIMIT], wait_when_limited=False)
+    overflow = ModelClient(mistral(), ["m1"], tmp_path / "m", transport=FakeTransport([groq_reply({"items": []})]),
+                           sleep=clock.sleep, clock=clock)
+    _, meta = FallbackClient([groq_client, overflow]).generate("s", "u", Outer, "v1")
+    assert meta.provider == "mistral" and clock.slept == []
+
+
+def test_mistral_request_names_its_output_budget_max_tokens():
+    from voicerx.llm.openai_compat import mistral
+
+    url, headers, body = mistral().build("s", "u", json_schema_for(Outer), "m1")
+    assert url == "https://api.mistral.ai/v1/chat/completions" and body["model"] == "mistral-large-latest"
+    assert body["max_tokens"] == 16384 and "max_completion_tokens" not in body
+    assert body["response_format"]["json_schema"]["strict"] is True
+
+
+def test_mistral_overflow_is_used_only_when_switched_on(tmp_path, monkeypatch):
+    for name in ("LLM_OVERFLOW", "MISTRAL_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY", "OLLAMA_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    env = tmp_path / ".env"
+    env.write_text("GROQ_API_KEY=q1\nMISTRAL_API_KEY=m1\n", encoding="utf-8")
+    assert [c.adapter.name for c in build_client(env, tmp_path, only="groq").clients] == ["groq"]
+    env.write_text("GROQ_API_KEY=q1\nMISTRAL_API_KEY=m1\nLLM_OVERFLOW=mistral\n", encoding="utf-8")
+    clients = build_client(env, tmp_path, only="groq").clients
+    assert [c.adapter.name for c in clients] == ["groq", "mistral"]
+    assert clients[0].wait_when_limited is False and clients[1].wait_when_limited is True
+    assert [c.adapter.name for c in build_client(env, tmp_path, only="groq", quick=True).clients] == ["groq"]
+    assert [c.adapter.name for c in build_client(env, tmp_path, only="mistral").clients] == ["mistral"]

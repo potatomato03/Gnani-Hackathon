@@ -15,8 +15,9 @@ from urllib.parse import quote
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FOLDERS = [Path(os.environ.get('CREDENTIALS_DIR', REPO_ROOT.parent / 'credentials')), REPO_ROOT.parent]
-# File name -> .env variable. mistral_API.env.txt is left out: Mistral is dropped (runbook C-29).
+# File name -> .env variable. Mistral returned as the free overflow provider (runbook D-130).
 FILES = {
+    'mistral_API.env.txt': 'MISTRAL_API_KEY',
     'GNANI_API.env.txt': 'GNANI_API_KEY',
     'Gemini_API.env.txt': 'GEMINI_API_KEY',
     'Gemini_API(2).env.txt': 'GEMINI_API_KEY_2',

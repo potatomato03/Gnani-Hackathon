@@ -28,6 +28,20 @@ def test_a_typed_source_becomes_a_checked_draft_and_reports_each_stage():
     assert [k for k, s in seen if s == 'succeeded'] == ['extracting', 'checking', 'writing', 'report_checks', 'assembling']
 
 
+def test_the_checked_medicines_are_handed_over_before_the_report_is_written():
+    seen = []
+    reference = reference_for(REF, REF.patients[CASE.patient_id], REF.doctors[CASE.doctor_id], REF.clinic)
+    draft = process_typed('enc-1', CASE.transcript, CASE.patient_id, CASE.doctor_id, date(2026, 11, 3), FixtureClient(FIXTURES),
+                          reference, frozenset(), lambda key, state: seen.append((key, state)),
+                          on_checked=lambda checked: seen.append(('checked', checked)))
+    keys = [k for k, _ in seen]
+    assert keys.index('checked') < keys.index('writing')
+    handed = seen[keys.index('checked')][1]
+    # The suggestions get the medicines (same ids) the draft carries, in a copy of their own.
+    assert [m.id for m in handed.medications] == [m.id for m in draft.checked.medications]
+    assert handed is not draft.checked
+
+
 def test_a_failed_stage_is_named_and_leaves_no_draft():
     class Broken:
         def generate(self, *args):

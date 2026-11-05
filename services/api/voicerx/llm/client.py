@@ -89,11 +89,14 @@ def retry_delay(headers, attempt):
 
 class ModelClient:
     def __init__(self, adapter, keys, cache_dir: Path, transport=None, sleep=time.sleep, max_transient=6,
-                 timeout=300, cooldown=None, clock=time.monotonic, repair=True):
+                 timeout=300, cooldown=None, clock=time.monotonic, repair=True, rotate_on_limit=True,
+                 wait_when_limited=True):
         """max_transient: tries per key on 429/5xx. A chat message uses 1 and a short timeout, so a busy
         provider falls back to the rules in seconds instead of minutes (runbook D-115). cooldown: seconds a
         key that was busy or unreachable rests before it is tried again; None means for the rest of the run.
-        A daily quota always ends the key for the run."""
+        A daily quota always ends the key for the run. rotate_on_limit: a per-minute 429 rests that key until its
+        retry-after and moves to the next key at once. wait_when_limited: when every key is resting, wait for the
+        first to free up (the last provider in line) or raise QuotaExhausted so an overflow provider answers."""
         self.adapter, self.keys, self.cache_dir = adapter, keys, Path(cache_dir)
         self.max_transient, self.timeout, self.cooldown, self.clock = max_transient, timeout, cooldown, clock
         self.allow_repair = repair      # chat: no second "fix your JSON" request; the next model is tried instead
@@ -101,6 +104,8 @@ class ModelClient:
         self.sleep = sleep
         self.exhausted = set()
         self.resting = {}           # key index -> clock time it may be tried again
+        self.rotate_on_limit, self.wait_when_limited = rotate_on_limit, wait_when_limited
+        self.limited = {}           # key index -> clock time its per-minute limit resets
 
     def _rest(self, index):
         if self.cooldown is None:
@@ -135,8 +140,26 @@ class ModelClient:
         attempts = 0
         repair = False
         request_user = user
+        waits = 0
+        while True:
+            result = self._try_keys(system, request_user, user, schema, prompt_version, attachments, cache_key, path,
+                                    attempts, repair)
+            if result[0] == 'done':
+                return result[1], result[2]
+            _, attempts, repair, request_user = result
+            # Every key is at its per-minute limit. The last provider in line waits for the first key to free up;
+            # one with an overflow provider behind it hands over at once (runbook D-130).
+            limited = [t for i, t in self.limited.items() if i not in self.exhausted]
+            if not limited or not self.wait_when_limited or waits >= self.max_transient:
+                raise QuotaExhausted(f'{self.adapter.name}: no available key or server')
+            waits += 1
+            self.sleep(max(0.0, min(limited) - self.clock()))
+
+    def _try_keys(self, system, request_user, user, schema, prompt_version, attachments, cache_key, path, attempts,
+                  repair):
         for index, key in enumerate(self.keys):
-            if index in self.exhausted or self.resting.get(index, 0) > self.clock():
+            if index in self.exhausted or self.resting.get(index, 0) > self.clock() \
+                    or self.limited.get(index, 0) > self.clock():
                 continue
             transient = 0
             while transient < self.max_transient:
@@ -149,6 +172,11 @@ class ModelClient:
                     break
                 if status == 0:
                     self._rest(index)
+                    break
+                if status == 429 and self.rotate_on_limit:
+                    # A per-minute limit: this key rests until the provider says, and the next key is tried now
+                    # instead of sleeping on this one (measured 21-96 s of sleeping per visit on 5 Nov).
+                    self.limited[index] = self.clock() + retry_delay(response_headers, 1)
                     break
                 if status == 429 or status >= 500:
                     transient += 1
@@ -187,8 +215,8 @@ class ModelClient:
                         temporary.replace(path)
                 finally:
                     temporary.unlink(missing_ok=True)
-                return parsed, meta
-        raise QuotaExhausted(f'{self.adapter.name}: no available key or server')
+                return 'done', parsed, meta
+        return 'busy', attempts, repair, request_user
 
 
 class FallbackClient:
@@ -220,14 +248,14 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeou
     the whole call (default 25 s); the budget must leave room for a fallback after one slow model."""
     from .gemini import DEFAULT_MODEL, GeminiAdapter
     from .ollama import OllamaAdapter
-    from .openai_compat import OpenAICompatAdapter
+    from .openai_compat import OpenAICompatAdapter, mistral
     settings = {}
     for line in env_path.read_text(encoding='utf-8-sig').splitlines():
         if line.strip() and not line.lstrip().startswith('#') and '=' in line:
             key, value = line.split('=', 1)
             settings[key.strip()] = value.strip().strip('\"\'')
     options = ({'max_transient': 1, 'timeout': timeout or 10, 'cooldown': 60, 'sleep': lambda seconds: None,
-                'repair': False} if quick else {})
+                'repair': False, 'rotate_on_limit': False} if quick else {})
     clients = []
     keys = [settings[k] for k in ('GEMINI_API_KEY', 'GEMINI_API_KEY_2') if settings.get(k)]
     if keys and only in (None, 'gemini'):
@@ -236,9 +264,16 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeou
                                      *filter(None, (m.strip() for m in fallback.split(',')))]))
         clients.extend(ModelClient(GeminiAdapter(model), keys, cache_dir, **options) for model in models)
     groq_keys = [settings[k] for k in ('GROQ_API_KEY', 'GROQ_API_KEY_2') if settings.get(k)]
+    mistral_keys = [settings[k] for k in ('MISTRAL_API_KEY',) if settings.get(k)]
+    # LLM_OVERFLOW=mistral: when every Groq key is at its per-minute limit, Mistral answers at once instead of
+    # the pipeline sleeping (runbook D-130). Off unless set, and only after Mistral passed the typed-case eval.
+    overflow = settings.get('LLM_OVERFLOW') == 'mistral' and mistral_keys and only in (None, 'groq') and not quick
     if groq_keys and only in (None, 'groq'):
         model = settings.get('GROQ_MODEL') or 'openai/gpt-oss-120b'
-        clients.append(ModelClient(OpenAICompatAdapter(model=model), groq_keys, cache_dir, **options))
+        clients.append(ModelClient(OpenAICompatAdapter(model=model), groq_keys, cache_dir,
+                                   **{**options, **({'wait_when_limited': False} if overflow else {})}))
+    if mistral_keys and (overflow or only == 'mistral'):
+        clients.append(ModelClient(mistral(settings.get('MISTRAL_MODEL')), mistral_keys, cache_dir, **options))
     if settings.get('OLLAMA_MODEL') and only in (None, 'ollama'):
         clients.append(ModelClient(OllamaAdapter(settings['OLLAMA_MODEL'], settings.get('OLLAMA_HOST', 'http://localhost:11434')), ['local'], cache_dir, **options))
     if not clients:

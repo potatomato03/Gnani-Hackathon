@@ -203,7 +203,7 @@ def main():
     parser.add_argument('--source', required=True, choices=SOURCES)
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--cases', nargs='+')
-    parser.add_argument('--provider', choices=['gemini', 'groq', 'ollama'])
+    parser.add_argument('--provider', choices=['gemini', 'groq', 'mistral', 'ollama'])
     parser.add_argument('--workers', type=int, default=1, choices=range(1, 5),
                         help='independent families in flight; local GPU calls remain serialized')
     args = parser.parse_args()

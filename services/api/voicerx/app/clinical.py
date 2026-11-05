@@ -36,7 +36,9 @@ def current_ids(approved_reports):
 
 
 def process_typed(case_id, transcript, patient_id, doctor_id, visit_date, client, reference, active_ids, on_step,
-                  rules=None, generics=frozenset(), finder=None):
+                  rules=None, generics=frozenset(), finder=None, on_checked=None):
+    """`on_checked` gets the checked extraction as soon as it is ready, so work that needs only that (the
+    medicine suggestions) can run while the report is written (runbook D-131)."""
     if not transcript.strip():
         raise StageFailed('extracting', 'The source is empty; there is nothing to process.')
     stage = 'extracting'
@@ -53,6 +55,8 @@ def process_typed(case_id, transcript, patient_id, doctor_id, visit_date, client
             allergies = record['allergies'] if record['allergy_status'] != 'unknown' else None
             checked, reference = complete(checked, reference, rules, allergies, finder, generics)
         on_step(stage, 'succeeded')
+        if on_checked:
+            on_checked(checked.model_copy(deep=True))
         stage = 'writing'
         on_step(stage, 'running')
         fields, _ = write_report(client, checked)

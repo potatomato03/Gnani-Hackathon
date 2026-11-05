@@ -46,8 +46,12 @@ class Shortlist(Strict):
 
 def conditions_of(report):
     """The present findings that describe what the patient has, most telling first."""
+    return conditions_in(report.checked)
+
+
+def conditions_in(checked):
     order = {kind: n for n, kind in enumerate(CONDITION_KINDS)}
-    kept = sorted((i for i in report.checked.kept if i.kind in order and i.assertion == 'present' and i.subject == 'patient'),
+    kept = sorted((i for i in checked.kept if i.kind in order and i.assertion == 'present' and i.subject == 'patient'),
                   key=lambda i: order[i.kind])
     return list(dict.fromkeys(i.term for i in kept))[:10]
 
