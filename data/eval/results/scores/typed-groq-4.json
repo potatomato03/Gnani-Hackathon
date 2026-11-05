@@ -1,0 +1,703 @@
+{
+  "run_id": "typed-groq-4",
+  "source": "typed",
+  "approximate": false,
+  "scored": 4,
+  "missing_input": [],
+  "incomplete": [
+    "fam-001-b",
+    "fam-003-b",
+    "fam-004-a",
+    "fam-004-b",
+    "fam-005-a",
+    "fam-005-b",
+    "fam-006-a",
+    "fam-006-b",
+    "fam-007-a",
+    "fam-007-b",
+    "fam-008-a",
+    "fam-008-b",
+    "fam-009-a",
+    "fam-009-b",
+    "fam-010-a",
+    "fam-010-b",
+    "fam-011-v1",
+    "fam-011-v2",
+    "fam-011-v3",
+    "fam-012-a",
+    "fam-012-b"
+  ],
+  "cases": {
+    "fam-001-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 1,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 8
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 6,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 8
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 8
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 6
+      },
+      "unexpected_blocking_flags": [],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x7"
+        ],
+        [
+          "f8",
+          "x8"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [
+        "f1"
+      ],
+      "unmatched_extracted_facts": [
+        "x1"
+      ],
+      "attribute_mismatches": [],
+      "model_metadata": {
+        "transcript_sha256": "c771f8c5074106b1b46c2b73869af8213459f1eb0bfb211ad37d0332ee679c67",
+        "stages": {
+          "extract": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "extract-v4",
+            "cache_key": "ec7260befcb5b77cd0877fe3cdfbf96570dedf6347717590b39e2510638b1276",
+            "cached": false,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "report-v3",
+            "cache_key": "c9fb9d9727a38a74160ddcae0dda0707067ef9e2217f90b3b535db42b1a1acc6",
+            "cached": false,
+            "key_index": 1,
+            "attempts": 3
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-001-b": {
+      "status": "incomplete",
+      "stage": "write_report",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-002-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 7
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 7
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 7
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 0
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 0
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 7
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 7
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 6
+      },
+      "unexpected_blocking_flags": [],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x7"
+        ]
+      ],
+      "medicine_matches": [],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [
+        {
+          "expected": "f5",
+          "extracted": "x5",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "a0d073c2d944349162a46c56f445bc19afda1fe6baf942661b3bad45fd382984",
+        "stages": {
+          "extract": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "extract-v4",
+            "cache_key": "1cdab979a7fa0bacc805e46d15b38cac99ffd8cd49218edf59e9d59bf25a29bf",
+            "cached": false,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "report-v3",
+            "cache_key": "bce7c5b71270fe883892a764bb5ba94e1d8eaf75c2121cc30685043dec1dc711",
+            "cached": false,
+            "key_index": 0,
+            "attempts": 2
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-002-b": {
+      "approximate": false,
+      "facts_found": {
+        "count": 7,
+        "total": 7
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 7
+      },
+      "false_facts": {
+        "count": 1,
+        "total": 8
+      },
+      "negation_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "medicines_exact": {
+        "count": 0,
+        "total": 0
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 0
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 7,
+        "total": 7
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 8
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 8
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 6
+      },
+      "unexpected_blocking_flags": [],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x7"
+        ],
+        [
+          "f7",
+          "x8"
+        ]
+      ],
+      "medicine_matches": [],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [
+        "x6"
+      ],
+      "attribute_mismatches": [
+        {
+          "expected": "f4",
+          "extracted": "x4",
+          "field": "temporality",
+          "expected_value": "past",
+          "actual_value": "current"
+        },
+        {
+          "expected": "f5",
+          "extracted": "x5",
+          "field": "temporality",
+          "expected_value": "planned",
+          "actual_value": "current"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "85d9487a525a30f0990e0458dab3f1f7d39bf924929b2a38d426bf11faed6a3c",
+        "stages": {
+          "extract": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "extract-v4",
+            "cache_key": "1e9003f12f1f1119f8faae0bdbde0c3a2a8640d4d94d6f0abcbfce1ce116b05c",
+            "cached": false,
+            "key_index": 1,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "report-v3",
+            "cache_key": "51346e82564e934927f1598d6cbe768baac70dbe3e8ebd095d5bd3e4c465ad82",
+            "cached": false,
+            "key_index": 1,
+            "attempts": 3
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-003-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 8,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 8
+      },
+      "negation_accuracy": {
+        "count": 8,
+        "total": 8
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 8
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 7,
+        "total": 8
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 8
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 8
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 6
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "negation_mismatch",
+          "severity": "block",
+          "target": "x2",
+          "message": "negation mismatch"
+        },
+        {
+          "code": "negation_mismatch",
+          "severity": "block",
+          "target": "x4",
+          "message": "negation mismatch"
+        },
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "investigation_results:0",
+          "message": "laterality mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x7"
+        ],
+        [
+          "f8",
+          "x8"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [
+        {
+          "expected": "f4",
+          "extracted": "x4",
+          "field": "laterality",
+          "expected_value": null,
+          "actual_value": "left"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "9f360bbdb3e8d5cb23bdcc5dff49b0943a72a23e89b68e8863688585df98c569",
+        "stages": {
+          "extract": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "extract-v4",
+            "cache_key": "ee81f71e5f26f8da8378a6710383a7e0cd057aee4d4df264d78a60a0d8deac4a",
+            "cached": false,
+            "key_index": 1,
+            "attempts": 3
+          },
+          "write_report": {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "prompt_version": "report-v3",
+            "cache_key": "80027a566526392cf0ee6b454b160269b8e0999fddd01f98bcf6b29b1fef5852",
+            "cached": false,
+            "key_index": 1,
+            "attempts": 3
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-003-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-004-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-004-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-005-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-005-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-006-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-006-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-007-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-007-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-008-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-008-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-009-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-009-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-010-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-010-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-011-v1": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-011-v2": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-011-v3": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-012-a": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    },
+    "fam-012-b": {
+      "status": "incomplete",
+      "stage": "extract",
+      "error": "QuotaExhausted: all configured providers unavailable"
+    }
+  },
+  "metrics": {
+    "facts_found": {
+      "count": 29,
+      "total": 30
+    },
+    "facts_missed": {
+      "count": 1,
+      "total": 30
+    },
+    "false_facts": {
+      "count": 2,
+      "total": 31
+    },
+    "negation_accuracy": {
+      "count": 29,
+      "total": 29
+    },
+    "side_accuracy": {
+      "count": 28,
+      "total": 29
+    },
+    "medicines_exact": {
+      "count": 2,
+      "total": 2
+    },
+    "extra_medicines": {
+      "count": 0,
+      "total": 2
+    },
+    "expected_flags": {
+      "count": 0,
+      "total": 0
+    },
+    "section_accuracy": {
+      "count": 27,
+      "total": 29
+    },
+    "report_omissions": {
+      "count": 0,
+      "total": 31
+    },
+    "report_duplications": {
+      "count": 0,
+      "total": 31
+    },
+    "unsupported_lines": {
+      "count": 0,
+      "total": 24
+    }
+  },
+  "unexpected_blocking_flags": 3,
+  "not_run": []
+}

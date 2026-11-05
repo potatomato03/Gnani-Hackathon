@@ -1,12 +1,14 @@
 # VoiceRx
 
-Working name. A doctor dictates for 15 to 60 seconds in Hinglish or another Indian language. VoiceRx drafts a structured outpatient note and prescription for the doctor to review and approve. After approval, the patient gets their instructions as a voice note in their own language and can call a browser voice agent. The agent answers only from the approved visit and passes everything else to the doctor.
+Working name. A doctor records or dictates a consultation in Hinglish or another Indian language. VoiceRx drafts a structured outpatient note and prescription for the doctor to review and approve. After approval, the report PDF is delivered to the registered WhatsApp number; a prescription voice note is available on request in the patient's saved language. The agent answers from the approved visit and passes unresolved questions to the doctor.
 
 Built for the Gnani AI Great Indian AI Internship Challenge. Speech runs on Gnani Prisma and Timbre.
 
 **Synthetic data only.** Every patient, doctor, phone number, recording and prescription in this repo is made up. This is a hackathon prototype and is not for clinical use.
 
 ## Status
+
+The private hospital workspace supports hospital → onboarded doctor → assigned patients, one shared private demo login, encrypted patient phone registration, consent choices and report-specific WhatsApp menus. The active hospitals start with empty rosters; old seeded organisations are archived. Vercel runs the HTTP app and a separate durable worker. See [private demo setup and deployment](docs/PRIVATE_DEMO.md).
 
 The extraction and report pipeline and doctor dashboard run on `aditya/extraction-report`: two checked model stages, medicine matching and instructions, audio capture, audited corrections, approval and PDF/FHIR export. The follow-up bot from `devansh/whatsapp-nlp-bot` is integrated with the same approved records, clinic sessions and database. Its local patient simulator, check-ins, report uploads and doctor tasks are available in the dashboard. A private real-phone Meta test verified JOIN, language/menu replies, read receipts, and a callback request saved to Supabase task/memory state using a synthetic visit. See [WhatsApp integration](docs/whatsapp-integration.md) for setup, verification and transport limitations, and the [runbook](runbook.md) for evaluation results.
 

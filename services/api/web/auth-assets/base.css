@@ -1,0 +1,138 @@
+/* =========================================================
+   Tokens
+   ========================================================= */
+:root {
+  --paper: #FBF8F3;
+  --card: rgba(255, 255, 255, .9);
+  --glass: rgba(255, 255, 255, .7);
+  --solid: #FFFFFF;
+  --sunk: #F4F0E9;
+  --sunk-2: #ECE6DC;
+  --ink: #16171C;
+  --ink-2: #4C4F59;
+  --ink-3: #696C76;
+  --line: rgba(22, 23, 28, .10);
+  --line-2: rgba(22, 23, 28, .2);
+  --saffron: #F5964A;
+  --marigold: #FFD27A;
+  --blush: #F2B4C4;
+  --peri: #8E9CF7;
+  --iris: #4A4FCB;
+  --iris-soft: #ECEDFD;
+  --ok: #11704E;   --ok-bg: #E2F2E9;
+  --warn: #875003; --warn-bg: #FCEED5;
+  --risk: #A5283F; --risk-bg: #FBE5E9;
+  --sun: linear-gradient(115deg, #FFD27A 0%, #F5964A 38%, #EBA1B6 68%, #8E9CF7 100%);
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1);
+  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --lift: 0 1px 2px rgba(22, 23, 28, .05), 0 24px 48px -28px rgba(70, 50, 120, .35);
+  --r-xl: 28px; --r-l: 22px; --r-m: 16px; --r-s: 12px;
+}
+html { font-size: 100%; }
+html[data-text="large"] { font-size: 115%; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--sans); -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--iris); outline-offset: 2px; border-radius: 10px; }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: fixed; left: 16px; top: -60px; z-index: 100; background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; text-decoration: none; transition: top 160ms var(--ease-out); }
+.skip:focus { top: 16px; }
+svg { flex: none; }
+
+/* =========================================================
+   Ambient sky: the Gnani sunrise, used behind every screen
+   ========================================================= */
+.sky { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--paper); }
+.sky i { position: absolute; border-radius: 50%; display: block; }
+.sky .b1 { width: 62vmax; height: 62vmax; left: -18vmax; bottom: -30vmax; background: radial-gradient(circle, rgba(142, 156, 247, .55), rgba(142, 156, 247, 0) 65%); animation: drift1 46s var(--ease-in-out) infinite alternate; }
+.sky .b2 { width: 52vmax; height: 52vmax; left: 18vw; bottom: -26vmax; background: radial-gradient(circle, rgba(245, 150, 74, .42), rgba(245, 150, 74, 0) 64%); animation: drift2 54s var(--ease-in-out) infinite alternate; }
+.sky .b3 { width: 40vmax; height: 40vmax; right: -10vmax; top: -16vmax; background: radial-gradient(circle, rgba(242, 180, 196, .45), rgba(242, 180, 196, 0) 66%); animation: drift3 60s var(--ease-in-out) infinite alternate; }
+.sky .b4 { width: 34vmax; height: 34vmax; left: 30vw; top: -14vmax; background: radial-gradient(circle, rgba(255, 210, 122, .42), rgba(255, 210, 122, 0) 66%); animation: drift2 66s var(--ease-in-out) infinite alternate-reverse; }
+.sky .rays {
+  width: 200vmax; height: 200vmax; border-radius: 0; left: 24%; top: 112%; translate: -50% -50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0) 0deg 3.4deg, rgba(255, 255, 255, .6) 4.2deg 4.8deg);
+  -webkit-mask: radial-gradient(circle, transparent 3%, #000 12%, rgba(0,0,0,.5) 28%, transparent 44%);
+          mask: radial-gradient(circle, transparent 3%, #000 12%, rgba(0,0,0,.5) 28%, transparent 44%);
+  animation: spin 200s linear infinite; opacity: .7;
+}
+.sky.app-sky .rays { opacity: .45; top: 120%; }
+.sky.app-sky .b1, .sky.app-sky .b2 { opacity: .8; }
+@keyframes drift1 { to { transform: translate3d(14vmax, -8vmax, 0) scale(1.1); } }
+@keyframes drift2 { to { transform: translate3d(-10vmax, -6vmax, 0) scale(1.15); } }
+@keyframes drift3 { to { transform: translate3d(-12vmax, 10vmax, 0) scale(.92); } }
+@keyframes spin { to { rotate: 360deg; } }
+html[data-motion="off"] .sky i { animation-play-state: paused; }
+
+/* =========================================================
+   Shared controls
+   ========================================================= */
+.btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 48px; padding: 0 22px; border-radius: 999px; border: 1px solid transparent;
+  font-weight: 500; font-size: 1rem; white-space: nowrap; text-decoration: none;
+  transition: transform 140ms var(--ease-out), background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn svg { width: 20px; height: 20px; }
+.btn-dark { background: var(--ink); color: #fff; }
+.btn-line { background: var(--solid); border-color: var(--line-2); }
+.btn-soft { background: var(--sunk); }
+.btn-sun { background: var(--sun); color: var(--ink); box-shadow: 0 10px 24px -14px rgba(200, 100, 40, .7); }
+.btn-quiet { background: transparent; min-height: 44px; padding: 0 14px; color: var(--ink-2); }
+.btn-small { min-height: 40px; padding: 0 16px; font-size: .9375rem; }
+@media (hover: hover) and (pointer: fine) {
+  .btn-dark:hover:not(:disabled) { background: #2B2D35; }
+  .btn-line:hover:not(:disabled) { border-color: var(--ink-3); }
+  .btn-soft:hover:not(:disabled) { background: var(--sunk-2); }
+  .btn-quiet:hover { color: var(--ink); background: rgba(22,23,28,.05); }
+  .btn-sun:hover:not(:disabled) { box-shadow: 0 14px 30px -14px rgba(200, 100, 40, .8); }
+}
+.input, .select, .textarea {
+  width: 100%; min-height: 50px; padding: 0 16px; border-radius: var(--r-s);
+  border: 1px solid var(--line-2); background: var(--solid); font-size: 1rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.textarea { padding: 14px 16px; min-height: 160px; resize: vertical; line-height: 1.55; }
+.select { appearance: none; padding-right: 44px; background: linear-gradient(45deg,transparent 50%,#4C4F59 50%,#4C4F59 62%,transparent 62%) no-repeat right 22px center / 7px 7px,linear-gradient(-45deg,transparent 50%,#4C4F59 50%,#4C4F59 62%,transparent 62%) no-repeat right 15px center / 7px 7px, var(--solid); }
+.input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--iris); box-shadow: 0 0 0 4px rgba(74, 79, 203, .16); }
+.input[aria-invalid="true"] { border-color: var(--risk); }
+.field { display: block; margin-bottom: 18px; }
+.field > span { display: block; font-size: .9375rem; font-weight: 500; margin-bottom: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 12px; border-radius: 999px; font-size: .875rem; font-weight: 500; line-height: 1.3; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.risk { background: var(--risk-bg); color: var(--risk); }
+.chip.muted { background: var(--sunk); color: var(--ink-2); }
+.chip.iris { background: var(--iris-soft); color: var(--iris); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.01em; font-size: 1.125rem; text-decoration: none; }
+.brand-mark { width: 30px; height: 30px; border-radius: 50%; background: conic-gradient(from 210deg, var(--saffron), var(--marigold), var(--blush), var(--peri), var(--iris), var(--saffron)); box-shadow: inset 0 0 0 5px rgba(255,255,255,.55); }
+
+
+/* Shared by login and app */
+.btn-label { display: inline-flex; gap: 8px; align-items: center; transition: filter 200ms ease, opacity 200ms ease; }
+.busy .btn-label { filter: blur(2px); opacity: 0; }
+.spinner { position: absolute; width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; opacity: 0; animation: spin 600ms linear infinite; transition: opacity 200ms ease; }
+.busy .spinner { opacity: 1; }
+.spinner.ink { position: static; opacity: 1; border-color: var(--line-2); border-top-color: var(--ink); }
+.link-btn { border: 0; background: none; padding: 0; color: var(--iris); font-size: inherit; text-decoration: underline; text-underline-offset: 3px; min-height: 24px; }
+.avatar { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: .9375rem; background: var(--sunk); color: var(--ink-2); }
+
+/* Aura: a soft colour ring that turns slowly around the one surface that matters */
+.halo-frame { position: relative; overflow: hidden; isolation: isolate; padding: 2px; border-radius: var(--r-xl); box-shadow: var(--lift); }
+.halo-frame::before {
+  content: ""; position: absolute; z-index: -1; left: 50%; top: 50%; width: 150%; aspect-ratio: 1; translate: -50% -50%;
+  background: conic-gradient(from 0deg, #FFD27A, #F5964A, #F2B4C4, #8E9CF7, #FFFFFF 62%, #FFD27A);
+  opacity: .8; animation: spin 22s linear infinite;
+}
+html[data-motion="off"] .halo-frame::before { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .sky i, .halo-frame::before, .spinner { animation: none !important; }
+}

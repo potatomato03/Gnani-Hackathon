@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en" data-text="standard" data-motion="on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARDAI for Doctors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/auth-assets/base.css?v=20261105b">
+<link rel="stylesheet" href="/static/app.css?v=20261105b">
+<script src="/static/app.js?v=20261105b" defer></script>
+</head>
+<body>
+<a class="skip" href="#view">Skip to main content</a>
+<div class="sky app-sky" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i><i class="rays"></i></div>
+
+<div class="app" id="app" hidden>
+  <header class="top">
+    <a class="brand" href="#/patients"><span class="brand-mark" aria-hidden="true"></span>ARDAI</a>
+    <label class="search"><span class="sr">Search patients</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input class="input" id="search" type="search" placeholder="Search by name or patient ID" autocomplete="off">
+    </label>
+    <div class="me">
+      <a class="where" href="#/workspace" id="where" title="Change hospital or doctor">
+        <span class="who"><b id="docName"></b><span id="docOrg"></span></span>
+        <span class="avatar doc" id="docInit" aria-hidden="true"></span>
+      </a>
+      <details class="menu" id="displayMenu">
+        <summary class="btn btn-quiet" aria-label="Display settings">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="lbl">Display</span>
+        </summary>
+        <div class="menu-panel" role="group" aria-label="Display settings">
+          <div class="opt"><h2>Text size</h2><p>Make everything easier to read.</p>
+            <div class="pills" data-pref="text"><button type="button" data-v="standard">Standard</button><button type="button" data-v="large">Large</button></div>
+          </div>
+          <div class="opt"><h2>Background motion</h2><p>The soft moving colours behind the page.</p>
+            <div class="pills" data-pref="motion"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div>
+          </div>
+        </div>
+      </details>
+      <button class="btn btn-quiet" id="signOut">Sign out</button>
+    </div>
+    <nav class="nav" aria-label="Main">
+      <a href="#/patients" data-nav="patients">Patients</a>
+      <a href="#/followups" data-nav="followups">Follow-ups<span class="count" id="taskCount" hidden></span></a>
+      <a href="#/register" data-nav="register">Register patient</a>
+      <a href="#/pharmacy" data-nav="pharmacy" id="navPharmacy" hidden>Pharmacy</a>
+    </nav>
+  </header>
+  <div id="view" tabindex="-1"></div>
+</div>
+
+<dialog class="drawer" id="refDrawer" aria-labelledby="refTitle">
+  <div class="drawer-head"><h2 id="refTitle">Look something up</h2><button class="btn btn-quiet btn-small" id="refClose">Close</button></div>
+  <p class="hint">Reference passages only. They aren't checked against this patient.</p>
+  <form id="refForm" class="row"><label class="grow"><span class="sr">Question</span><input class="input" id="refQ" maxlength="300" placeholder="For example, pantoprazole uses" autocomplete="off"></label><button class="btn btn-dark">Search</button></form>
+  <div id="refResults" aria-live="polite"></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="badge-demo" id="demoBadge" hidden>Demo mode, synthetic data</div>
+<div id="print"></div>
+</body>
+</html>

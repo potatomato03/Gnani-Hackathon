@@ -1,1220 +1,1192 @@
-// VoiceRx doctor workspace. Plain modules, no build step; served same-origin with the API (DESIGN.md 4.1).
-// Every element is built with DOM calls, never innerHTML, so no record text can inject markup.
+"use strict";
+/* ARDAI doctor app (design by Rakshit, 5 Nov; wired to the real API in runbook D-129). Plain JavaScript, no build step.
+   All network calls are in `live`. All field-name guessing is in `adapt`.
+   If static/mock.js is loaded it replaces `live` with in-memory demo data. */
+const API = "/api/v1";
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const root = document.getElementById('root');
-let session = null;
-const ui = { list: 'all', q: '', patientId: null, pollTimer: null, selectedLine: null, editing: null };
-
-// ---------- Small helpers ----------
-
-function h(tag, props = {}, ...kids) {
-  const el = document.createElement(tag);
-  for (const [key, value] of Object.entries(props || {})) {
-    if (value === null || value === undefined || value === false) continue;
-    if (key === 'class') el.className = value;
-    else if (key === 'text') el.textContent = value;
-    else if (key.startsWith('on')) el.addEventListener(key.slice(2).toLowerCase(), value);
-    else if (key === 'dataset') Object.assign(el.dataset, value);
-    else if (value === true) el.setAttribute(key, '');
-    else el.setAttribute(key, value);
-  }
-  for (const kid of kids.flat(Infinity)) {
-    if (kid === null || kid === undefined || kid === false) continue;
-    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
-  }
-  return el;
-}
-
-// replaceChildren with nested lists flattened (replaceChildren itself would print a list as "[object …]").
-function put(el, ...kids) {
-  el.replaceChildren(...kids.flat(Infinity).filter(k => k !== null && k !== undefined && k !== false && k !== ''));
-  return el;
-}
-
-function svg(path, viewBox = '0 0 24 24') {
-  const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  el.setAttribute('viewBox', viewBox); el.setAttribute('fill', 'none'); el.setAttribute('stroke', 'currentColor');
-  el.setAttribute('stroke-width', '2'); el.setAttribute('stroke-linecap', 'round'); el.setAttribute('stroke-linejoin', 'round');
-  for (const d of [].concat(path)) {
-    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); el.append(p);
-  }
-  return el;
-}
+/* ---------------- helpers ---------------- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const initials = n => String(n || "?").replace(/^Dr\.?\s+/i, "").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+const first = n => String(n || "").split(" ")[0];
+const fmtDate = iso => iso ? new Date(String(iso).slice(0, 10) + "T12:00:00+05:30").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "";
+const fmtTime = iso => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+const fmtWhen = iso => iso ? `${fmtDate(iso)}, ${fmtTime(iso)}` : "";
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : "";
+const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
+const sized = (svg, n) => svg.replace("<svg", `<svg width="${n}" height="${n}"`);
 const ICON = {
-  search: ['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z', 'm20 20-3.5-3.5'],
-  mic: ['M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z', 'M19 11a7 7 0 0 1-14 0', 'M12 18v3'],
-  check: ['M5 12.5 10 17l9-10'],
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9.5 15.5 12 18l2.5-2.5"/></svg>',
+  json: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4c-2 0-2 1.5-2 3s0 3-2 3c2 0 2 1.5 2 3s0 3 2 3M16 4c2 0 2 1.5 2 3s0 3 2 3c-2 0-2 1.5-2 3s0 3-2 3"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+  alert: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>',
+  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>',
+  type: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7V5h16v2M12 5v14M9 19h6"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3Z"/></svg>',
+  wa: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Z"/></svg>'
 };
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2800); }
+class ApiError extends Error { constructor(code, message, status) { super(message); this.code = code; this.status = status; } }
 
-class ApiError extends Error {
-  constructor(status, error) { super(error?.message || 'Request failed'); this.status = status; this.code = error?.code; this.detail = error; }
-}
-
-async function api(path, { method = 'GET', body } = {}) {
-  const headers = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (method !== 'GET' && session) headers['X-CSRF-Token'] = session.csrf_token;
-  const response = await fetch('/api/v1' + path, { method, headers, credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body) });
-  if (response.status === 204) return null;
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (response.status === 401 && path !== '/me') { session = null; renderLogin(); }
-    throw new ApiError(response.status, data.error);
+/* =================================================================
+   LIVE API: routes from DASHBOARD_AND_API.md (5 Nov)
+   ================================================================= */
+let api = null, csrf = null, session = null;
+const toLogin = expired => location.replace(window.VoiceRxMock ? "login.html" : "/" + (expired ? "?expired=1" : ""));
+async function http(method, path, body, extra = {}) {
+  const headers = { Accept: "application/json", ...(extra.headers || {}) };
+  if (method !== "GET" && csrf) headers["X-CSRF-Token"] = csrf;
+  let payload = body;
+  if (body !== undefined && !(body instanceof Blob)) { headers["Content-Type"] = "application/json"; payload = JSON.stringify(body); }
+  const res = await fetch(API + path, { method, headers, body: payload, credentials: "same-origin" });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 401) toLogin(true);
+    const fallback = { 403: "You don't have access to this.", 413: "That file is too big.", 429: "Too many requests. Wait a moment and try again." }[res.status] || "Something went wrong. Try again.";
+    throw new ApiError(data.error?.code || "http_" + res.status, data.error?.message || fallback, res.status);
   }
   return data;
 }
+const PART_BYTES = 3 * 1024 * 1024;
+const q = o => { const s = new URLSearchParams(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== "")).toString(); return s ? "?" + s : ""; };
+const live = {
+  me: () => http("GET", "/me"),
+  logout: () => http("POST", "/auth/logout"),
+  hospitals: () => http("GET", "/workspace/hospitals"),
+  doctors: id => http("GET", `/workspace/hospitals/${id}/doctors`),
+  addDoctor: (id, body) => http("POST", `/workspace/hospitals/${id}/doctors`, body),
+  select: body => http("POST", "/workspace/select", body),
+  patients: (list, s, doctor_id) => http("GET", "/patients" + q({ list, q: s, doctor_id })),
+  // The form speaks in words; the API wants codes ("hindi" -> "hi-IN", "female" -> "F", "none" -> "nka").
+  register: body => http("POST", "/patients", { ...body, language: LANG_CODE[body.language] || body.language,
+    sex: { female: "F", male: "M" }[body.sex] || body.sex, allergy_status: body.allergy_status === "none" ? "nka" : body.allergy_status }),
+  patient: id => http("GET", `/patients/${id}`),
+  journey: id => http("GET", `/patients/${id}/journey`).then(adapt.journey).catch(() => null),
+  encounter: id => http("GET", `/encounters/${id}`),
+  createEncounter: pid => http("POST", `/patients/${pid}/encounters`, {}),
+  typedSource: (enc, text, language) => http("POST", `/encounters/${enc}/sources`, { kind: "typed", language, text }),
+  async audioSource(enc, blob, language, onProgress) {
+    const type = (blob.type || "audio/webm").split(";")[0];
+    if (blob.size <= PART_BYTES) return http("POST", `/encounters/${enc}/sources/audio?language=${language}`, blob, { headers: { "Content-Type": type, "X-Recording-Consent": "patient-agreed" } });
+    const u = await http("POST", `/encounters/${enc}/audio-uploads`, { size: blob.size, media_type: type, language, recording_consent: true });
+    const id = u.upload_id ?? u.id, step = u.part_bytes || PART_BYTES, parts = Math.ceil(blob.size / step);
+    for (let i = 0; i < parts; i++) {
+      await http("PUT", `/audio-uploads/${id}/parts/${i}`, blob.slice(i * step, (i + 1) * step, "application/octet-stream"), { headers: { "Content-Type": "application/octet-stream" } });
+      onProgress?.((i + 1) / parts);
+    }
+    return http("POST", `/audio-uploads/${id}/complete`, {});
+  },
+  startRun: (enc, src) => http("POST", `/encounters/${enc}/runs`, { source_id: src.source_id ?? src.id, source_version: src.source_version ?? src.version }).then(adapt.run),
+  run: id => http("GET", `/runs/${id}`).then(adapt.run),
+  retry: id => http("POST", `/runs/${id}/retry`).then(adapt.run),
+  report: (enc, version) => http("GET", `/encounters/${enc}/report` + q({ version })),
+  resolve: (enc, r, resolutions) => http("POST", `/encounters/${enc}/resolutions`, { expected_version: r.version, expected_content_hash: r.content_hash, resolutions }),
+  approve: (enc, r) => http("POST", `/encounters/${enc}/approvals`, { expected_version: r.version, expected_content_hash: r.content_hash }),
+  artifacts: enc => http("GET", `/encounters/${enc}/artifacts`).then(d => items(d).map(adapt.artifact)),
+  deliveries: enc => http("GET", `/encounters/${enc}/clinic-reports`).then(d => items(d).map(adapt.delivery)),
+  retryDelivery: enc => http("POST", `/encounters/${enc}/clinic-reports/retry`, {}),
+  shortlist: enc => http("GET", `/encounters/${enc}/shortlist`),
+  catalog: s => http("GET", "/catalog/search" + q({ q: s })),
+  knowledge: (question, encounter_id) => http("POST", "/knowledge/search", { question, encounter_id }),
+  tasks: () => http("GET", "/followup/tasks").then(d => ({ items: items(d).map(adapt.task) })),
+  followup: enc => http("GET", `/encounters/${enc}/followup`).then(adapt.followup),
+  followStart: enc => http("POST", `/encounters/${enc}/followup`, {}).then(adapt.followup),
+  followSend: (enc, body) => http("POST", `/encounters/${enc}/followup/messages`, body).then(adapt.followup),
+  followMemory: enc => http("GET", `/encounters/${enc}/followup/memory`).then(d => ({ ...d, documents: (d.documents || []).map(adapt.upload) })),
+  followAdvance: enc => http("POST", `/encounters/${enc}/followup/advance`, {}),
+  followDoc: (enc, file) => http("POST", `/encounters/${enc}/followup/documents`, file, { headers: { "Content-Type": file.type || "application/pdf" } }),
+  taskDone: (enc, id) => http("POST", `/encounters/${enc}/followup/tasks/${id}/done`, {}),
+  reviewUpload: id => http("POST", `/patient-uploads/${id}/review`, {}),
+  uploadUrl: id => `${API}/patient-uploads/${id}/download`,
+  previewUrl: (enc, version) => `${API}/encounters/${enc}/preview.pdf${q({ version })}`,
+  downloadUrl: id => `${API}/artifacts/${id}/download`,
+  pharmacy: () => http("GET", "/pharmacy/stock"),
+  uploadStock: (filename, csv) => http("POST", "/pharmacy/stock", { filename, csv })
+};
 
-let toastTimer;
-function toast(message, bad = false) {
-  const el = document.getElementById('toast');
-  el.textContent = message; el.classList.toggle('bad', bad); el.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), bad ? 6000 : 3200);
-}
-function fail(error) { console.error(error); toast(error.message || 'Something went wrong.', true); }
+/* =================================================================
+   Adapters: the one place that knows backend field names.
+   Fields marked "assumed" in DESIGN.md are resolved here.
+   ================================================================= */
+const items = d => d?.items || d?.patients || d?.hospitals || d?.doctors || d?.tasks || d?.jobs || d?.results || d?.artifacts || (Array.isArray(d) ? d : []);
+const LANG_CODE = { english: "en-IN", hindi: "hi-IN", tamil: "ta-IN", telugu: "te-IN", gujarati: "gu-IN" };
+const LANG_WORD = Object.fromEntries(Object.entries(LANG_CODE).map(([w, c]) => [c, w]));
+const TASK_TEXT = { callback: "Call the patient back", urgent: "Urgent: patient reported a problem", question: "Patient question to answer", report_review: "Review a report the patient sent" };
+const ART_KIND = { report_pdf: "pdf", fhir_bundles: "fhir" };
+const DELIVERY_KIND = { report_pdf: "pdf", prescription_voice: "voice", voice_option: "voice_option" };
+const adapt = {
+  // /me and /workspace/select: the actor is the doctor once a doctor is chosen; the shared admin has role "admin".
+  session(s) {
+    const w = s.workspace || {}, role = s.scope?.role;
+    const doctor = w.doctor || (role === "doctor" && s.actor ? { id: s.actor.id, display_name: s.actor.display_name, specialty: s.actor.specialty } : null);
+    return { ...s, admin: !!(w.admin ?? w.is_admin ?? s.workspace_admin), hospital: w.hospital || (s.scope?.organisation_id ? { id: s.scope.organisation_id, name: s.scope.organisation_name } : null), doctor };
+  },
+  doctor: d => ({ ...d, name: d.display_name || d.name, specialty: d.specialty ? cap(String(d.specialty).replaceAll("_", " ")) : "" }),
+  patient(p) {
+    const list = Array.isArray(p.allergies) ? p.allergies : p.allergies?.items || [];
+    const status = p.allergies?.status || { nka: "none", known: "known", unknown: "unknown" }[p.allergy_status] || (list.length ? "known" : "unknown");
+    // Consents are stored as a list; registration asked about recording, so its absence means "not agreed".
+    const consents = Array.isArray(p.consents) ? { ai: p.consents.includes("ai_processing"), recording: p.consents.includes("recording"), whatsapp: p.consents.includes("followup_whatsapp") } : (p.consents || p.consent || {});
+    return { ...p, age: p.age ?? p.age_years ?? (p.birth_year ? new Date().getFullYear() - p.birth_year : null), language: p.language || LANG_WORD[p.language_pref] || null,
+      allergies: { status, items: list }, consents, last_visit_date: p.last_visit_date || p.last_visit, visit_state: p.visit_state || p.open_state, blocking_count: p.blocking_count ?? p.open_blocking };
+  },
+  encounter: e => ({ ...e, date: e.date || e.visit_date, diagnosis: e.diagnosis || (e.diagnoses || []).join(", "), complaint: e.complaint || (e.complaints || []).join(", ") }),
+  run: r => r && ({ ...r, id: r.id ?? r.run_id, error: typeof r.error === "string" ? { message: r.error } : r.error }),
+  artifact: a => ({ ...a, kind: ART_KIND[a.kind] || a.kind }),
+  delivery: j => ({ ...j, kind: DELIVERY_KIND[j.kind] || j.kind, status: j.status || j.state }),
+  task: t => ({ ...t, title: t.title || TASK_TEXT[t.kind] || cap(String(t.kind || "task").replaceAll("_", " ")), detail: t.detail || t.note }),
+  upload: u => ({ ...u, filename: u.filename || `${u.mime === "application/pdf" ? "PDF report" : "Report image"}${u.received_at ? ", " + fmtDate(u.received_at) : ""}`, reviewed: u.reviewed ?? !!u.reviewed_at }),
+  journey: j => j && ({ ...j, questions: (j.questions || []).map(x => ({ ...x, text: x.text || x.question })), uploads: (j.uploads || []).map(adapt.upload) }),
+  followup(d) {
+    const c = d.conversation;
+    return { ...d, status: c ? "active" : "inactive", simulated: c?.plan?.channel === "simulated" && !c.stopped,
+      status_label: c ? `Approved visit, ${c.plan?.channel === "simulated" ? "local simulator, nothing is sent" : "WhatsApp"}${c.stopped ? ", stopped by the patient" : ""}` : "",
+      messages: (c?.messages || []).map(m => ({ ...m, direction: m.direction || (m.sender === "patient" ? "in" : "out"), buttons: (m.buttons || []).map(b => ({ id: b.id, title: b.title || b.label })) })),
+      reason: d.reason };
+  },
+  report(r) {
+    const sections = r.report?.sections || {};
+    const groups = (r.report_groups || []).map(g => {
+      if (Array.isArray(g)) {
+        const [heading, secs] = g;
+        return { key: secs[0], heading, lines: secs.flatMap(sec => (sections[sec] || []).map((l, i) => ({ ref: `${sec}:${i}`, text: l.text ?? l, cites: l.cites || [] }))) };
+      }
+      if (g.lines) return g;
+      const lines = (g.sections || []).flatMap(sec => (Array.isArray(r.report?.[sec]) ? r.report[sec] : []).map((l, i) => ({ ref: `${sec}:${i}`, text: l.text ?? l, cites: l.cites || [] })));
+      return { key: g.key || g.heading, heading: g.heading || g.title, lines };
+    }).filter(g => g.lines.length);
+    const meds = (r.medication_views || []).map(adapt.med), byId = Object.fromEntries(meds.map(m => [m.id, m]));
+    const header = r.report?.header || {};
+    return { ...r, report_groups: groups, issue_views: (r.issue_views || []).map(i => adapt.issue(i, byId)), findings: r.findings || {},
+      medication_views: meds.filter(m => m.row || !("row" in m)), all_meds: byId,
+      date: r.date || header.visit_date || r.visit_date, clinician: r.clinician || header.doctor_name,
+      approval: r.approval ? { ...r.approval, approved_by: r.approval.approved_by || r.approval.approver_name } : null,
+      artifacts: (r.artifacts || []).map(adapt.artifact) };
+  },
+  // Our schedules: grid {m,a,e,n}, frequency {times, period}, as_needed {max_per_day}, taper. The screens use kinds.
+  med(m) {
+    const s = m.schedule, n = v => v && v !== "-" && Number(v) !== 0 ? v : 0;
+    const schedule = !s ? null : s.kind ? s : s.type === "grid" ? { kind: "slots", slots: ["m", "a", "e", "n"].map(k => n(s[k])) }
+      : s.type === "frequency" ? (s.period === "day" ? { kind: "frequency", times_per_day: s.times } : { kind: "weekly", times: s.times })
+      : s.type === "as_needed" ? { kind: "as_needed", max_per_day: s.max_per_day } : s.type === "taper" ? { kind: "taper" } : null;
+    return { ...m, raw_schedule: s, schedule, label: m.label || m.row?.label || m.product_label || m.name || m.spoken_name || m.spoken_as,
+      composition: m.composition || m.product_composition || "", form: m.form || m.product_form, filled: m.filled || {},
+      unresolved: Array.isArray(m.unresolved) ? (m.unresolved.length ? m.unresolved : null) : m.unresolved, display: m.display || m.row?.detail };
+  },
+  // Our checks name their corrections ("acknowledge", "choose_product"); each becomes a button here.
+  issue(i, meds) {
+    const med = meds[i.target], acts = [];
+    for (const a of i.actions || []) {
+      if (typeof a !== "string") { if (a.resolutions || a.edit || a.find || a.line) acts.push(a); continue; }
+      const one = (label, value = {}, target = i.target) => acts.push({ label, resolutions: [{ action: a, target, value }] });
+      if (a === "choose_product") {
+        (med?.suggestions || []).forEach(x => acts.push({ label: `Use ${x.label}${x.stock ? ", " + STOCK_TEXT[x.stock.status].toLowerCase() : ""}`,
+          resolutions: [{ action: a, target: i.target, value: { product_id: x.product_id }, reason: `Heard "${med.spoken_name}"; meant ${x.label}.` },
+            ...(x.standard || []).map(p => ({ action: p.action, target: i.target, value: p.value, reason: p.reason }))] }));
+        if (!(med?.suggestions || []).length) (med?.candidates || []).filter(c => c.id !== med.product_id).forEach(c => acts.push({ label: `Use ${c.label}`, resolutions: [{ action: a, target: i.target, value: { product_id: c.id } }] }));
+        acts.push({ label: "Find another medicine", find: i.target });
+      } else if (["set_dose", "set_timing", "set_food", "set_duration"].includes(a)) { if (!acts.some(x => x.edit)) acts.push({ label: "Edit the medicine", edit: i.target }); }
+      else if (a === "acknowledge") one("Accept as it is", { code: i.code });
+      else if (a === "confirm_interpretation") one("Correct as written", { code: i.code });
+      else if (a === "confirm_order") one("Confirm");
+      else if (a === "remove_medicine") one("Remove medicine");
+      else if (a === "dismiss_item") one("Rule it out");
+      else if (a === "remove_line") one("Remove sentence", {}, i.lines?.[0] || i.target);
+      else if (a === "edit_line") acts.push({ label: "Edit sentence", line: i.lines?.[0] || i.target });
+    }
+    return { ...i, id: i.id || i.uid, severity: i.severity === "warning" ? "warn" : i.severity, actions: acts };
+  }
+};
 
-const initials = name => name.replace(/^Dr\.?\s+/, '').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
-const LANG = { 'hi-IN': 'Hindi', 'en-IN': 'English', 'te-IN': 'Telugu', 'ta-IN': 'Tamil', 'gu-IN': 'Gujarati', hinglish: 'Hinglish',
-  hindi: 'Hindi', english: 'English', tamil: 'Tamil', telugu: 'Telugu', gujarati: 'Gujarati' };
-function fmtDate(iso) {
-  if (!iso) return '';
-  return new Date(iso.length === 10 ? iso + 'T00:00:00' : iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-function fmtTime(iso) {
-  return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) + ' IST';
-}
-function allergyChip(p) {
-  if (p.allergy_status === 'known') return h('span', { class: 'chip miss', text: 'Allergies: ' + p.allergies.join(', ') });
-  if (p.allergy_status === 'nka') return h('span', { class: 'chip ok', text: 'No known allergies' });
-  return h('span', { class: 'chip off', text: 'Allergy status unknown' });
-}
-function stateChip(state, blocking) {
-  const map = { open: ['muted', 'Not processed'], processing: ['iris', 'Processing'], failed: ['miss', 'Needs retry'],
-    in_review: ['off', blocking ? `Draft · ${blocking} to resolve` : 'Draft · ready to approve'], approved: ['ok', 'Approved'] };
-  const [cls, label] = map[state] || ['muted', state];
-  return h('span', { class: 'chip ' + cls, text: label });
-}
+/* Hospital pharmacy stock (runbook D-126): a label and a one-click swap, never an automatic change. */
+const STOCK_TEXT = { in_stock: "In stock", low: "Low stock", out: "Out of stock", not_stocked: "Not stocked" };
+const STOCK_CLS = { in_stock: "ok", low: "warn", out: "risk", not_stocked: "muted" };
+const stockChip = st => st ? `<span class="chip ${STOCK_CLS[st.status]}" title="Hospital pharmacy">Pharmacy: ${STOCK_TEXT[st.status]}${["in_stock", "low"].includes(st.status) ? ` (${esc(st.quantity)})` : ""}</span>` : "";
 
-// ---------- Sign-in ----------
+/* =================================================================
+   Display preferences (per viewer, browser storage only)
+   ================================================================= */
+const prefs = { text: store.get("vrx-text") || "standard", motion: store.get("vrx-motion") || (reduce ? "off" : "on") };
+function applyPrefs() {
+  document.documentElement.dataset.text = prefs.text;
+  document.documentElement.dataset.motion = prefs.motion;
+  $$(".pills[data-pref]").forEach(g => g.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(prefs[g.dataset.pref] === b.dataset.v))));
+}
+$$(".pills[data-pref]").forEach(g => g.addEventListener("click", e => {
+  const b = e.target.closest("button[data-v]"); if (!b) return;
+  prefs[g.dataset.pref] = b.dataset.v; store.set("vrx-" + g.dataset.pref, b.dataset.v); applyPrefs();
+}));
+document.addEventListener("click", e => { const m = $("#displayMenu"); if (m.open && !m.contains(e.target)) m.open = false; });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#displayMenu").open) { $("#displayMenu").open = false; $("#displayMenu summary").focus(); } });
+applyPrefs();
 
-async function renderLogin() {
+/* =================================================================
+   Router
+   ================================================================= */
+const state = { tab: "today", q: "", rows: [], selected: null, patient: null, visit: null, poll: 0, searchT: 0, hospital: null, tasks: [], guard: "" };
+const view = () => $("#view");
+const stopPolling = () => clearTimeout(state.poll);
+function swap() { const v = view(); if (reduce) return; v.classList.remove("swap"); void v.offsetWidth; v.classList.add("swap"); }
+function showError(msg, retry) {
+  view().innerHTML = `<div class="page narrow"><div class="panel error-box" role="alert"><p>${esc(msg)}</p><button class="btn btn-line" id="retryView">Try again</button></div></div>`;
+  $("#retryView").onclick = retry;
+}
+async function route() {
+  if (state.visit?.phase === "recording") {
+    if (!confirm("Stop and discard the recording in progress?")) { history.replaceState(null, "", state.guard); return; }
+    stopMic(); state.visit.phase = "idle";
+  }
+  state.guard = location.hash;
   stopPolling();
-  root.replaceChildren();
-  const card = h('div', { class: 'auth' }, h('p', { class: 'muted', text: 'Loading…' }));
-  root.append(h('section', { class: 'login', 'aria-label': 'Sign in' },
-    h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'VoiceRx'),
-    h('div', { class: 'login-body' },
-      h('div', { class: 'pitch' },
-        h('h1', { text: 'Speak the visit. Check the report. Approve.' }),
-        h('p', { class: 'lede', text: 'VoiceRx drafts the visit note and prescription from what was said, shows you every source quote, and flags anything it is unsure of. Nothing reaches a patient until you approve it.' }),
-        h('dl', {}, [['Languages offered', 'Hinglish, Hindi, English, Tamil, Telugu, Gujarati'],['Every line', 'Has a source'], ['Sent to patient', 'Only after approval']]
-          .map(([term, value]) => h('div', {}, h('dt', { text: term }), h('dd', { text: value }))))),
-      card),
-    h('div')));
+  const [, name = "", id] = location.hash.split("/");
+  if (session.admin && !session.doctor && name !== "workspace") { location.hash = "#/workspace"; return; }
+  $$(".nav a").forEach(a => { const on = a.dataset.nav === (name === "followup" ? "followups" : name === "encounters" || name === "" ? "patients" : name); on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"); });
   try {
-    const options = await api('/auth/options');
-    if (!options.dev_login) {
-      card.replaceChildren(h('h2', { text: 'Sign in' }),
-        h('p', { class: 'sub', text: "Sign-in with Supabase Auth isn't set up yet, and development sign-in is switched off on this server." }));
-      return;
-    }
-    const { users } = await api('/auth/dev-users');
-    const err = h('p', { class: 'err', role: 'alert' });
-    card.replaceChildren(
-      h('h2', { text: 'Sign in' }),
-      h('p', { class: 'sub', text: 'Development sign-in: choose a synthetic doctor. No real patients or credentials.' }),
-      h('div', { class: 'doc-pick' }, users.map(u => h('button', { type: 'button', onclick: async () => {
-        try { session = await api('/auth/dev-login', { method: 'POST', body: { user_id: u.id } }); startApp(); }
-        catch (e) { err.textContent = e.message; }
-      } }, h('span', { class: 'avatar doc', text: initials(u.display_name) }),
-        h('span', {}, h('b', { text: u.display_name }), h('small', { text: `${u.specialty.replace('_', ' ')} · ${u.organisation_name}` }))))),
-      err,
-      h('p', { class: 'fine', text: 'Password sign-in arrives with Supabase Auth. This server only lists synthetic doctors.' }));
-  } catch (e) { card.replaceChildren(h('p', { class: 'err', text: e.message })); }
+    if (name === "workspace") return await renderWorkspace();
+    if (name === "register") return await renderRegister();
+    if (name === "followups") return await renderTasks();
+    if (name === "pharmacy") return await renderPharmacy();
+    if (name === "followup" && id) return await renderFollowup(id);
+    if (name === "encounters" && id) { const e = await api.encounter(id); return await openPatient(e.patient?.id ?? e.patient_id, id); }
+    await openPatient(name === "patients" ? id : null);
+  } catch (x) { if (x.status !== 401) showError(x.message, route); }
 }
-
-// ---------- Shell ----------
-
-function startApp() {
-  root.replaceChildren();
-  const hour = Number(new Date().toLocaleString('en-IN', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }));
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const search = h('input', { class: 'input', type: 'search', placeholder: 'Search by name, MRN or patient ID', 'aria-label': 'Search patients' });
-  let searchTimer;
-  search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { ui.q = search.value; loadPatients(); }, 250); });
-  const tabs = h('div', { class: 'tabs', role: 'tablist' }, [['today', "Today's visits"], ['all', 'All patients']].map(([key, label]) =>
-    h('button', { type: 'button', role: 'tab', 'aria-selected': String(ui.list === key), onclick: e => {
-      ui.list = key; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', String(b === e.currentTarget))); loadPatients();
-    } }, label)));
-  root.append(h('div', { class: 'app' },
-    h('header', { class: 'top' },
-      h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'VoiceRx'),
-      h('label', { class: 'search' }, svg(ICON.search), search),
-      h('div', { class: 'me' },
-        h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { location.hash = '#/followups'; } }, 'Follow-ups'),
-        h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => openReference(null) }, 'Reference'),
-        h('div', { class: 'who' }, h('b', { text: session.actor.display_name }), h('span', { text: session.scope.organisation_name })),
-        h('span', { class: 'avatar doc', text: initials(session.actor.display_name) }),
-        h('button', { class: 'btn btn-quiet', type: 'button', onclick: signOut }, 'Sign out'))),
-    h('div', { class: 'layout' },
-      h('aside', { class: 'side' },
-        h('div', { class: 'hello' }, h('h1', { text: `${greeting}, ${session.actor.display_name.split(' ').slice(0, 2).join(' ')}` }),
-          h('p', { text: new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' }) })),
-        tabs, h('ul', { class: 'plist', id: 'plist' })),
-      h('main', { class: 'main', id: 'main' }))),
-    h('aside', { class: 'drawer', id: 'drawer', 'aria-label': 'Reference information' }));
-  window.onhashchange = route;
-  loadPatients();
-  route();
+window.addEventListener("hashchange", route);
+function renderShell() {
+  const d = session.doctor?.display_name || session.doctor?.name;
+  $("#docName").textContent = d || "Choose a doctor";
+  $("#docOrg").textContent = session.hospital?.name || "No hospital selected";
+  $("#docInit").textContent = initials(d || session.hospital?.name);
+  const caps = session.capabilities || {};
+  $("#navPharmacy").hidden = !caps.pharmacy;
+  $('[data-nav="register"]').hidden = caps.register === false;
 }
-
-async function signOut() {
-  try { await api('/auth/logout', { method: 'POST' }); } catch (e) { /* the session may already be gone */ }
-  session = null; location.hash = ''; renderLogin();
-}
-
-async function loadPatients() {
-  const list = document.getElementById('plist');
-  if (!list) return;
-  try {
-    const data = await api(`/patients?list=${ui.list}&q=${encodeURIComponent(ui.q)}`);
-    list.replaceChildren(...(data.items.length ? data.items.map(p => h('li', {},
-      h('button', { class: 'pitem', type: 'button', 'aria-current': String(p.id === ui.patientId), onclick: () => { location.hash = '#/patients/' + p.id; } },
-        h('span', {},h('span', { class: 'name', text: p.name }),
-          h('span', { class: 'why', text: `${p.mrn} · ${p.last_visit ? 'last visit ' + fmtDate(p.last_visit) : 'no visits yet'}` })),
-        p.open_state ? stateChip(p.open_state, p.open_blocking) : ''))) :
-      [h('li', { class: 'empty-list', text: ui.list === 'today' ? 'No visits started today yet. Open a patient from All patients.' : 'No patients match.' })]));
-  } catch (e) { fail(e); }
-}
-
-function main() { return document.getElementById('main'); }
-function stopPolling() { clearTimeout(ui.pollTimer); ui.pollTimer = null; }
-
-function route() {
-  stopPolling();
-  ui.cleanup?.(); ui.cleanup = null;
-  const [, kind, id] = location.hash.split('/');
-  if (kind === 'patients' && id) return showPatient(id);
-  if (kind === 'encounters' && id) return showEncounter(id);
-  if (kind === 'followup' && id) return showFollowup(id);
-  if (kind === 'followups') return showFollowupTasks();
-  ui.patientId = null;
-  main().replaceChildren(h('div', { class: 'panel first' }, h('h3', { text: 'Choose a patient' }),
-    h('p', { text: 'Pick someone from the list to see their visits, or start a new visit for them.' })));
-}
-
-// ---------- Patient ----------
-
-async function showPatient(id) {
-  ui.patientId = id;
-  loadPatients();
-  main().replaceChildren(h('p', { class: 'muted', text: 'Loading…' }));
-  try {
-    const { patient, encounters } = await api('/patients/' + id);
-    const age = new Date().getFullYear() - patient.birth_year;
-    main().replaceChildren(
-      h('div', { class: 'phead' },
-        h('div', {}, h('h2', { text: patient.name }), h('ul', { class: 'facts' },
-          h('li', { text: `About ${age} years · ${patient.sex === 'F' ? 'Female' : patient.sex === 'M' ? 'Male' : patient.sex}` }),
-          h('li', { class: 'mono', text: patient.mrn }), h('li', { text: 'Speaks ' + (LANG[patient.language_pref] || patient.language_pref) }),
-          h('li', {}, allergyChip(patient)))),
-        h('div', { class: 'actions' }, session.capabilities.capture ?
-          h('button', { class: 'btn btn-dark', type: 'button', onclick: () => startVisit(id) }, 'Start a visit') : '')),
-      patientCommunicationPanel(patient), patientJourneyPanel(patient.id),
-      h('section', { class: 'panel' },
-        h('div', { class: 'ph' }, h('h3', { text: 'Visits' }), h('p', { text: encounters.length ? `${encounters.length} on record` : '' })),
-        encounters.length ? h('ul', { class: 'visits' }, encounters.map(e => h('li', {},
-          h('button', { type: 'button', onclick: () => { location.hash = '#/encounters/' + e.id; } },
-            h('span', { class: 'vdate', text: fmtDate(e.visit_date) }),
-            h('span', { class: 'vdx', text: (e.diagnoses[0] || e.complaints[0] || (e.state === 'open' ? 'Not processed yet' : '—')) + ' · ' + e.clinician_name }),
-            stateChip(e.state, e.blocking))))) :
-          h('div', { class: 'first' }, h('p', { text: 'No visits yet. Start one to type or paste the consultation.' }))));
-  } catch (e) { fail(e); }
-}
-
-async function startVisit(patientId) {
-  try {
-    const encounter = await api(`/patients/${patientId}/encounters`, { method: 'POST' });
-    location.hash = '#/encounters/' + encounter.id;
-  } catch (e) { fail(e); }
-}
-
-// ---------- Encounter ----------
-
-async function showEncounter(id) {
-  main().replaceChildren(h('p', { class: 'muted', text: 'Loading…' }));
-  try {
-    const encounter = await api('/encounters/' + id);
-    ui.patientId = encounter.patient.id;
-    loadPatients();
-    if (['in_review', 'approved'].includes(encounter.state)) return showReview(encounter);
-    if (encounter.state === 'processing' && encounter.run) return showProcessing(encounter, encounter.run);
-    return showCapture(encounter);
-  } catch (e) { fail(e); }
-}
-
-function header(encounter, extra) {
-  return [
-    h('div', { class: 'crumb' }, h('button', { type: 'button', onclick: () => { location.hash = '#/patients/' + encounter.patient.id; } }, '← ' + encounter.patient.name)),
-    h('div', { class: 'phead' },
-      h('div', {}, h('h2', { text: encounter.patient.name }), h('ul', { class: 'facts' },
-        h('li', { text: 'Visit ' + fmtDate(encounter.visit_date) }), h('li', { text: encounter.clinician_name }),
-        h('li', { class: 'mono', text: encounter.patient.mrn }), h('li', {}, allergyChip(encounter.patient)), extra ? h('li', {}, extra) : ''))),
-  ];
-}
-
-const MAX_RECORDING_MS = 20 * 60 * 1000;
-const clock = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
-
-async function showCapture(encounter) {
-  const failed = encounter.run && ['failed', 'incomplete'].includes(encounter.run.state);
-  const language = h('select', { class: 'input' }, [['hinglish', 'Hinglish'], ['hindi', 'Hindi'], ['english', 'English'], ['tamil', 'Tamil'], ['telugu', 'Telugu'], ['gujarati', 'Gujarati']]
-    .map(([v, l]) => h('option', { value: v, selected: encounter.source?.language === v }, l)));
-  const consent = h('input', { type: 'checkbox' });
-  const status = h('p', { class: 'muted small', role: 'status' });
-  const timer = h('span', { class: 'timer', text: '0:00' });
-  const meterBar = h('i');
-  const meter = h('span', { class: 'level', 'aria-hidden': 'true' }, meterBar);
-  const mic = h('button', { class: 'mic', type: 'button', 'aria-label': 'Start recording' }, svg(ICON.mic));
-  const micLabel = h('span', { class: 'mic-label', text: 'Record' });
-  const live = h('div', { class: 'live', hidden: true }, h('div', { class: 'row' }, h('span', { class: 'rec-dot' }), timer, meter));
-  const controls = h('div', { class: 'row' });
-  const review = h('div', { class: 'stack' });
-  const fileInput = h('input', { type: 'file', accept: 'audio/*', class: 'sr', id: 'audio-file' });
-
-  // Typing stays available: no microphone, a patient who declines recording, or a synthetic sample.
-  const text = h('textarea', { class: 'input', rows: '8', placeholder: 'Type or paste what was said in the consultation.' });
-  if (encounter.source?.kind === 'typed') text.value = encounter.source.text;
-  const samples = h('select', { class: 'input', 'aria-label': 'Insert a synthetic sample' }, h('option', { value: '' }, 'Insert a synthetic sample…'));
-  const process = h('button', { class: 'btn btn-dark', type: 'button' }, 'Write the draft from this text');
-  const typed = h('details', { class: 'typed', open: encounter.source?.kind === 'typed' },
-    h('summary', { text: 'Type or paste instead' }),
-    h('label', { class: 'field' }, h('span', { text: 'What was said' }), text),
-    h('label', { class: 'field' }, h('span', { text: 'Synthetic samples for this patient' }), samples),
-    h('p', { class: 'muted small', text: 'Typed text needs no recording consent. It is stored as this visit\'s source and checked quote by quote.' }),
-    process);
-
-  const recordingAllowed = encounter.patient.consents?.includes('recording') ?? true;
-  main().replaceChildren(...header(encounter), patientJourneyPanel(encounter.patient.id),
-    h('section', { class: 'record' },
-      h('div', { class: 'capture' },
-        h('div', {}, mic, micLabel),
-        h('div', {},
-          h('h3', { text: failed ? 'Processing stopped' : 'Record the consultation' }),
-          failed ? h('p', { class: 'err', text: encounter.run.error || 'The last attempt failed.' }) : '',
-          failed ? h('div', { class: 'row' }, h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => retryRun(encounter) },
-            encounter.source?.kind === 'audio' ? 'Retry the same recording' : 'Retry the same text')) : '',
-          h('p', { class: 'muted', text: 'Speak as you normally would. Gnani Prisma transcribes the recording; every finding in the draft is then checked against that transcript.' }),
-          h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { text: 'Language spoken' }), language)),
-          h('label', { class: 'consent' }, consent, h('span', { text: recordingAllowed ? 'The patient agreed to this recording.' : 'This patient\'s record has no consent to recording. Type the visit instead.' })),
-          live, controls, review, status,
-          h('div', { class: 'row' }, h('label', { class: 'btn btn-line btn-sm', for: 'audio-file' }, 'Upload an audio file'), fileInput),
-          typed))));
-  if (!recordingAllowed) { mic.disabled = true; consent.disabled = true; }
-
-  let recorder = null, stream = null, chunks = [], started = 0, banked = 0, ticker = null, audioContext = null, frame = null, discard = false, stopping = false;
-  const elapsed = () => banked + (recorder?.state === 'recording' && !stopping ? Date.now() - started : 0);
-  // Bank the running stretch before stopping: by the time onstop fires the recorder is no longer 'recording'.
-  const stopRecording = drop => {
-    if (!recorder || stopping) return;
-    if (recorder.state === 'recording') banked += Date.now() - started;
-    stopping = true; discard = drop; recorder.stop();
-  };
-  const needConsent = () => {
-    if (consent.checked) return false;
-    consent.focus(); toast('Confirm the patient agreed to the recording first.', true); return true;
-  };
-  const stopMeter = () => { cancelAnimationFrame(frame); audioContext?.close(); audioContext = null; meterBar.style.width = '0%'; };
-  const startMeter = () => {
-    audioContext = new AudioContext();
-    const analyser = audioContext.createAnalyser(); analyser.fftSize = 1024;
-    audioContext.createMediaStreamSource(stream).connect(analyser);
-    const data = new Float32Array(analyser.fftSize);
-    const draw = () => {
-      analyser.getFloatTimeDomainData(data);
-      const rms = Math.sqrt(data.reduce((sum, v) => sum + v * v, 0) / data.length);
-      meterBar.style.width = Math.min(100, rms * 400) + '%';
-      frame = requestAnimationFrame(draw);
-    };
-    draw();
-  };
-  const leaving = e => { e.preventDefault(); e.returnValue = ''; };
-  const setControls = () => {
-    const state = recorder?.state || 'inactive';
-    live.hidden = state === 'inactive';
-    mic.setAttribute('aria-label', state === 'inactive' ? 'Start recording' : 'Stop recording');
-    micLabel.textContent = state === 'inactive' ? 'Record' : 'Stop';
-    mic.classList.toggle('on', state !== 'inactive');
-    put(controls, state === 'inactive' ? [] : [
-      h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => {
-        if (recorder.state === 'recording') { banked += Date.now() - started; recorder.pause(); }
-        else { started = Date.now(); recorder.resume(); }
-        setControls();
-      } }, state === 'paused' ? 'Resume' : 'Pause'),
-      h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => stopRecording(true) }, 'Discard')]);
-    status.textContent = state === 'paused' ? 'Paused.' : state === 'recording' ? 'Recording. Nothing is sent until you stop and choose to use it.' : status.textContent;
-  };
-
-  async function startRecording() {
-    if (needConsent()) return;
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { status.textContent = 'This browser cannot record. Upload a file or type instead.'; return; }
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } }); }
-    catch (e) { status.textContent = 'The microphone is blocked or missing. Allow it for this site, or upload a file or type instead.'; return; }
-    const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t));
-    recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-    chunks = []; banked = 0; discard = false; stopping = false; put(review);
-    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-    recorder.onstop = () => {
-      clearInterval(ticker); stopMeter(); stream.getTracks().forEach(t => t.stop());
-      window.removeEventListener('beforeunload', leaving);
-      const blob = new Blob(chunks, { type: (recorder.mimeType || 'audio/webm').split(';')[0] });
-      const length = elapsed(); recorder = null; setControls();
-      if (discard) { status.textContent = 'Recording discarded.'; return; }
-      showRecorded(blob, length);
-    };
-    recorder.start(1000); started = Date.now();
-    ticker = setInterval(() => { timer.textContent = clock(elapsed()); if (elapsed() >= MAX_RECORDING_MS) stopRecording(false); }, 250);
-    window.addEventListener('beforeunload', leaving);
-    startMeter(); setControls();
-  }
-
-  function showRecorded(blob, length) {
-    const url = URL.createObjectURL(blob);
-    put(review, h('audio', { controls: true, src: url, class: 'player' }),
-      h('p', { class: 'muted small', text: `${clock(length)} recorded. Listen back if you like, then use it or record again.` }),
-      h('div', { class: 'row' },
-        h('button', { class: 'btn btn-dark', type: 'button', onclick: e => { e.currentTarget.disabled = true; upload(blob); } }, 'Use this recording'),
-        h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { URL.revokeObjectURL(url); put(review); status.textContent = ''; timer.textContent = '0:00'; } }, 'Record again')));
-    status.textContent = '';
-  }
-
-  async function upload(blob) {
-    if (needConsent()) return;
-    status.textContent = 'Uploading the recording…';
-    try {
-      const response = await fetch(`/api/v1/encounters/${encounter.id}/sources/audio?language=${language.value}`, {
-        method: 'POST', credentials: 'same-origin', body: blob,
-        headers: { 'Content-Type': (blob.type || 'audio/webm').split(';')[0], 'X-CSRF-Token': session.csrf_token, 'X-Recording-Consent': 'patient-agreed' } });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new ApiError(response.status, data.error);
-      status.textContent = `Uploaded ${Math.round(data.duration_s)} seconds of audio. Starting…`;
-      const run = await api(`/encounters/${encounter.id}/runs`, { method: 'POST', body: { source_id: data.id, source_version: data.version } });
-      showProcessing(encounter, run);
-    } catch (e) { status.textContent = ''; fail(e); review.querySelectorAll('button').forEach(b => { b.disabled = false; }); }
-  }
-
-  mic.addEventListener('click', () => (recorder ? stopRecording(false) : startRecording()));
-  // Leaving the page mid-recording discards it and releases the microphone.
-  ui.cleanup = () => stopRecording(true);
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files[0];
-    fileInput.value = '';
-    if (!file) return;
-    if (needConsent()) return;
-    put(review, h('p', { class: 'muted small', text: `${file.name} (${(file.size / 1048576).toFixed(1)} MB)` }));
-    upload(file);
-  });
-  api(`/patients/${encounter.patient.id}/samples`).then(({ items }) => {
-    items.forEach(s => samples.append(h('option', { value: s.id, dataset: { text: s.text, language: s.language } }, `${s.id} (${LANG[s.language] || s.language})`)));
-    if (!items.length) samples.firstChild.textContent = 'No samples for this patient';
-  }).catch(() => {});
-  samples.addEventListener('change', () => {
-    const option = samples.selectedOptions[0];
-    if (option?.dataset.text) { text.value = option.dataset.text; language.value = option.dataset.language; }
-  });
-  process.addEventListener('click', async () => {
-    process.disabled = true;
-    try {
-      const source = await api(`/encounters/${encounter.id}/sources`, { method: 'POST', body: { kind: 'typed', language: language.value, text: text.value } });
-      const run = await api(`/encounters/${encounter.id}/runs`, { method: 'POST', body: { source_id: source.id, source_version: source.version } });
-      showProcessing(encounter, run);
-    } catch (e) { fail(e); process.disabled = false; }
-  });
-}
-
-async function retryRun(encounter) {
-  try { showProcessing(encounter, await api(`/runs/${encounter.run.run_id}/retry`, { method: 'POST' })); } catch (e) { fail(e); }
-}
-
-const STEP_TEXT = { transcribing: 'Transcribe the recording with Gnani Prisma', extracting: 'Find findings and medicines', checking: 'Check every quote against what was said',
-  writing: 'Write the report', report_checks: 'Check each report line against its sources', assembling: 'Put the draft together',
-  suggesting: 'Suggest products for unclear medicine names' };
-
-function showProcessing(encounter, run) {
-  const list = h('ol', { class: 'proc' });
-  const note = h('p', { class: 'muted small' });
-  main().replaceChildren(...header(encounter, h('span', { class: 'chip iris', text: 'Processing' })),
-    h('section', { class: 'record' }, h('h3', { text: 'Writing the draft' }),
-      h('p', { class: 'muted', text: 'Each step below is real progress from the server. This usually takes under a minute.' }), list, note));
-  let delay = 2000;
-  const draw = r => {
-    list.replaceChildren(...r.steps.map(s => h('li', { class: s.state }, h('span', { class: 'tick' }, svg(ICON.check)),
-      STEP_TEXT[s.key] + (s.state === 'skipped' ? ' (not needed for typed text)' : ''))));
-    note.textContent = r.state === 'retry_wait' ? (r.error || 'Waiting to retry.') : r.attempts > 1 ? `Attempt ${r.attempts}` : '';
-  };
-  const poll = async () => {
-    try {
-      const r = await api('/runs/' + run.run_id);
-      draw(r); delay = 2000;
-      if (r.state === 'succeeded') return showEncounter(encounter.id);
-      if (['failed', 'incomplete', 'cancelled'].includes(r.state)) return showEncounter(encounter.id);
-    } catch (e) { delay = Math.min(delay * 2, 15000); if (e.status === 401) return; }
-    ui.pollTimer = setTimeout(poll, document.hidden ? Math.max(delay, 8000) : delay);
-  };
-  draw(run);
-  stopPolling();
-  ui.pollTimer = setTimeout(poll, 1200);
-}
-
-// ---------- Review ----------
-
-const ACTION_TEXT = { choose_product: 'Choose product', set_dose: 'Set dose', set_timing: 'Set timing', set_food: 'Set food',
-  set_duration: 'Set duration', remove_medicine: 'Remove medicine', confirm_order: 'Accept', acknowledge: 'Accept',
-  edit_line: 'Edit line', remove_line: 'Remove line', add_line: 'Add a line', dismiss_item: 'Rule out finding',
-  confirm_interpretation: 'Correct' };
-// The signed-in doctor is recorded with every change, so nothing asks for a typed reason: confirmations save in
-// one click, edits save from their fields, and the audit keeps one of these plain reasons.
-const DONE_REASON = { choose_product: 'Product chosen by the doctor.', set_dose: 'Dose set by the doctor.',
-  set_timing: 'Timing set by the doctor.', set_food: 'Food timing set by the doctor.', set_duration: 'Duration set by the doctor.',
-  remove_medicine: 'Removed by the doctor.', confirm_order: 'Confirmed by the doctor as their own order.',
-  acknowledge: 'Reviewed and accepted by the doctor.', edit_line: 'Edited by the doctor.', remove_line: 'Removed by the doctor.',
-  add_line: 'Written by the doctor.', dismiss_item: 'Ruled out by the doctor.',
-  confirm_interpretation: 'Confirmed correct as written by the doctor.' };
-const ONE_CLICK = ['confirm_order', 'acknowledge', 'confirm_interpretation'];
-const CONFIRM_TEXT = { remove_medicine: 'Yes, remove', remove_line: 'Yes, remove', dismiss_item: 'Yes, rule out' };
-// ---------- Medicine picker (runbook D-122): choose a medicine and its instructions without the mouse ----------
-// Search or ↓ through the visit's common choices, Enter to pick; then ↑↓ moves between rows, ←→ changes the
-// value, Enter saves, Esc steps back. Nothing is typed but the search.
-
-const PK_DAYS = [1, 2, 3, 5, 7, 10, 14, 21, 30, 60, 90];
-const PK_TIMES = [['1', 'Once'], ['2', 'Twice'], ['3', 'Three times'], ['4', 'Four times'], ['sos', 'When needed']];
-const PK_WHEN = { '1': ['m', 'a', 'e', 'n'], '2': ['mn', 'me', 'ma', 'an'], '3': ['man', 'men'], '4': ['maen'], sos: [''] };
-const PK_SLOT = { m: 'Morning', a: 'Afternoon', e: 'Evening', n: 'Night' };
-const PK_DOSES = ['0.5', '1', '2', '3', '4'];
-const PK_FOOD = [['', 'Not said'], ['before_food', 'Before food'], ['after_food', 'After food'], ['with_food', 'With food'], ['empty_stomach', 'Empty stomach']];
-const PK_UNIT = { tablet: 'tablet', capsule: 'capsule', sachet: 'sachet', syrup: 'teaspoon', suspension: 'teaspoon', drops: 'drop', inhaler: 'puff' };
-const ONCE_SLOT = { morning: 'm', afternoon: 'a', evening: 'e', night: 'n' };
-const whenText = w => w ? w.split('').map(s => PK_SLOT[s]).join(' + ') : 'As needed';
-
-function medicinePicker({ shortlist, med, onSave, onCancel, taken = [], number = 1 }) {
-  const box = h('div', { class: 'picker', tabindex: '-1' });
-  const search = h('input', { class: 'input', type: 'search', placeholder: 'Type a medicine, or press ↓ for the common choices', autocomplete: 'off' });
-  const list = h('ul', { class: 'pk-list', role: 'listbox' });
-  const rowsHost = h('div', { class: 'pk-rows' });
-  const hint = h('p', { class: 'muted small pk-hint' });
-  let options = [], active = 0, chosen = null, rows = [], row = 0, timer;
-
-  const drawList = () => {
-    list.replaceChildren(...options.map((o, i) => h('li', { class: 'pk-item' + (i === active ? ' active' : ''), role: 'option',
-      onmousedown: e => { e.preventDefault(); pick(o); } },
-      h('div', {}, o.group ? h('span', { class: 'chip muted pk-group', text: o.group }) : '', h('b', { text: o.label })),
-      h('span', { class: 'muted small', text: [o.composition, o.why].filter(Boolean).join(' · ') }))));
-    list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
-  };
-  // What is already prescribed drops out, so the list moves on to the next kind of medicine.
-  const fromShortlist = q => shortlist.items.filter(o => !taken.includes(o.product_id)
-    && (!q || (o.label + ' ' + o.composition + ' ' + (o.group || '')).toLowerCase().includes(q.toLowerCase())));
-  const refresh = () => {
-    const q = search.value.trim();
-    options = fromShortlist(q); active = 0; drawList();
-    clearTimeout(timer);
-    if (q.length < 2) return;
-    timer = setTimeout(async () => {
-      try {
-        const { items } = await api('/catalog/search?q=' + encodeURIComponent(q));
-        const seen = new Set(options.map(o => o.product_id));
-        options = [...fromShortlist(q), ...items.filter(p => !seen.has(p.id)).map(p => ({ product_id: p.id, label: p.label,
-          composition: p.composition, form: p.form, food: p.food, once_daily: p.once_daily }))];
-        active = Math.min(active, Math.max(options.length - 1, 0)); drawList();
-      } catch (e) { fail(e); }
-    }, 200);
-  };
-
-  // The instruction rows, with values taken from the medicine (when editing) or its standard instructions.
-  function startRows(o, current) {
-    chosen = o;
-    const s = current?.schedule;
-    const slots = s?.type === 'grid' ? 'maen'.split('').filter(k => Number(s[k]) > 0).join('') : '';
-    const times = s?.type === 'as_needed' ? 'sos' : slots ? String(slots.length) : s?.type === 'frequency' ? String(Math.min(s.times, 4))
-      : o.once_daily ? '1' : '2';
-    const days = current?.duration ? current.duration.value * ({ day: 1, week: 7, month: 30 })[current.duration.unit] : 5;
-    const pickWhen = t => slots && slots.length === Number(t) && PK_WHEN[t].includes(slots) ? slots
-      : t === '1' && ONCE_SLOT[o.once_daily] ? ONCE_SLOT[o.once_daily] : PK_WHEN[t][0];
-    rows = [
-      { key: 'days', label: 'Days', values: PK_DAYS.includes(days) ? PK_DAYS : [...PK_DAYS, days].sort((a, b) => a - b), value: days, text: d => `${d} day${d > 1 ? 's' : ''}` },
-      { key: 'times', label: 'Times a day', values: PK_TIMES.map(t => t[0]), value: times, text: t => Object.fromEntries(PK_TIMES)[t] },
-      { key: 'when', label: 'Which time', values: PK_WHEN[times], value: pickWhen(times), text: whenText },
-      { key: 'dose', label: 'Dose', values: PK_DOSES, value: current?.dose?.amount && PK_DOSES.includes(current.dose.amount) ? current.dose.amount : '1',
-        text: d => `${d === '0.5' ? '½' : d} ${PK_UNIT[o.form] || 'unit'}${Number(d) > 1 ? 's' : ''}` },
-      { key: 'food', label: 'Food', values: PK_FOOD.map(f => f[0]), value: current ? (current.food || '') : (o.food || ''), text: f => Object.fromEntries(PK_FOOD)[f] },
-    ];
-    row = 0;
-    search.hidden = true; list.hidden = true;
-    drawRows();
-    // When editing, the picker isn't on the page yet; focus once it is, so the arrow keys reach it.
-    setTimeout(() => box.focus(), 0);
-  }
-  const drawRows = () => {
-    rowsHost.replaceChildren(h('div', { class: 'pk-chosen' }, h('b', { text: chosen.label }), h('span', { class: 'muted small', text: chosen.composition || '' })),
-      ...rows.map((r, i) => h('div', { class: 'pk-row' + (i === row ? ' active' : '') },
-        h('span', { class: 'pk-label', text: r.label }),
-        h('div', { class: 'pk-opts' }, r.values.map(v => h('button', { class: 'pk-opt' + (v === r.value ? ' sel' : ''), type: 'button', tabindex: '-1',
-          onmousedown: e => { e.preventDefault(); row = i; set(r, v); } }, r.text(v)))))));
-    rowsHost.querySelector('.pk-row.active .sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    hint.textContent = '↑ ↓ row · ← → change · Enter save · Esc back';
-  };
-  const set = (r, v) => {
-    r.value = v;
-    if (r.key === 'times') { const when = rows[2]; when.values = PK_WHEN[v]; when.value = v === '1' && ONCE_SLOT[chosen.once_daily] ? ONCE_SLOT[chosen.once_daily] : PK_WHEN[v][0]; }
-    drawRows();
-  };
-  const result = () => {
-    const get = k => rows.find(r => r.key === k).value;
-    const when = get('when');
-    return { product: chosen, dose: { amount: get('dose'), unit: PK_UNIT[chosen.form] || 'unit' },
-      schedule: get('times') === 'sos' ? { type: 'as_needed', max_per_day: null }
-        : { type: 'grid', ...Object.fromEntries('maen'.split('').map(k => [k, when.includes(k) ? '1' : '0'])) },
-      food: get('food'), duration: { value: get('days'), unit: 'day' } };
-  };
-
-  search.addEventListener('input', refresh);
-  search.addEventListener('keydown', e => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, options.length - 1); drawList(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); drawList(); }
-    else if (e.key === 'Enter') { e.preventDefault(); if (options[active]) pick(options[active]); }
-    else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-    // The space that opened the picker, or a second press, shows the common choices rather than typing a blank.
-    else if (e.key === ' ' && !search.value) { e.preventDefault(); }
-  });
-  box.addEventListener('keydown', e => {
-    if (!chosen || e.target === search) return;
-    const r = rows[row], i = r.values.indexOf(r.value);
-    if (e.key === 'ArrowDown') { e.preventDefault(); row = (row + 1) % rows.length; drawRows(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); row = (row + rows.length - 1) % rows.length; drawRows(); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); set(r, r.values[Math.min(i + 1, r.values.length - 1)]); }
-    else if (e.key === 'ArrowLeft') { e.preventDefault(); set(r, r.values[Math.max(i - 1, 0)]); }
-    else if (e.key === 'Enter') { e.preventDefault(); onSave(result()); }
-    else if (e.key === 'Escape') { e.preventDefault(); if (med) onCancel(); else { chosen = null; rowsHost.replaceChildren(); search.hidden = false; list.hidden = false; hint.textContent = '↓ ↑ choose · Enter pick · Esc close'; search.focus(); } }
-  });
-  function pick(o) { startRows(o); }
-
-  if (med) {
-    box.append(rowsHost, hint);
-    startRows({ product_id: med.product_id, label: med.product_label || med.spoken_name, composition: '', form: med.product_form || 'tablet' }, med);
-  } else {
-    box.append(h('div', { class: 'pk-head' }, h('b', { text: `Medicine ${number}` }), h('span', { class: 'muted small', text: 'Enter saves and opens the next · Esc when done' })),
-      shortlist.conditions.length ? h('p', { class: 'muted small', text: 'Common for: ' + shortlist.conditions.slice(0, 4).join(', ') }) : '',
-      search, list, rowsHost, hint);
-    hint.textContent = '↓ ↑ choose · Enter pick · Esc close';
-    refresh();
-    setTimeout(() => search.focus(), 0);
-  }
-  return box;
-}
-
-// What VoiceRx filled in rather than heard (runbook D-118), shown on the prescription row for the doctor to check.
-const FILLED_PRODUCT = { generic: 'Generic name', auto: 'Name matched: check', learned: 'Chosen before in this clinic' };
-const FILLED_FIELD = { dose: 'dose', food: 'food', schedule: 'times' };
-function filledChips(m) {
-  const f = m.filled || {};
-  const standard = Object.keys(FILLED_FIELD).filter(k => f[k] === 'standard').map(k => FILLED_FIELD[k]);
-  return [f.product ? h('span', { class: 'chip ' + (f.product === 'auto' ? 'off' : 'muted'), text: FILLED_PRODUCT[f.product] || f.product }) : '',
-    standard.length ? h('span', { class: 'chip iris', text: 'Standard ' + standard.join(', ') }) : ''];
-}
-const TIER_TEXT = { formulary: 'In formulary', indian: 'Indian list · unverified', clinic: 'Clinic list · pending review' };
-const PRODUCT_CODES = ['unmatched_product', 'ambiguous_product', 'fuzzy_product_match', 'allergy_conflict'];
-const SOURCE_TEXT = { openfda_label: 'US label (openFDA)', nlem_2022: 'NLEM 2022', jan_aushadhi: 'Jan Aushadhi' };
-
-async function showReview(encounter, view) {
-  try { view = view || await api(`/encounters/${encounter.id}/report`); } catch (e) { return fail(e); }
-  const report = view.report;
-  const draft = view.status === 'draft';
-  const canEdit = draft && view.capabilities.resolve;
-  const issuesByTarget = {};
-  view.issue_views.forEach(i => (issuesByTarget[i.target] ||= []).push(i));
-  const flaggedLine = ref => (issuesByTarget[ref] || []).length > 0 ||
-    report.sections[ref.split(':')[0]][Number(ref.split(':')[1])].cites.some(c => (issuesByTarget[c] || []).length);
-  const evidence = h('section', { class: 'panel evidence' });
-  const transcript = h('div', { class: 'transcript' });
-
-  const submit = async items => {
-    try {
-      const updated = await api(`/encounters/${encounter.id}/resolutions`, { method: 'POST',
-        body: { expected_version: view.version, expected_content_hash: view.content_hash, resolutions: items } });
-      ui.editing = null; toast(`Saved. Draft is now version ${updated.version}.`);
-      showReview(encounter, updated);
-    } catch (e) {
-      ui.chainPicker = false;
-      if (e.code === 'version_conflict') { toast(e.message, true); return showEncounter(encounter.id); }
-      fail(e);
-    }
-  };
-
-  const drawTranscript = quotes => {
-    const text = encounter.source?.text || '';
-    const spans = [];
-    for (const q of quotes || []) { const at = q ? text.indexOf(q) : -1; if (at >= 0) spans.push([at, at + q.length]); }
-    spans.sort((a, b) => a[0] - b[0]);
-    const parts = []; let pos = 0;
-    for (const [s, e] of spans) { if (s < pos) continue; parts.push(text.slice(pos, s), h('mark', { text: text.slice(s, e) })); pos = e; }
-    parts.push(text.slice(pos));
-    transcript.replaceChildren(...parts);
-    transcript.querySelector('mark')?.scrollIntoView({ block: 'nearest' });
-  };
-
-  const showLine = ref => {
-    ui.selectedLine = ref;
-    document.querySelectorAll('.line').forEach(b => b.classList.toggle('sel', b.dataset.ref === ref));
-    const [section, index] = ref.split(':');
-    const line = report.sections[section][Number(index)];
-    const findings = line.cites.map(c => view.findings[c]).filter(Boolean);
-    const reviewIssues = view.issue_views.filter(i => (i.target === ref || line.cites.includes(i.target))
-      && i.actions.includes('confirm_interpretation'));
-    put(evidence, h('div', { class: 'ph' }, h('h3', { text: 'Evidence' }), h('p', { text: view.section_names[section] })),
-      h('p', { text: line.text }),
-      findings.length ? findings.map(f => h('div', { class: 'finding' },
-        h('b', { text: f.term }), h('p', { class: 'quote', text: '“' + f.quote + '”' }),
-        h('div', { class: 'attrs' }, h('span', { class: 'chip ' + (f.assertion === 'absent' ? 'muted' : 'iris'), text: f.assertion }),
-          h('span', { class: 'chip muted', text: f.certainty }), f.laterality ? h('span', { class: 'chip muted', text: f.laterality }) : '',
-          f.subject !== 'patient' ? h('span', { class: 'chip off', text: 'about ' + f.subject }) : '',
-          h('span', { class: 'chip muted', text: 'said by ' + f.said_by }), h('span', { class: 'chip muted', text: f.id })))) :
-        h('p', { class: 'err', text: 'This line cites no checked finding.' }),
-      canEdit ? h('div', { class: 'row' },
-        reviewIssues.length ? h('button', { class: 'btn btn-dark btn-sm', type: 'button',
-          title: 'Confirm the flagged interpretations for this line as correct',
-          onclick: () => submit(reviewIssues.map(i => ({ action: 'confirm_interpretation', target: i.target,
-            value: { code: i.code }, reason: DONE_REASON.confirm_interpretation }))) }, 'Correct') : '',
-        h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => openEditor('edit_line', ref, evidence) }, 'Edit line'),
-        h('button', { class: 'btn btn-risk btn-sm', type: 'button', onclick: () => openEditor('remove_line', ref, evidence) }, 'Remove line')) : '');
-    drawTranscript(findings.map(f => f.quote));
-  };
-
-  const medById = Object.fromEntries(view.medication_views.map(m => [m.id, m]));
-  const describe = issue => {
-    if (issue.target_kind === 'medicine') { const m = medById[issue.target]; return 'Medicine: ' + (m?.product_label || m?.spoken_name || issue.target); }
-    if (issue.target_kind === 'line') { const [s, i] = issue.target.split(':'); return `${view.section_names[s]}: “${report.sections[s][Number(i)]?.text || ''}”`; }
-    if (issue.target_kind === 'finding') { const f = view.findings[issue.target]; return `Finding: ${f?.term || issue.target}` + (f ? ` (“${f.quote}”)` : ''); }
-    return 'Whole report';
-  };
-
-  // One editor at a time. Every correction carries a reason (DESIGN.md section 7), supplied here from context.
-  function openEditor(action, target, host, issue, preset) {
-    host.querySelector('.editor')?.remove();
-    let reason = DONE_REASON[action];
-    const fields = h('div');
-    let value = () => ({});
-    const med = medById[target];
-    const select = (options, current) => h('select', { class: 'input' }, options.map(([v, l]) => h('option', { value: v, selected: v === current }, l)));
-    if (action === 'choose_product') {
-      // Suggestions, the matcher's candidates and the formulary; search and "add a product" reach every tier.
-      const options = new Map();
-      (med?.suggestions || []).forEach(s => options.set(s.product_id, `${s.label} · ${TIER_TEXT[s.tier] || s.tier}`));
-      (med?.candidates || []).forEach(c => options.set(c.id, c.label));
-      view.catalog.forEach(p => { if (!options.has(p.id)) options.set(p.id, p.label); });
-      const s = select([...options], preset?.product_id || med?.product_id);
-      const offer = (id, label) => { if (!options.has(id)) { options.set(id, label); s.append(h('option', { value: id }, label)); } s.value = id; };
-      const search = h('input', { class: 'input', type: 'search', placeholder: 'Search all products: formulary, Indian list, clinic' });
-      const found = h('div', { class: 'found' });
-      let searchTimer;
-      search.addEventListener('input', () => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(async () => {
-          if (search.value.trim().length < 2) return put(found);
-          try {
-            const { items } = await api('/catalog/search?q=' + encodeURIComponent(search.value));
-            put(found, items.map(p => h('button', { class: 'btn btn-quiet btn-sm', type: 'button',
-              onclick: () => { offer(p.id, `${p.label} · ${TIER_TEXT[p.tier] || p.tier}`); put(found); search.value = ''; } },
-              `${p.label} (${p.composition})`)));
-          } catch (e) { fail(e); }
-        }, 250);
-      });
-      const newName = h('input', { class: 'input', placeholder: 'Brand name as on the pack, e.g. Colaquick' });
-      const newForm = select(['tablet', 'capsule', 'syrup', 'suspension', 'injection', 'sachet', 'powder', 'gel', 'cream', 'drops', 'other'].map(f => [f, f]), 'tablet');
-      const newComposition = h('input', { class: 'input', placeholder: 'Composition, e.g. Collagen Peptide (10g) + Vitamin C (40mg)' });
-      const add = h('details', { class: 'add-product' }, h('summary', { text: 'Add a product that isn’t listed' }),
-        h('label', { class: 'field' }, h('span', { text: 'Brand' }), newName),
-        h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { text: 'Form' }), newForm),
-          h('label', { class: 'field' }, h('span', { text: 'Composition' }), newComposition)),
-        h('p', { class: 'muted small', text: 'Added for this clinic and marked pending review. It can be used at once.' }),
-        h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: async () => {
-          try {
-            const p = await api('/catalog/products', { method: 'POST', body: { name: newName.value, form: newForm.value, composition: newComposition.value } });
-            offer(p.id, `${p.label} · ${TIER_TEXT.clinic}`); add.open = false; toast(`${p.label} added for this clinic.`);
-          } catch (e) { fail(e); }
-        } }, 'Add and select'));
-      fields.append(h('label', { class: 'field' }, h('span', { text: 'Product' }), s), search, found, add);
-      if (preset && med) reason = `Heard “${med.spoken_name}”; meant ${preset.label}.`;
-      value = () => ({ product_id: s.value });
-    } else if (action === 'set_dose') {
-      const amount = h('input', { class: 'input', inputmode: 'decimal', value: med?.dose?.amount || '1' });
-      const unit = select(['tablet', 'capsule', 'ml', 'puff', 'teaspoon', 'drop', 'sachet', 'unit'].map(u => [u, u]), med?.dose?.unit || 'tablet');
-      fields.append(h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { text: 'Amount' }), amount), h('label', { class: 'field' }, h('span', { text: 'Unit' }), unit)));
-      value = () => ({ amount: amount.value.trim(), unit: unit.value });
-    } else if (action === 'set_timing') {
-      const s = med?.schedule || {};
-      const kind = select([['grid', 'Morning / afternoon / evening / night'], ['frequency', 'Times a day or week'], ['as_needed', 'When needed']], s.type === 'taper' ? 'grid' : (s.type || 'grid'));
-      const slots = 'maen'.split('').map(k => h('input', { class: 'input', inputmode: 'decimal', value: s.type === 'grid' ? s[k] : '0', 'aria-label': { m: 'Morning', a: 'Afternoon', e: 'Evening', n: 'Night' }[k] }));
-      const times = h('input', { class: 'input', type: 'number', min: '1', value: s.times || '1' });
-      const period = select([['day', 'a day'], ['week', 'a week']], s.period || 'day');
-      const maxDay = h('input', { class: 'input', type: 'number', min: '1', value: s.max_per_day || '', placeholder: 'No limit stated' });
-      const grid = h('div', { class: 'row' }, slots.map((input, i) => h('label', { class: 'field' }, h('span', { text: ['Morning', 'Afternoon', 'Evening', 'Night'][i] }), input)));
-      const freq = h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { text: 'Times' }), times), h('label', { class: 'field' }, h('span', { text: 'Per' }), period));
-      const prn = h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { text: 'At most per day' }), maxDay));
-      const sync = () => { grid.hidden = kind.value !== 'grid'; freq.hidden = kind.value !== 'frequency'; prn.hidden = kind.value !== 'as_needed'; };
-      kind.addEventListener('change', sync); sync();
-      fields.append(h('label', { class: 'field' }, h('span', { text: 'Schedule' }), kind), grid, freq, prn);
-      value = () => ({ schedule: kind.value === 'grid' ? { type: 'grid', m: slots[0].value.trim(), a: slots[1].value.trim(), e: slots[2].value.trim(), n: slots[3].value.trim() }
-        : kind.value === 'frequency' ? { type: 'frequency', times: Number(times.value), period: period.value }
-          : { type: 'as_needed', max_per_day: maxDay.value ? Number(maxDay.value) : null } });
-    } else if (action === 'set_food') {
-      const s = select([['after_food', 'After food'], ['before_food', 'Before food'], ['with_food', 'With food'], ['empty_stomach', 'Empty stomach']], med?.food || 'after_food');
-      fields.append(h('label', { class: 'field' }, h('span', { text: 'Food' }), s)); value = () => ({ food: s.value });
-    } else if (action === 'set_duration') {
-      const n = h('input', { class: 'input', type: 'number', min: '1', value: med?.duration?.value || '5' });
-      const unit = select([['day', 'days'], ['week', 'weeks'], ['month', 'months']], med?.duration?.unit || 'day');
-      fields.append(h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { text: 'For' }), n), h('label', { class: 'field' }, h('span', { text: 'Unit' }), unit)));
-      value = () => ({ value: Number(n.value), unit: unit.value });
-    } else if (action === 'edit_line') {
-      const [s, i] = target.split(':');
-      const t = h('textarea', { class: 'input', rows: '3' }); t.value = report.sections[s][Number(i)].text;
-      fields.append(h('label', { class: 'field' }, h('span', { text: 'Line text (its citations stay as they are)' }), t)); value = () => ({ text: t.value });
-    } else if (action === 'add_line') {
-      // The issue targets a finding; the new line goes into the section the doctor picks and cites that finding.
-      const findingId = target;
-      const f = view.findings[findingId];
-      const section = select(Object.entries(view.section_names), 'plan');
-      const t = h('textarea', { class: 'input', rows: '2' }); t.value = f ? f.term : '';
-      fields.append(h('p', { class: 'muted small', text: `Cites finding ${findingId}: “${f?.quote || ''}”` }),
-        h('label', { class: 'field' }, h('span', { text: 'Section' }), section), h('label', { class: 'field' }, h('span', { text: 'Line text' }), t));
-      value = () => ({ text: t.value, cites: [findingId] });
-      fields._target = () => section.value;
-    } else if (action === 'acknowledge') {
-      value = () => ({ code: issue.code });
-    }
-    const editor = h('div', { class: 'editor' }, h('b', { text: ACTION_TEXT[action] }), fields,
-      h('div', { class: 'row' },
-        h('button', { class: 'btn btn-dark btn-sm', type: 'button', onclick: () =>
-          submit([{ action, target: fields._target ? fields._target() : target, value: value(), reason }]) },
-          CONFIRM_TEXT[action] || 'Save'),
-        h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => editor.remove() }, 'Cancel')));
-    host.append(editor);
-    editor.querySelector('input, select, textarea')?.focus();
-  }
-
-  // Accept saves at once; anything else opens its short form.
-  function act(action, target, host, issue) {
-    if (!ONE_CLICK.includes(action)) return openEditor(action, target, host, issue);
-    submit([{ action, target, value: ['acknowledge', 'confirm_interpretation'].includes(action) ? { code: issue.code } : {}, reason: DONE_REASON[action] }]);
-  }
-
-  // What was heard and what it may have been (spec 2026-11-03, part B). Never applied without a click.
-  function suggestionList(med, card, issue) {
-    const likely = med.suggestions[0]?.likely;
-    return h('div', { class: 'suggest' },
-      h('p', { class: 'where', text: `Heard “${med.spoken_name}”. ${likely ? 'Likely match first; confirm it:' : 'Possible matches; choose the one you meant:'}` }),
-      med.suggestions.map((s, i) => h('div', { class: 'sugg' + (i === 0 && likely ? ' top' : '') },
-        h('div', {},
-          h('b', { text: s.label }),
-          h('div', { class: 'attrs' },
-            h('span', { class: 'chip ' + (s.tier === 'formulary' ? 'ok' : 'off'), text: TIER_TEXT[s.tier] || s.tier }),
-            s.sound_alike_sibling ? h('span', { class: 'chip miss', text: 'Sound-alike: check which' }) : '',
-            s.strength_match === false ? h('span', { class: 'chip off', text: 'Strength differs from what was said' }) : '',
-            s.chosen_before ? h('span', { class: 'chip iris', text: `Chosen before in this clinic (${s.chosen_before}×)` }) : ''),
-          s.reason ? h('p', { class: 'muted small', text: s.reason }) : '',
-          s.standard?.length ? h('p', { class: 'muted small', text: 'Also sets the standard: ' + s.standard.map(p => p.text).join(' · ') }) : ''),
-        h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => submit([
-          { action: 'choose_product', target: med.id, value: { product_id: s.product_id }, reason: `Heard “${med.spoken_name}”; meant ${s.label}.` },
-          ...standardItems(med, s.standard)]) }, 'Use this'))));
-  }
-
-  // Standard instructions fill only what the doctor left unsaid, and only when accepted (runbook D-115).
-  const standardItems = (med, items) => (items || []).map(p => ({ action: p.action, target: med.id, value: p.value, reason: p.reason }));
-  const withStandard = view.medication_views.filter(m => m.standard?.length);
-  const standardText = m => m.standard.map(p => p.text).join(' · ');
-
-  // Approval panel
-  let approvePanel;
-  if (draft) {
-    const approve = h('button', { class: 'btn btn-dark', type: 'button', disabled: !view.can_approve }, `Approve version ${view.version}`);
-    approve.addEventListener('click', async () => {
-      approve.disabled = true;
-      try {
-        const approved = await api(`/encounters/${encounter.id}/approvals`, { method: 'POST', body: { expected_version: view.version, expected_content_hash: view.content_hash } });
-        toast('Approved. The PDF is being prepared.');
-        showReview({ ...encounter, state: 'approved' }, approved);
-      } catch (e) { approve.disabled = false; if (e.code === 'version_conflict') { toast(e.message, true); return showEncounter(encounter.id); } fail(e); }
-    });
-    approvePanel = h('section', { class: 'panel' }, h('div', { class: 'approve-bar' },
-      h('div', {}, h('h3', { text: `Draft version ${view.version}` }),
-        h('p', { text: view.blocking_count ? `${view.blocking_count} blocking issue${view.blocking_count > 1 ? 's' : ''} to resolve before approval. Warnings can be acknowledged.` : 'No blocking issues. Read the draft, then approve.' })),
-      h('div', { class: 'row' }, h('a', { class: 'btn btn-line', href: `/api/v1/encounters/${encounter.id}/preview.pdf?version=${view.version}`, target: '_blank', rel: 'noopener' }, 'Preview PDF'), approve)),
-      h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) }));
-  } else {
-    const files = h('div', { class: 'row' });
-    const clinicStatus = h('div', { class: 'stack', role: 'status' });
-    const drawClinic = jobs => clinicStatus.replaceChildren(...jobs.map(j => h('p', { class: 'muted small',
-      text: `WhatsApp clinic copy · ${j.kind === 'report_pdf' ? 'PDF' : j.kind === 'voice_option' ? 'Voice option' : 'Requested audio'}: ${j.state.replaceAll('_', ' ')}${j.error ? ' · ' + j.error : ''}` })),
-      jobs.some(j => j.state === 'failed') && view.capabilities.resolve ? h('button', { class: 'btn btn-line btn-sm', type: 'button',
-        onclick: async () => { try { const r = await api(`/encounters/${encounter.id}/clinic-reports/retry`, { method: 'POST' }); drawClinic(r.items); } catch (e) { fail(e); } } }, 'Retry failed WhatsApp delivery') : '');
-    drawClinic(view.clinic_deliveries || []);
-    const drawFiles = artifacts => files.replaceChildren(...artifacts.map(a => a.state === 'ready'
-      ? h('a', { class: 'btn btn-line btn-sm', href: `/api/v1/artifacts/${a.id}/download` }, a.kind === 'report_pdf' ? 'Download approved PDF' : 'Download FHIR bundles')
-      : h('span', { class: 'chip ' + (a.state === 'failed' ? 'miss' : 'muted'), text: `${a.kind === 'report_pdf' ? 'PDF' : 'FHIR'}: ${a.state}` })));
-    drawFiles(view.artifacts);
-    if (view.artifacts.some(a => ['pending', 'running'].includes(a.state))) {
-      const pollFiles = async () => {
-        try { const { items } = await api(`/encounters/${encounter.id}/artifacts`); const mine = items.filter(a => a.version === view.version); drawFiles(mine);
-          if (mine.some(a => ['pending', 'running'].includes(a.state))) ui.pollTimer = setTimeout(pollFiles, 2500); } catch (e) { /* keep the page */ }
-      };
-      stopPolling(); ui.pollTimer = setTimeout(pollFiles, 2000);
-    }
-    approvePanel = h('section', { class: 'panel stack' },
-      h('div', { class: 'approved' }, svg(ICON.check), h('span', {}, h('b', { text: `Approved version ${view.version}` }),
-        ` by ${view.approval?.approver_name || 'the doctor'}, ${view.approval ? fmtTime(view.approval.approved_at) : ''}`)),
-      h('p', { class: 'muted small', text: 'Fingerprint ' + view.content_hash.slice(0, 12) + '. Follow-up and delivery have their own status.' }), files, clinicStatus,
-      h('a', { class: 'btn btn-line', href: `#/followup/${encounter.id}` }, 'Open patient follow-up'));
-  }
-
-  // Report, under the headings of an outpatient summary. A section's sentences run on as one paragraph; each
-  // stays selectable, so its sources are one click away. Advice reads one sentence a line, and review closes it.
-  const sentence = t => /[.!?]$/.test(t.trim()) ? t.trim() : t.trim() + '.';
-  const lineEl = (s, i, line) => { const ref = `${s}:${i}`;
-    return h('span', { class: 'line' + (flaggedLine(ref) ? ' flagged' : '') + (ui.selectedLine === ref ? ' sel' : ''), role: 'button', tabindex: '0',
-      dataset: { ref }, onclick: () => showLine(ref), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showLine(ref); } } },
-      h('span', { text: sentence(line.text) }), h('span', { class: 'cite', text: line.cites.join(', ') || 'no source' })); };
-  const reportPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'Report' }), h('p', { text: 'Select a sentence to see what it is based on.' })),
-    h('p', { class: 'opening', text: `Patient seen in the outpatient clinic on ${fmtDate(report.header.visit_date)}.` }),
-    view.report_groups.map(([title, sections]) => {
-      const lines = sections.flatMap(s => (report.sections[s] || []).map((line, i) => lineEl(s, i, line)));
-      const current = title === 'Present problem' && report.current_medicines.length
-        ? h('div', { class: 'section' }, h('h4', { text: 'Current medicines' }), report.current_medicines.map(t => h('p', { text: t }))) : '';
-      if (!lines.length) return current;
-      if (title === 'Review') return h('div', { class: 'section closing' }, lines);
-      return [h('div', { class: 'section ' + (title === 'Treatment advised' ? 'advice' : 'prose') }, h('h4', { text: title }),
-        title === 'Treatment advised' ? lines : h('p', {}, lines.flatMap((el, i) => i ? [' ', el] : [el]))), current];
-    }),
-    report.not_discussed.length ? h('p', { class: 'not-discussed', text: 'Not discussed: ' + report.not_discussed.join(', ') + '.' }) : '');
-
-  // Medicines
-  const slot = v => v && v !== '-' && Number(v) !== 0 ? h('span', { class: 'pill-n', text: v }) : h('span', { class: 'pill-z', text: v === '-' ? '·' : '0' });
-  const tableMeds = view.medication_views.filter(m => m.row);
-  const pickerHost = h('div');
-  const closePicker = () => { pickerHost.replaceChildren(); ui.picking = false; };
-  // Add a medicine nobody said, or change a medicine's instructions, from the keyboard (runbook D-122).
-  const openPicker = async med => {
-    ui.picking = true;
-    let shortlist = { conditions: [], items: [] };
-    if (!med) {
-      ui.shortlists ||= {};
-      try { shortlist = ui.shortlists[encounter.id] ||= await api(`/encounters/${encounter.id}/shortlist`); } catch (e) { fail(e); }
-    }
-    const taken = view.medication_views.map(m => m.product_id).filter(Boolean);
-    pickerHost.replaceChildren(medicinePicker({ shortlist, med, taken, number: tableMeds.length + 1, onCancel: closePicker, onSave: r => {
-      // Saving a new medicine opens the picker again for the next one, until Esc.
-      if (!med) { ui.chainPicker = true; return submit([{ action: 'add_medicine', target: 'new', reason: 'Added by the doctor.', value: {
-        product_id: r.product.product_id, dose: r.dose, schedule: r.schedule, food: r.food, duration: r.duration } }]); }
-      const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-      const changes = [];
-      if (!same(r.dose, med.dose)) changes.push({ action: 'set_dose', value: r.dose });
-      if (!same(r.schedule, med.schedule)) changes.push({ action: 'set_timing', value: { schedule: r.schedule } });
-      if (r.food && r.food !== med.food) changes.push({ action: 'set_food', value: { food: r.food } });
-      if (!same(r.duration, med.duration)) changes.push({ action: 'set_duration', value: r.duration });
-      if (!changes.length) return closePicker();
-      submit(changes.map(c => ({ ...c, target: med.id, reason: DONE_REASON[c.action] })));
-    } }));
-  };
-  const addButton = canEdit ? h('button', { class: 'btn btn-line btn-sm', type: 'button', title: 'Shortcut: space bar', onclick: () => openPicker() }, 'Add medicine', h('kbd', { class: 'kbd', text: 'Space' })) : '';
-  const medsPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'Prescription' }),
-    h('div', { class: 'row' }, h('p', { text: tableMeds.length ? 'Morning · Afternoon · Evening · Night' : 'No medicines started or changed.' }), addButton)),
-    pickerHost,
-    tableMeds.length ? h('div', { class: 'wrapx' }, h('table', { class: 'meds' },
-      h('thead', {}, h('tr', {}, h('th', { text: 'Medicine' }), ['M', 'A', 'E', 'N'].map(x => h('th', { class: 's', text: x })))),
-      h('tbody', {}, tableMeds.map(m => {
-        const cell = h('td', {},
-          h('span', { class: 'mname', text: m.row.label }), h('span', { class: 'how', text: m.row.detail }),
-          Object.keys(m.filled || {}).length ? h('div', { class: 'attrs' }, filledChips(m)) : '',
-          m.row.flags.length ? h('div', { class: 'attrs' }, m.row.flags.map(f => h('span', { class: 'chip miss', text: f.replaceAll('_', ' ') }))) : '',
-          canEdit && m.standard?.length ? h('div', { class: 'standard' }, h('span', { class: 'chip iris', text: 'Standard' }), standardText(m),
-            h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => submit(standardItems(m, m.standard)) }, 'Accept')) : '',
-          h('div', { class: 'acts' },
-            canEdit && m.match === 'exact' ? h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => openPicker(m) }, 'Edit instructions') : '',
-            canEdit ? ['choose_product', ...(m.match === 'exact' ? [] : ['set_dose', 'set_timing', 'set_food', 'set_duration']),
-              ...(m.speaker_unclear ? ['confirm_order'] : []), 'remove_medicine']
-              .filter(a => a !== 'choose_product' || m.match !== 'exact' || m.candidates.length > 1)
-              .map(a => h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => act(a, m.id, cell) }, ACTION_TEXT[a])) : '',
-            view.capabilities.knowledge && (m.product_id || m.candidates.length) ? h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => openReference({ encounter, med: m }) }, 'Reference') : ''));
-        return h('tr', {}, cell, m.row.grid.map(v => h('td', { class: 's' }, slot(v))));
-      })))) : '');
-
-  // Issues
-  const issuesPanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'To review' }),
-    h('p', { text: view.issue_views.length ? `${view.blocking_count} blocking · ${view.issue_views.length - view.blocking_count} warnings` : 'Nothing flagged' })),
-    canEdit && withStandard.length ? h('div', { class: 'standard-all' }, h('b', { text: 'Standard instructions for what wasn’t said' }),
-      withStandard.map(m => h('p', { text: `${m.product_label || m.spoken_name}: ${standardText(m)}` })),
-      h('p', { class: 'muted small', text: 'Usual directions for these medicines. Not yet reviewed by a clinician.' }),
-      h('button', { class: 'btn btn-dark btn-sm', type: 'button', onclick: () => submit(withStandard.flatMap(m => standardItems(m, m.standard))) },
-        withStandard.length > 1 ? `Accept all ${withStandard.length}` : 'Accept')) : '',
-    view.issue_views.map(issue => {
-      const card = h('div', { class: 'issue ' + issue.severity },
-        h('span', { class: 'sev', text: issue.actions.includes('confirm_interpretation') ? 'Needs review' : issue.severity === 'block' ? 'Must fix' : 'Warning' }), h('b', { text: issue.title }),
-        h('p', { class: 'where', text: describe(issue) }),
-        issue.actions.includes('confirm_interpretation') ? h('p', { class: 'muted small', text: 'Choose Correct if this is accurate as written, or edit/remove it.' }) : '',
-        issue.title !== issue.message && !issue.message.startsWith(issue.code.replaceAll('_', ' ')) ? h('p', { class: 'where', text: issue.message }) : '');
-      const med = issue.target_kind === 'medicine' ? medById[issue.target] : null;
-      if (canEdit && med?.suggestions?.length && PRODUCT_CODES.includes(issue.code)) card.append(suggestionList(med, card, issue));
-      // An instruction said away from its medicine: use it as heard, in one click.
-      if (canEdit && issue.uses?.length) card.append(h('div', { class: 'choices' }, issue.uses.map(u => h('button', {
-        class: 'btn btn-sm btn-dark', type: 'button',
-        onclick: () => submit([{ ...u.item, target: issue.target, reason: `Said “${u.label.slice(5, -1)}” for this medicine; confirmed by the doctor.` }]) }, u.label))));
-      // Accept leads; the rest are ways to edit.
-      const ordered = [...issue.actions.filter(a => ONE_CLICK.includes(a)), ...issue.actions.filter(a => !ONE_CLICK.includes(a))];
-      if (canEdit && issue.actions.length) card.append(h('div', { class: 'choices' }, ordered.map(a => h('button', {
-        class: 'btn btn-sm ' + (ONE_CLICK.includes(a) ? 'btn-dark' : 'btn-line'), type: 'button',
-        onclick: () => (a === 'edit_line' || a === 'remove_line') && issue.target_kind === 'finding'
-          ? (issue.lines[0] ? (showLine(issue.lines[0]), openEditor(a, issue.lines[0], evidence)) : null)
-          : act(a, issue.target, card, issue) }, ACTION_TEXT[a]))));
-      else if (issue.target_kind === 'line') card.append(h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => showLine(issue.target) }, 'Show line'));
-      return card;
-    }));
-
-  const spoken = encounter.source?.kind === 'audio';
-  const sourcePanel = h('section', { class: 'panel' }, h('div', { class: 'ph' }, h('h3', { text: 'What was said' }),
-    h('p', { text: encounter.source ? (spoken ? `Gnani Prisma transcript of a ${clock(encounter.source.duration_s * 1000)} recording` : `Typed source v${encounter.source.version}`)
-      + ` · ${LANG[encounter.source.language] || encounter.source.language}` : '' })),
-    spoken ? h('audio', { controls: true, preload: 'none', src: encounter.source.audio_url, class: 'player' }) : '', transcript);
-
-  evidence.replaceChildren(h('h3', { text: 'Evidence' }), h('p', { class: 'muted small', text: 'Select a report line to see the quotes it rests on.' }));
-  main().replaceChildren(...header(encounter, stateChip(draft ? 'in_review' : 'approved', view.blocking_count)),
-    patientJourneyPanel(encounter.patient.id),
-    h('div', { class: 'review' },
-      h('div', { class: 'stack' }, approvePanel, reportPanel, medsPanel, sourcePanel),
-      h('div', { class: 'aside' }, issuesPanel, evidence)));
-  drawTranscript([]);
-  if (ui.selectedLine && report.sections[ui.selectedLine.split(':')[0]]?.[Number(ui.selectedLine.split(':')[1])]) showLine(ui.selectedLine);
-  else ui.selectedLine = null;
-  ui.picking = false;
-  ui.addMedicine = canEdit ? { open: () => { medsPanel.scrollIntoView({ block: 'start' }); openPicker(); }, host: pickerHost } : null;
-  if (ui.chainPicker) { ui.chainPicker = false; if (ui.addMedicine) ui.addMedicine.open(); }
-}
-
-// The space bar on a review screen opens the medicine picker with the visit's common choices, unless the doctor
-// is typing or has a button or link selected (where space presses it).
-document.addEventListener('keydown', e => {
-  const busy = ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(document.activeElement?.tagName);
-  if (e.key === ' ' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !busy && !ui.picking
-      && ui.addMedicine && document.contains(ui.addMedicine.host)) {
-    e.preventDefault();
-    ui.addMedicine.open();
-  }
+$("#signOut").addEventListener("click", async () => { try { await api.logout(); } catch (_) {} toLogin(); });
+$("#search").addEventListener("input", e => {
+  clearTimeout(state.searchT);
+  state.searchT = setTimeout(() => { state.q = e.target.value.trim(); $("#plist") ? loadList() : (location.hash = "#/patients"); }, 250);
 });
-
-// ---------- Follow-up: the real agent, with a clearly labelled synthetic patient simulator ----------
-
-function patientCommunicationPanel(patient) {
-  if (!session.capabilities.resolve) return '';
-  const phone = h('input', { class: 'input', type: 'tel', autocomplete: 'off', placeholder: 'Country code and WhatsApp number', 'aria-label': 'Patient WhatsApp number' });
-  const language = h('select', { class: 'input', 'aria-label': 'Patient native language' },
-    ['hi-IN','en-IN','ta-IN','te-IN','gu-IN'].map(code => h('option', { value: code, selected: code === patient.language_pref }, LANG[code])));
-  const consent = h('input', { type: 'checkbox' });
-  const status = h('p', { class: 'muted small', role: 'status' });
-  return h('details', { class: 'panel stack' }, h('summary', { text: 'Patient WhatsApp and native language' }),
-    h('p', { class: 'muted small', text: 'The patient verifies the connection once using the private invitation on an approved visit. Later approved reports use that same connection. This private test server accepts its configured test numbers.' }),
-    h('label', { class: 'field' }, h('span', { text: 'WhatsApp number' }), phone),
-    h('label', { class: 'field' }, h('span', { text: 'Native language for future prescriptions and requested audio' }), language),
-    h('label', { class: 'consent' }, consent, 'The patient agreed to WhatsApp delivery and follow-up.'),
-    h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
-      if (!consent.checked) { status.textContent = 'Confirm patient consent first.'; return; }
-      try { const result = await api(`/patients/${patient.id}/whatsapp-target`, { method: 'POST', body: { phone: phone.value, language: language.value, consent_confirmed: true } });
-        phone.value = ''; status.textContent = result.linked ? 'Verified WhatsApp connection retained. Preference saved for future visits.' : 'Target saved. After approval, open patient follow-up and let the patient send the private JOIN invitation once.';
-      } catch (e) { status.textContent = e.message; }
-    } }, 'Save communication preferences'), status);
-}
-
-function patientJourneyPanel(patientId) {
-  if (!session.capabilities.resolve) return '';
-  const panel = h('section', { class: 'panel stack patient-journey', 'aria-label': 'Patient history for this visit' },
-    h('h3', { text: 'Between visits' }), h('p', { class: 'muted small', text: 'Loading patient questions and lab history…' }));
-  async function load() {
-    try {
-      const data = await api(`/patients/${patientId}/journey`);
-      panel.replaceChildren(h('div', { class: 'ph' }, h('h3', { text: 'Between visits' }),
-        h('span', { class: 'chip ' + (data.whatsapp.linked && !data.whatsapp.opted_out ? 'ok' : 'muted'), text: data.whatsapp.opted_out ? 'WhatsApp stopped' : data.whatsapp.linked ? 'WhatsApp verified' : 'WhatsApp not yet linked' })),
-        h('p', { class: 'muted small', text: 'Patient-reported questions and uploaded reports across visits. These do not change the approved clinical record.' }),
-        h('details', { open: data.tasks.some(t => t.status === 'open') },
-          h('summary', { text: `Patient questions and requests · ${data.questions.length}` }),
-          ...data.questions.slice(0, 30).map(q => h('article', { class: 'history-entry' },
-            h('small', { class: 'muted', text: `${fmtTime(q.at)} · ${q.source || 'patient'} · ${q.action}` }),
-            h('p', { class: 'followup-text', text: q.question }),
-            q.reply ? h('details', {}, h('summary', { text: 'What the assistant replied' }), h('p', { class: 'followup-text', text: q.reply })) : '',
-            h('a', { href: `#/followup/${q.encounter_id}`, text: 'Conversation and doctor tasks' }))),
-          data.questions.length ? '' : h('p', { class: 'muted', text: 'No patient questions recorded yet.' })),
-        h('details', { open: data.uploads.some(u => !u.reviewed_at) }, h('summary', { text: `Lab reports and other uploads · ${data.uploads.length}` }),
-          ...data.uploads.map(u => h('article', { class: 'history-entry stack' },
-            h('small', { class: 'muted', text: fmtTime(u.received_at) + ' · ' + (u.reviewed_at ? 'Reviewed ' + fmtTime(u.reviewed_at) : 'Awaiting doctor review') }),
-            h('p', { class: 'followup-text', text: u.summary }),
-            h('div', { class: 'row' }, h('a', { class: 'btn btn-line btn-sm', href: u.download_url, text: 'Open original report' }),
-              !u.reviewed_at ? h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: async () => {
-                try { await api(`/patient-uploads/${u.id}/review`, { method: 'POST' }); await load(); } catch (e) { fail(e); }
-              } }, 'Mark reviewed') : ''))),
-          data.uploads.length ? '' : h('p', { class: 'muted', text: 'No uploaded reports yet.' })));
-    } catch (e) { panel.replaceChildren(h('h3', { text: 'Between visits' }), h('p', { class: 'err', text: e.message })); }
-  }
-  load(); return panel;
-}
-
-async function showFollowupTasks() {
-  main().replaceChildren(h('p', { class: 'muted', text: 'Loading follow-up tasks…' }));
+async function loadTasks() {
   try {
-    const { items } = await api('/followup/tasks');
-    main().replaceChildren(h('h1', { text: 'Patient follow-ups' }),
-      h('p', { class: 'muted', text: 'Patient-reported questions and problems. These do not change the approved prescription.' }),
-      ...items.map(t => h('section', { class: 'panel stack' }, h('span', { class: 'chip ' + (t.kind === 'urgent' ? 'miss' : 'off'), text: t.kind.replaceAll('_', ' ') }),
-        h('h3', { text: t.patient_name }), h('p', { class: 'followup-text', text: t.note }),
-        h('a', { class: 'btn btn-line', href: `#/followup/${t.encounter_id}` }, 'Open conversation'))),
-      items.length ? '' : h('p', { class: 'panel', text: 'No open follow-up tasks.' }));
-  } catch (e) { fail(e); }
+    state.tasks = items(await api.tasks()).filter(t => t.status !== "done");
+    const c = $("#taskCount"); c.textContent = state.tasks.length; c.hidden = !state.tasks.length;
+  } catch (_) { state.tasks = []; }
 }
 
-async function showFollowup(encounterId) {
-  const base = `/encounters/${encounterId}/followup`;
-  const title = h('h1', { text: 'Patient follow-up' });
-  const status = h('p', { class: 'muted', role: 'status' });
-  const transcript = h('div', { class: 'followup-messages stack', tabindex: '0', 'aria-label': 'Follow-up conversation' });
-  const tasks = h('section', { class: 'panel stack', 'aria-label': 'Doctor follow-up tasks' });
-  const join = h('p', { class: 'followup-text' });
-  const delivery = h('section', { class: 'panel stack', 'aria-label': 'Patient delivery status' });
-  const consent = h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
-    try { await api(base + '/consent', { method: 'POST', body: { enabled: true } }); await refresh(); }
-    catch (e) { fail(e); }
-  } }, 'Record consent for synthetic follow-up');
-  consent.hidden = true;
-  const input = h('input', { class: 'input', maxlength: '2000', placeholder: 'Try DOCTOR, STOP, or a medicine question', 'aria-label': 'Simulated patient reply' });
-  const send = h('button', { class: 'btn btn-dark', type: 'submit' }, 'Send simulated reply');
-  const simulator = h('form', { class: 'panel stack followup-simulator', onsubmit: async e => {
-    e.preventDefault(); if (!input.value.trim()) return;
-    await reply({ text: input.value.trim() });
-  } }, h('h3', { text: 'Simulate the patient' }),
-  h('p', { class: 'muted small', text: 'Local synthetic conversation. No WhatsApp message is sent.' }), input, send,
-  h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
-    try { const result = await api(base + '/advance', { method: 'POST' }); if (active) { draw(result); if (!result.advanced) toast('No further scheduled check-in.'); } }
-    catch (e) { fail(e); }
-  } }, 'Simulate next scheduled check-in'));
-  const reportFile = h('input', { type: 'file', accept: 'application/pdf,image/png,image/jpeg,image/webp', 'aria-label': 'Synthetic patient report' });
-  reportFile.addEventListener('change', async () => {
-    const file = reportFile.files[0]; if (!file) return;
-    if (file.size > 10000000) { toast('Reports must be under 10 MB.', true); return; }
+/* =================================================================
+   Hospitals and doctors
+   ================================================================= */
+async function renderWorkspace() {
+  view().innerHTML = `<div class="page narrow"><div class="skel tall w40"></div><div class="skel"></div></div>`;
+  const list = items(await api.hospitals());
+  const hid = state.hospital;
+  if (!hid) {
+    view().innerHTML = `<div class="page wide"><header class="page-head center"><h1>Choose a hospital</h1><p>Pick where you're working today.</p></header>
+      <ul class="choice-grid">${list.map(h => `<li><button class="choice" data-h="${esc(h.id)}"><span class="avatar doc big">${esc(initials(h.name))}</span><b>${esc(h.name)}</b><span>${esc(h.city || (h.doctor_count != null ? h.doctor_count + " doctors" : ""))}</span></button></li>`).join("")}</ul>
+      ${list.length ? "" : `<div class="panel first"><h3>No hospitals yet</h3><p>Ask the workspace owner to add one.</p></div>`}</div>`;
+    $$("[data-h]").forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      try { session = adapt.session({ ...session, ...(await api.select({ hospital_id: b.dataset.h })) }); csrf = session.csrf_token || csrf; state.hospital = b.dataset.h; renderShell(); await renderWorkspace(); }
+      catch (x) { toast(x.message); b.disabled = false; }
+    });
+    swap(); return;
+  }
+  const d = await api.doctors(hid), doctors = items(d).map(adapt.doctor), hospital = d.hospital || list.find(h => h.id === hid) || {};
+  view().innerHTML = `<div class="page wide">
+    <header class="page-head"><button class="link-btn" id="backH">All hospitals</button><h1>${esc(hospital.name)}</h1><p>Choose the doctor to work as. Their patients open next.</p></header>
+    <ul class="choice-grid doctors">${doctors.map(x => `<li><button class="choice row-choice" data-d="${esc(x.id)}"><span class="avatar doc">${esc(initials(x.name))}</span><span><b>${esc(x.name)}</b><span>${esc(x.specialty || "")}</span></span></button></li>`).join("")}</ul>
+    ${doctors.length ? "" : `<p class="hint">No doctors here yet. Add the first one below.</p>`}
+    <section class="panel addform" aria-label="Add a doctor"><h3>Add a doctor</h3>
+      <form id="addDoc" class="form-grid three" novalidate>
+        <label class="field"><span>Full name</span><input class="input" name="name" required autocomplete="off"></label>
+        <label class="field"><span>Specialty</span><input class="input" name="specialty" required autocomplete="off"></label>
+        <label class="field"><span>Registration number (optional)</span><input class="input" name="registration_no" autocomplete="off"></label>
+        <p class="err span-all" id="docErr" role="alert"></p>
+        <div class="span-all"><button class="btn btn-dark">${ICON.plus}Add doctor</button></div>
+      </form></section></div>`;
+  $("#backH").onclick = () => { state.hospital = null; renderWorkspace(); };
+  $$("[data-d]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
     try {
-      const response = await fetch('/api/v1' + base + '/documents', { method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': file.type, 'X-CSRF-Token': session.csrf_token }, body: file });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error?.message || 'Upload failed');
-      if (active) draw(result);
-    } catch (e) { fail(e); } finally { reportFile.value = ''; }
+      session = adapt.session({ ...session, ...(await api.select({ hospital_id: hid, doctor_id: b.dataset.d })) });
+      csrf = session.csrf_token || csrf; if (!session.doctor) session.doctor = doctors.find(x => x.id === b.dataset.d);
+      if (!session.hospital) session.hospital = hospital;
+      renderShell(); state.selected = null; state.tab = "today"; await loadTasks(); location.hash = "#/patients";
+    } catch (x) { toast(x.message); b.disabled = false; }
   });
-  simulator.append(h('label', { class: 'stack' }, 'Send a synthetic report for doctor review', reportFile));
-  simulator.hidden = true;
-  const memory = h('section', { class: 'panel stack' }, h('h3', { text: 'Patient-reported history' }));
-  async function loadMemory() {
-    const result = await api(base + '/memory');
-    if (!active) return;
-    memory.replaceChildren(h('h3', { text: 'Patient-reported history' }),
-      h('p', { class: 'muted small', text: 'Unreviewed patient statements and uploaded report readings. These are separate from the approved visit.' }),
-      ...result.items.map(i => h('p', { class: 'followup-text', text: `${i.kind.replaceAll('_', ' ')}: ${i.text}` })),
-      ...result.documents.map(d => h('details', {}, h('summary', { text: d.reading.report_type || 'Uploaded report' }),
-        h('p', { class: 'followup-text', text: d.reading.transcription }),
-        ...d.reading.findings.map(f => h('p', { text: `${f.name}: ${f.value} ${f.unit || ''} · ${f.flag || 'flag unspecified'} · “${f.quote}”` })))));
-  }
-  let active = true;
-  ui.cleanup = () => { active = false; };
-  const start = h('button', { class: 'btn btn-line', type: 'button', onclick: async () => {
-    start.disabled = true;
+  $("#addDoc").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, err = $("#docErr");
+    if (!f.name.value.trim() || !f.specialty.value.trim()) { err.textContent = "Enter the doctor's name and specialty."; return; }
     try {
-      const result = await api(base, { method: 'POST' });
-      if (active) { join.replaceChildren(result.whatsapp_configured ? `Private invitation (valid once for 24 hours): ${result.join_command}` : '',
-        result.join_url ? h('a', { class: 'btn btn-line', href: result.join_url, target: '_blank', rel: 'noopener', text: 'Open WhatsApp connection message' }) : ''); draw(result); }
-    } catch (e) { fail(e); } finally { start.disabled = false; }
-  } }, 'Start follow-up');
-  async function reply(body) {
-    send.disabled = true;
-    try { const result = await api(base + '/messages', { method: 'POST', body }); if (active) { input.value = ''; draw(result); } }
-    catch (e) { fail(e); } finally { send.disabled = false; }
-  }
-  function draw(result) {
-    const c = result.conversation;
-    title.textContent = c ? `${c.patient_name} · Follow-up` : 'Patient follow-up';
-    consent.hidden = Boolean(c) || !result.reason?.includes('consent');
-    status.textContent = c ? `Approved visit · ${LANG[c.language] || c.language} · ${c.plan.channel === 'simulated' ? 'Local simulator · no external delivery' : 'WhatsApp · ' + result.delivery}` : result.reason;
-    delivery.replaceChildren(h('h3', { text: 'Report and requested audio' }),
-      ...(result.deliveries || []).map(job => h('p', {}, h('b', { text: job.kind === 'report_pdf' ? 'Approved PDF: ' : `Prescription audio (${LANG[job.language] || job.language}): ` }),
-        job.state.replaceAll('_', ' '), job.error ? ' · ' + job.error : '')),
-      h('p', { class: 'muted small', text: 'Approval queues the PDF. The patient can ask VOICE for their native-language prescription audio. Outside the WhatsApp reply window, delivery waits for a patient message.' }));
-    start.textContent = c ? 'Refresh private WhatsApp invitation' : 'Start follow-up';
-    start.hidden = Boolean(c?.stopped) || Boolean(c && !result.whatsapp_configured);
-    simulator.hidden = !c || c.stopped || c.plan.channel !== 'simulated';
-    transcript.replaceChildren(...(c?.messages || []).map(m => h('section', { class: `panel stack followup-message ${m.sender}` },
-      h('b', { text: m.sender === 'clinic' ? 'Clinic assistant' : 'Synthetic patient' }),
-      h('p', { class: 'followup-text', text: m.text }),
-      h('small', { class: 'muted', text: fmtTime(m.at) + (m.cites.length ? ' · Approved medicine: ' + m.cites.join(', ') : '') }),
-      ...(result.receipts || []).filter(r => r.message_ref === m.id).map(r => h('span', { class: 'chip muted', text: 'WhatsApp: ' + r.status })),
-      m.sender === 'clinic' && m === c.messages.at(-1) && c.plan.channel === 'simulated' && !c.stopped
-        ? h('div', { class: 'row' }, m.buttons.map(b => h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => reply({ button: b.id }) }, b.label))) : '')));
-    const open = (c?.tasks || []).filter(t => t.status === 'open');
-    tasks.replaceChildren(h('h3', { text: 'Doctor follow-up tasks' }), ...open.map(t => h('div', { class: 'stack' },
-      h('b', { text: t.kind.replaceAll('_', ' ') }), h('p', { class: 'followup-text', text: t.note }),
-      h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: async () => {
-        try { await api(`${base}/tasks/${t.id}/done`, { method: 'POST' }); await refresh(); } catch (e) { fail(e); }
-      } }, 'Mark reviewed'))), open.length ? '' : h('p', { class: 'muted', text: 'No open tasks.' }));
-    if (c?.stopped) status.textContent += ' · Patient stopped follow-up';
-    transcript.scrollTop = transcript.scrollHeight;
-    if (c) loadMemory().catch(fail);
-  }
-  async function refresh() { const result = await api(base); if (active) draw(result); }
-  main().replaceChildren(h('a', { class: 'crumb', href: `#/encounters/${encounterId}` }, '← Approved visit'),
-    title, status, consent, start, join, delivery, transcript, simulator, tasks, memory,
-    h('button', { class: 'btn btn-line', type: 'button', onclick: () => refresh().catch(fail) }, 'Refresh conversation'));
-  try { await refresh(); } catch (e) { fail(e); }
-}
-
-// ---------- Reference drawer (DESIGN.md section 10: beside the record, never in it) ----------
-
-function openReference(context) {
-  const drawer = document.getElementById('drawer');
-  const name = context?.med ? (context.med.product_label || context.med.spoken_name) : null;
-  const question = h('input', { class: 'input', placeholder: 'Ask about a medicine', value: name ? `What is ${context.med.spoken_name} used for?` : '' });
-  const results = h('div');
-  const note = h('p', { class: 'note', text: 'Reference passages from US drug labels (openFDA), India’s NLEM 2022 and the Jan Aushadhi list. They are not part of the record and are not checked against this patient.' });
-  const ask = async q => {
-    if (!q.trim()) return;
-    results.replaceChildren(h('p', { class: 'muted', text: 'Searching…' }));
-    try {
-      const data = await api('/knowledge/search', { method: 'POST', body: { question: q,
-        ...(context?.med ? { encounter_id: context.encounter.id, medication_id: context.med.id } : {}) } });
-      put(results,
-        data.scope ? h('p', { class: 'muted small', text: 'Limited to: ' + (data.scope.ingredients.join(', ') || 'no known ingredients') }) : '',
-        data.results.length ? data.results.map(r => {
-          const long = r.content.length > 520;
-          const body = h('p', { text: long ? r.content.slice(0, 520) + '…' : r.content });
-          return h('article', { class: 'hit' }, h('header', {}, h('span', { class: 'chip muted', text: SOURCE_TEXT[r.source] || r.source }),
-            h('b', { text: r.title }), h('span', { class: 'muted small', text: r.section })), body,
-            h('div', { class: 'row' }, long ? h('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: e => { body.textContent = r.content; e.currentTarget.remove(); } }, 'Show all') : '',
-              r.url ? h('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' }, 'Source ↗') : ''));
-        }) : h('p', { class: 'muted', text: 'No reference passage found. Nothing is assumed.' }));
-    } catch (e) { results.replaceChildren(h('p', { class: 'err', text: e.message })); }
+      await api.addDoctor(hid, { name: f.name.value.trim(), specialty: f.specialty.value.trim(), registration_no: f.registration_no.value.trim() || undefined });
+      toast("Doctor added."); await renderWorkspace();
+    } catch (x) { err.textContent = x.message; }
   };
-  const quick = ['Uses', 'Dose', 'Interactions', 'Pregnancy', 'Side effects'].map(topic => h('button', { class: 'btn btn-line btn-sm', type: 'button',
-    onclick: () => { question.value = name ? `${context.med.spoken_name} ${topic.toLowerCase()}` : topic; ask(question.value); } }, topic));
-  question.addEventListener('keydown', e => { if (e.key === 'Enter') ask(question.value); });
-  drawer.replaceChildren(h('div', { class: 'ph' }, h('h3', { text: 'Reference' }),
-    h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => drawer.classList.remove('open') }, 'Close')),
-    name ? h('p', { class: 'muted small', text: name }) : '', note, question, h('div', { class: 'row quick' }, quick), results);
-  drawer.classList.add('open');
-  question.focus();
-  if (name) ask(question.value);
+  swap();
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('drawer')?.classList.remove('open'); });
+/* =================================================================
+   Register a patient
+   ================================================================= */
+const PATIENT_LANGS = [["english", "English"], ["hindi", "Hindi"], ["tamil", "Tamil"], ["telugu", "Telugu"], ["gujarati", "Gujarati"]];
+const SPOKEN = [["hinglish", "Hinglish"], ...PATIENT_LANGS];
+const langName = c => (SPOKEN.find(l => l[0] === c) || [c, cap(c)])[1];
+async function renderRegister() {
+  const docs = session.admin && session.hospital ? items(await api.doctors(session.hospital.id)).map(adapt.doctor) : session.doctor ? [adapt.doctor(session.doctor)] : [];
+  view().innerHTML = `<div class="page narrow">
+    <header class="page-head"><h1>Register a patient</h1><p>Added to ${esc(session.hospital?.name || "this hospital")}. Use made-up details only: this is a synthetic demo.</p></header>
+    <form class="panel" id="reg" novalidate>
+      <div class="form-grid">
+        <label class="field span-all"><span>Full name</span><input class="input" name="name" required autocomplete="off"></label>
+        <label class="field"><span>Assigned doctor</span><select class="select" name="doctor_id">${docs.map(d => `<option value="${esc(d.id)}"${d.id === session.doctor?.id ? " selected" : ""}>${esc(d.name)}</option>`).join("")}</select></label>
+        <div class="field"><span>Phone with country code</span><div class="phone"><select class="select" name="cc" aria-label="Country code"><option value="+91">+91</option><option value="+1">+1</option><option value="+44">+44</option><option value="+971">+971</option></select><input class="input" name="phone" inputmode="tel" aria-label="Phone number" autocomplete="off"></div></div>
+        <label class="field"><span>Preferred language</span><select class="select" name="language">${PATIENT_LANGS.map(([c, n]) => `<option value="${c}">${n}</option>`).join("")}</select></label>
+        <label class="field"><span>Year of birth</span><input class="input" name="birth_year" type="number" min="1900" max="${new Date().getFullYear()}" inputmode="numeric"></label>
+        <label class="field"><span>Sex</span><select class="select" name="sex"><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
+        <fieldset class="field span-all"><legend>Allergies</legend><div class="toggles">
+          <label><input type="radio" name="allergy_status" value="unknown" checked>Not asked yet</label>
+          <label><input type="radio" name="allergy_status" value="none">No known allergies</label>
+          <label><input type="radio" name="allergy_status" value="known">Has allergies</label>
+        </div></fieldset>
+        <label class="field span-all" id="allergyBox" hidden><span>Known allergies, separated by commas</span><input class="input" name="allergies" autocomplete="off"></label>
+      </div>
+      <fieldset class="consents"><legend>Patient's agreement</legend>
+        <label class="consent"><input type="checkbox" name="ai_consent"> <span><b>AI processing.</b> ARDAI can draft reports from this patient's visits. Required.</span></label>
+        <label class="consent"><input type="checkbox" name="recording_consent"> <span><b>Recording.</b> Visits can be recorded.</span></label>
+        <label class="consent"><input type="checkbox" name="whatsapp_consent"> <span><b>WhatsApp.</b> Approved reports and check-ins go to this number. Demo test numbers only.</span></label>
+      </fieldset>
+      <p class="err" id="regErr" role="alert"></p>
+      <div class="row"><button class="btn btn-dark" id="regGo">Register patient</button><a class="btn btn-line" href="#/patients">Cancel</a></div>
+    </form></div>`;
+  const f = $("#reg");
+  f.querySelectorAll("[name=allergy_status]").forEach(r => r.onchange = () => $("#allergyBox").hidden = f.allergy_status.value !== "known");
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const err = $("#regErr"), bad = (m, el) => { err.textContent = m; el?.focus(); };
+    const phone = f.phone.value.replace(/[^\d]/g, ""), year = +f.birth_year.value;
+    if (!f.name.value.trim()) return bad("Enter the patient's name.", f.name);
+    if (phone.length < 6) return bad("Enter a phone number.", f.phone);
+    if (!(year >= 1900 && year <= new Date().getFullYear())) return bad("Enter a year of birth, like 1980.", f.birth_year);
+    if (f.allergy_status.value === "known" && !f.allergies.value.trim()) return bad("List the allergies.", f.allergies);
+    if (!f.ai_consent.checked) return bad("AI processing agreement is needed to register.", f.ai_consent);
+    err.textContent = ""; const b = $("#regGo"); b.disabled = true; b.textContent = "Registering";
+    try {
+      const r = await api.register({
+        name: f.name.value.trim(), phone: f.cc.value + phone, language: f.language.value, doctor_id: f.doctor_id.value, birth_year: year, sex: f.sex.value,
+        allergy_status: f.allergy_status.value, allergies: f.allergies.value.split(",").map(s => s.trim()).filter(Boolean),
+        ai_consent: f.ai_consent.checked, recording_consent: f.recording_consent.checked, whatsapp_consent: f.whatsapp_consent.checked
+      });
+      toast("Patient registered."); state.tab = "all"; location.hash = `#/patients/${r.id ?? r.patient_id ?? r.patient?.id}`;
+    } catch (x) { err.textContent = x.message; b.disabled = false; b.textContent = "Register patient"; }
+  };
+  swap();
+}
 
-// ---------- Start ----------
+/* =================================================================
+   Patients: sidebar + main
+   ================================================================= */
+function ensureLayout() {
+  if ($("#main")) return;
+  const h = new Date().toLocaleString("en-IN", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" });
+  const name = (session.doctor?.display_name || session.doctor?.name || "").replace(/^(Dr\.?\s+)(\S+)\s+/, "$1");
+  view().innerHTML = `<div class="layout">
+    <aside class="side" aria-label="Patients">
+      <div class="hello"><h1>${+h < 12 ? "Good morning" : +h < 17 ? "Good afternoon" : "Good evening"}${name ? ", " + esc(name) : ""}</h1><p>${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}</p></div>
+      <section class="attention" id="attention" aria-label="Needs your attention" hidden></section>
+      <div class="tabs" role="tablist" aria-label="Patient list"><button role="tab" data-tab="today">Today</button><button role="tab" data-tab="all">All patients</button></div>
+      <ul class="plist" id="plist" aria-live="polite"></ul>
+    </aside>
+    <main class="main" id="main" tabindex="-1"></main></div>`;
+  $(".tabs").onclick = async e => { const b = e.target.closest("[data-tab]"); if (b) { state.tab = b.dataset.tab; await loadList(); } };
+  $("#plist").onclick = e => { const b = e.target.closest(".pitem"); if (b) location.hash = `#/patients/${b.dataset.id}`; };
+  $("#main").addEventListener("click", onMainClick);
+  swap();
+}
+async function loadList() {
+  $$(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === state.tab)));
+  try { state.rows = items(await api.patients(state.tab, state.q, session.admin ? session.doctor?.id : undefined)).map(adapt.patient); }
+  catch (x) { state.rows = []; $("#plist").innerHTML = `<li class="empty-list">Couldn't load patients. ${esc(x.message)} <button class="link-btn" id="retryList">Try again</button></li>`; $("#retryList").onclick = loadList; return; }
+  renderList(); renderAttention();
+}
+function rowState(p) {
+  if (p.visit_state === "in_review") return p.blocking_count ? `<span class="state warn"><span class="dot warn"></span>${p.blocking_count} to check</span>` : `<span class="state iris"><span class="dot iris"></span>Ready</span>`;
+  if (p.visit_state === "processing") return `<span class="state iris"><span class="dot iris"></span>Preparing</span>`;
+  const f = { on_track: ["ok", "On track"], slightly_off: ["warn", "Slightly off track"], missed: ["risk", "Missed doses"], no_reply: ["warn", "No reply"] }[p.followup_status];
+  return f ? `<span class="dot ${f[0]}" title="${f[1]}"><span class="sr">${f[1]}</span></span>` : "";
+}
+function renderList() {
+  const ul = $("#plist"); if (!ul) return;
+  if (!state.rows.length) {
+    ul.innerHTML = state.q ? `<li class="empty-list">No patient matches "${esc(state.q)}". Try a first name or an ID.</li>` : `<li class="empty-list">${state.tab === "today" ? "No visits today." : "No patients yet."} <a class="link-btn" href="#/register">Register a patient</a></li>`;
+    return;
+  }
+  ul.innerHTML = state.rows.map((p, i) => {
+    const sub = state.tab === "today" && p.reason ? p.reason : p.last_visit_date ? "Last seen " + fmtDate(p.last_visit_date).replace(/ \d{4}$/, "") : "No visits yet";
+    return `<li class="${state.fresh ? "stagger n" + Math.min(i, 7) : ""}"><button class="pitem" data-id="${esc(p.id)}" aria-current="${p.id === state.selected}">
+      <span class="avatar" aria-hidden="true">${p.appointment_time && state.tab === "today" ? esc(p.appointment_time) : esc(initials(p.name))}</span>
+      <span class="grow"><span class="name">${esc(p.name)}</span><span class="why">${esc(sub)}</span></span>${rowState(p)}</button></li>`;
+  }).join("");
+}
+function renderAttention() {
+  const box = $("#attention"); if (!box) return;
+  const list = state.tasks.slice(0, 4); box.hidden = !list.length;
+  box.innerHTML = `<h2>${ICON.alert}Needs your attention</h2>` + list.map(t => `<a href="#/followup/${esc(t.encounter_id)}"><b>${esc(t.patient_name || "Patient")}</b><span>${esc(t.title)}</span></a>`).join("");
+}
+const TODAY_ISO = () => window.VoiceRxMock?.today || new Date().toLocaleDateString("en-CA", { timeZone: session?.scope?.timezone || "Asia/Kolkata" });
 
-(async () => {
-  try { session = await api('/me'); startApp(); } catch (e) { renderLogin(); }
-})();
+async function openPatient(id, encId) {
+  state.fresh = !$("#main");
+  ensureLayout();
+  await loadList(); state.fresh = false;
+  id = id || state.rows[0]?.id;
+  const main = $("#main");
+  if (!id) { main.innerHTML = `<div class="panel first"><h3>No patients here yet</h3><p>Register your first patient to start a visit.</p><a class="btn btn-sun mt" href="#/register">${ICON.plus}Register patient</a></div>`; return; }
+  state.selected = id; renderList();
+  main.innerHTML = `<div class="panel" aria-busy="true"><div class="skel tall w40"></div><div class="skel"></div><div class="skel w80"></div></div>`;
+  const [det, journey] = await Promise.all([api.patient(id), api.journey(id)]);
+  if (state.selected !== id) return;
+  const encounters = [...(det.encounters || det.visits || [])].map(adapt.encounter).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const open = encounters.find(e => encId ? e.id === encId : e.date === TODAY_ISO());
+  const lastApproved = encounters.find(e => e.state === "approved" && e !== open);
+  const lastReport = lastApproved ? adapt.report(await api.report(lastApproved.id, lastApproved.approved_version)) : null;
+  const p = adapt.patient(det.patient || det);
+  state.patient = { ...p, encounters, journey, lastReport };
+  const row = state.rows.find(r => r.id === id);
+  state.visit = open ? { enc: open.id, phase: "loading" } : (state.tab === "today" && row) ? { phase: "idle", language: "hinglish" } : null;
+  renderPatient(true);
+  if (open) await resumeVisit(open);
+  main.focus({ preventScroll: true });
+}
+
+function allergyChip(a) {
+  if (a?.status === "known") return `<span class="chip risk">Allergic to ${esc((a.items || []).join(", "))}</span>`;
+  if (a?.status === "none") return `<span class="chip muted">No known allergies</span>`;
+  return `<span class="chip warn">Allergies not recorded yet</span>`;
+}
+function renderPatient(animate) {
+  const p = state.patient, v = state.visit, main = $("#main");
+  const past = p.encounters.filter(e => e.state === "approved" && e.id !== v?.enc);
+  main.innerHTML = `
+    <div class="phead">
+      <span class="avatar" aria-hidden="true">${esc(initials(p.name))}</span>
+      <div><h2>${esc(p.name)}</h2>
+        <ul class="facts">${p.age != null ? `<li>${esc(p.age)} years</li>` : ""}${p.sex ? `<li>${esc(cap(p.sex))}</li>` : ""}<li>ID ${esc(p.mrn || p.id)}</li>${p.language ? `<li>Speaks ${esc(langName(p.language))}</li>` : ""}${p.phone_last4 ? `<li>Phone ends ${esc(p.phone_last4)}</li>` : ""}<li>${allergyChip(p.allergies)}</li></ul>
+      </div>
+      ${!v ? `<div class="actions"><button class="btn btn-sun" data-act="new-visit">${ICON.mic}Start a new visit</button></div>` : ""}
+    </div>
+    <div class="stack">
+      ${v ? `<section class="visit-card" id="visit" aria-label="Today's visit"></section>` : ""}
+      ${briefHTML(p)}
+      ${past.length ? `<section class="panel" aria-label="Past visits"><div class="ph"><h3>Past visits</h3><p>${past.length} approved ${past.length === 1 ? "visit" : "visits"}</p></div>
+        <ul class="visits">${past.map(e => `<li class="visit" data-open="false" data-enc="${esc(e.id)}">
+          <button aria-expanded="false"><span class="vdate">${fmtDate(e.date)}</span><span class="vdx">${esc(e.diagnosis || e.complaint || "Visit")}</span><span class="vstate chip ok">Approved</span>${ICON.chev}</button>
+          <div class="vbody"><div><div class="inner"></div></div></div></li>`).join("")}</ul></section>` : ""}
+    </div>`;
+  if (v) renderVisit();
+  if (animate && !reduce) { main.classList.remove("swap"); void main.offsetWidth; main.classList.add("swap"); }
+}
+
+function briefHTML(p) {
+  const r = p.lastReport;
+  if (!r) return `<section class="panel first"><h3>First visit</h3><p>There's no earlier record for ${esc(first(p.name))}. Today's visit starts their record.</p></section>`;
+  const g = k => r.report_groups.find(x => x.key === k || x.heading?.toLowerCase().startsWith(k))?.lines.map(l => l.text).join(" ") || "";
+  return `<div class="grid2">
+    <section class="panel" aria-label="Since the last visit">
+      <div class="ph"><h3>Since the last visit</h3><p>${fmtDate(r.date)}</p></div>
+      <dl class="sum">
+        <dt>They came for</dt><dd>${esc(g("present") || "Not recorded")}</dd>
+        <dt>You found</dt><dd>${esc(g("assessment") || "Not recorded")}</dd>
+        <dt>You prescribed</dt><dd>${r.medication_views.length ? r.medication_views.map(m => `<div><b>${esc(m.label)}</b>, ${esc(medShort(m))}</div>`).join("") : "No medicines"}</dd>
+        <dt>You advised</dt><dd>${esc(g("treatment") || "Nothing extra")}</dd>
+        <dt>Follow-up</dt><dd>${esc(g("review") || "Not set")}</dd>
+      </dl>
+    </section>
+    ${journeyHTML(p)}
+  </div>`;
+}
+function journeyHTML(p) {
+  const j = p.journey || {}, f = j.adherence, ups = j.uploads || [], qs = j.questions || [], fn = esc(first(p.name));
+  const lastEnc = p.lastReport?.encounter_id;
+  const head = chip => `<div class="ph"><div class="wa-head"><span class="wa-badge">${ICON.wa}</span><h3>WhatsApp check-ins</h3></div>${chip || ""}</div>`;
+  if (!f && !ups.length && !qs.length) return `<section class="panel">${head()}<p class="wa-sum muted">Nothing from ${fn} yet. Check-ins start once a report is approved and delivered.</p>${lastEnc ? `<a class="btn btn-line btn-small" href="#/followup/${esc(lastEnc)}">${ICON.chat}Open follow-up</a>` : ""}</section>`;
+  const cls = { on_track: "ok", slightly_off: "warn", missed: "risk", no_reply: "warn" }[f?.status] || "muted";
+  const word = { taken: "taken", late: "taken late", missed: "missed", not_due: "not due" };
+  return `<section class="panel" aria-label="WhatsApp check-ins">
+    ${head(f ? `<span class="chip ${cls}">${esc(f.label)}</span>` : "")}
+    ${f ? `<p class="wa-sum">${esc(f.summary)}</p>
+    <div class="adh" role="table" aria-label="Doses over the last 7 days">
+      <div role="row" class="contents"><span role="columnheader"><span class="sr">Medicine</span></span>${f.days.map(d => `<span class="d" role="columnheader">${esc(d)}</span>`).join("")}</div>
+      ${f.rows.map(r => `<div role="row" class="contents"><span class="lbl" role="rowheader">${esc(r.medicine)}</span>${r.cells.map((c, k) => `<span class="cell ${c}" role="cell" title="${esc(f.days[k])}: ${word[c]}">${c === "missed" ? ICON.x : c === "taken" ? ICON.check : ""}<span class="sr">${word[c]}</span></span>`).join("")}</div>`).join("")}
+    </div>
+    <div class="legend"><span><i class="taken"></i>Taken</span><span><i class="late"></i>Late</span><span><i class="missed"></i>Missed</span><span><i class="not_due"></i>Not due</span></div>
+    ${f.last_message ? `<p class="quote">"${esc(f.last_message.text)}"<small>${fn} on WhatsApp, ${fmtWhen(f.last_message.at)}</small></p>` : ""}` : ""}
+    ${qs.length ? `<h4 class="sub-h">${fn} asked</h4><ul class="plain">${qs.map(x => `<li>${esc(x.text || x)}</li>`).join("")}</ul>` : ""}
+    ${ups.length ? `<h4 class="sub-h">Reports ${fn} sent</h4>${uploadsHTML(ups)}` : ""}
+    ${lastEnc ? `<a class="btn btn-line btn-small mt" href="#/followup/${esc(lastEnc)}">${ICON.chat}Open follow-up</a>` : ""}
+  </section>`;
+}
+function uploadsHTML(ups) {
+  return `<ul class="plain uploads">${ups.map(u => `<li><span class="grow"><b>${esc(u.filename || u.title || "Report")}</b>${u.summary ? `<span class="muted">${esc(u.summary)}</span>` : ""}</span>
+    <span class="row tight">${u.id && api.uploadUrl ? `<a class="btn btn-line btn-small" href="${esc(api.uploadUrl(u.id))}">Download</a>` : ""}
+    ${u.reviewed ? `<span class="chip ok">Reviewed</span>` : `<button class="btn btn-soft btn-small" data-review="${esc(u.id)}">Mark reviewed</button>`}</span></li>`).join("")}</ul>`;
+}
+
+/* Medicine wording */
+const FOOD = { after_food: "after food", before_food: "before food", with_food: "with food", empty_stomach: "on an empty stomach", before_breakfast: "before breakfast" };
+const SLOT = ["morning", "afternoon", "evening", "night"];
+function scheduleText(s) {
+  if (!s) return "timing not set";
+  if (s.kind === "as_needed") return "when needed" + (s.max_per_day ? `, up to ${s.max_per_day} a day` : "");
+  if (s.kind === "frequency") return (["", "once", "twice", "three times", "four times"][s.times_per_day] || s.times_per_day + " times") + " a day";
+  if (s.kind === "slots") { const on = s.slots.map((n, i) => n ? SLOT[i] : null).filter(Boolean); return on.length === 1 ? "every " + on[0] : on.length ? on.slice(0, -1).join(", ") + " and " + on.at(-1) : "timing not set"; }
+  if (s.kind === "weekly") return `${s.times} ${s.times === 1 ? "time" : "times"} a week`;
+  if (s.kind === "taper") return "tapering dose, see full instructions";
+  return s.phrase ? `"${s.phrase}" (check timing)` : "timing not set";
+}
+const doseText = d => d ? `${d.amount} ${d.unit}${d.amount !== "1" && !/ml/i.test(d.unit) ? "s" : ""}` : "dose not set";
+const medShort = m => m.display || `${doseText(m.dose)} ${scheduleText(m.schedule)}${m.food ? ", " + (FOOD[m.food] || m.food) : ""}${m.duration ? `, ${m.duration.value} ${m.duration.unit}${m.duration.value > 1 ? "s" : ""}` : ""}`;
+
+/* =================================================================
+   Visit: idle -> record/type/upload -> processing -> review -> approved
+   ================================================================= */
+function stepper(n) {
+  return `<ol class="stepper" aria-label="Visit progress">${["Record", "Check", "Approve"].map((s, i) => `<li data-s="${i < n ? "done" : i === n ? "now" : "todo"}"${i === n ? ' aria-current="step"' : ""}>${s}</li>`).join("")}</ol>`;
+}
+const STEP_TEXT = { transcribing: "Turning speech into text", extracting: "Picking out symptoms, findings and medicines", checking: "Checking medicines and instructions", writing: "Writing the report", report_checks: "Checking the report", assembling: "Putting the prescription together", suggesting: "Preparing medicine suggestions" };
+function renderVisit() {
+  const box = $("#visit"); if (!box) return;
+  const p = state.patient, v = state.visit, fn = esc(first(p.name));
+  if (v.phase === "loading") { box.innerHTML = stepper(1) + `<div class="skel tall w40"></div><div class="skel"></div>`; return; }
+
+  if (v.phase === "idle") {
+    const refused = p.consents?.recording === false || p.recording_consent === false;
+    box.innerHTML = stepper(0) + `<div class="rec-grid">
+      <div><button class="mic idle" id="micBtn" aria-describedby="consentErr">${ICON.mic}<span class="halo"></span><span class="sr">Start recording</span></button><span class="mic-label" aria-hidden="true">Start recording</span></div>
+      <div class="rec-copy">
+        <h3>Record today's visit with ${fn}</h3>
+        <p>Talk to ${fn} the way you normally do. When you stop, ARDAI drafts the report and prescription for you to check.</p>
+        <div class="lang-row"><label for="lang">Language spoken</label><select class="select" id="lang">${SPOKEN.map(([c, n]) => `<option value="${c}"${c === v.language ? " selected" : ""}>${n}</option>`).join("")}</select></div>
+        ${refused ? `<p class="hint warn">${fn} didn't agree to recording at registration. Type your notes instead.</p>` : `<label class="consent" id="consentRow"><input type="checkbox" id="consent" ${v.consent ? "checked" : ""}> <span>${fn} has agreed to this visit being recorded</span></label>`}
+        <p class="hint warn" id="consentErr" role="alert" hidden></p>
+      </div>
+    </div>
+    <div class="alt">
+      <label class="btn btn-line" for="fileIn">${ICON.upload}Upload a recording</label><input class="sr" type="file" id="fileIn" accept="audio/*">
+      <button class="btn btn-line" data-act="type">${ICON.type}Type notes instead</button>
+    </div>`;
+    $("#lang").onchange = e => v.language = e.target.value;
+    const c = $("#consent");
+    if (c) c.onchange = e => { v.consent = e.target.checked; if (v.consent) { $("#consentErr").hidden = true; $("#consentRow").classList.remove("need"); } };
+    const need = () => { const er = $("#consentErr"); er.hidden = false; er.textContent = refused ? "Recording isn't allowed for this patient." : `Ask ${first(p.name)} first, then tick the box.`; $("#consentRow")?.classList.add("need"); c?.focus(); };
+    $("#micBtn").onclick = () => v.consent ? startRecording() : need();
+    $("#fileIn").onclick = e => { if (!v.consent) { e.preventDefault(); need(); } };
+    $("#fileIn").onchange = e => { const f = e.target.files[0]; if (f) submitAudio(f); };
+    return;
+  }
+  if (v.phase === "typing") {
+    box.innerHTML = stepper(0) + `<h3>Type the visit notes</h3><p class="hint mb">Write it the way you'd dictate it. Brand names are fine.</p>
+      <label class="field"><span class="sr">Visit notes</span><textarea class="textarea" id="notes" maxlength="20000" placeholder="Fever for three days, no cough. Dolo 650 one tablet when needed, after food, three days.">${esc(v.text || "")}</textarea></label>
+      <p class="hint warn" id="typeErr" role="alert" hidden></p>
+      <div class="row"><button class="btn btn-dark" id="typeGo">Create report</button><button class="btn btn-line" data-act="cancel">Back</button></div>`;
+    $("#notes").focus(); $("#notes").oninput = e => v.text = e.target.value; $("#typeGo").onclick = submitTyped;
+    return;
+  }
+  if (v.phase === "recording") {
+    box.innerHTML = stepper(0) + `<div class="rec-grid">
+      <div><button class="mic live" id="micStop">${ICON.mic}<span class="halo" id="halo"></span><span class="sr">Stop recording</span></button><span class="mic-label" aria-hidden="true">${v.paused ? "Paused" : "Listening"}</span></div>
+      <div>
+        <div class="live-top"><span class="rec-dot ${v.paused ? "paused" : ""}" aria-hidden="true"></span><span class="timer" id="timer" role="timer">00:00</span></div>
+        <canvas class="live-wave" id="liveWave" aria-hidden="true"></canvas>
+        <div class="row"><button class="btn btn-dark" id="stopBtn">Stop recording</button><button class="btn btn-line" id="pauseBtn">${v.paused ? ICON.play + "Resume" : ICON.pause + "Pause"}</button><button class="btn btn-quiet" id="discardBtn">Discard</button></div>
+        <p class="hint">${mic.fake ? "Microphone isn't available here, so this is a pretend recording for the demo." : "Speak normally. Recording stops by itself after 20 minutes."}</p>
+      </div></div>`;
+    $("#stopBtn").onclick = $("#micStop").onclick = stopRecording;
+    $("#pauseBtn").onclick = togglePause;
+    $("#discardBtn").onclick = () => { stopMic(); v.phase = "idle"; renderVisit(); toast("Recording discarded."); };
+    tickTimer(); drawLive();
+    return;
+  }
+  if (v.phase === "review-audio") {
+    box.innerHTML = stepper(0) + `<h3>Listen back, or create the report</h3><p class="hint">Recording length ${esc(v.duration || "")}.</p>
+      ${v.url ? `<audio controls src="${v.url}"></audio>` : ""}
+      <div class="row mt"><button class="btn btn-dark" id="useRec">Create report</button><button class="btn btn-line" id="redo">Record again</button></div>`;
+    $("#useRec").onclick = () => submitAudio(v.blob);
+    $("#redo").onclick = () => { if (v.url) URL.revokeObjectURL(v.url); Object.assign(v, { phase: "idle", blob: null, url: null }); renderVisit(); };
+    return;
+  }
+  if (["uploading", "processing", "failed"].includes(v.phase)) {
+    const up = v.phase === "uploading";
+    const steps = v.run?.steps || [{ key: "upload", label: up && v.upPct ? `Saving the recording, ${Math.round(v.upPct * 100)}%` : "Saving", state: "running" }];
+    const isDone = s => ["succeeded", "skipped", "done"].includes(s.state), done = steps.filter(isDone).length;
+    box.innerHTML = stepper(1) + `<h3>Preparing ${fn}'s report</h3>
+      <p class="hint">${v.phase === "failed" ? "" : "This usually takes under a minute. You can open another patient meanwhile."}</p>
+      <ol class="proc" aria-live="polite">${steps.map(s => `<li data-s="${isDone(s) ? "done" : s.state === "running" ? "running" : s.state === "failed" ? "failed" : "todo"}"><span class="tick">${ICON.check}</span>${esc(s.label || STEP_TEXT[s.key] || s.key)}</li>`).join("")}</ol>
+      <div class="progress" aria-hidden="true"><i id="procBar"></i></div>
+      ${v.phase === "failed" ? `<div class="error-box" role="alert"><p>${esc(v.error || "The report couldn't be prepared.")}</p>${v.run ? `<button class="btn btn-dark" id="retryRun">Try again</button>` : ""}</div>` : ""}`;
+    $("#procBar").style.setProperty("--p", steps.length ? done / steps.length : 0);
+    $("#retryRun")?.addEventListener("click", retryRun);
+    return;
+  }
+  if (v.phase === "review") return renderReview(box);
+  if (v.phase === "approved") return renderApproved(box);
+}
+
+/* -------- Recording -------- */
+const mic = { stream: null, ctx: null, analyser: null, data: null, rec: null, chunks: [], raf: 0, tick: 0, start: 0, pausedAt: 0, pausedTotal: 0, fake: false, auto: 0 };
+async function startRecording() {
+  const v = state.visit; mic.fake = false; mic.chunks = []; mic.rec = null;
+  try {
+    mic.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    mic.ctx = new AudioContext(); mic.analyser = mic.ctx.createAnalyser(); mic.analyser.fftSize = 256;
+    mic.ctx.createMediaStreamSource(mic.stream).connect(mic.analyser); mic.data = new Uint8Array(mic.analyser.frequencyBinCount);
+    mic.rec = new MediaRecorder(mic.stream); mic.rec.ondataavailable = e => e.data.size && mic.chunks.push(e.data); mic.rec.start(1000);
+  } catch (_) {
+    if (!window.VoiceRxMock) { toast("Microphone permission is needed to record. You can upload a file or type instead."); return; }
+    mic.fake = true;
+  }
+  Object.assign(mic, { start: performance.now(), pausedTotal: 0, pausedAt: 0 });
+  v.phase = "recording"; v.paused = false; renderVisit();
+  clearTimeout(mic.auto); mic.auto = setTimeout(() => state.visit?.phase === "recording" && stopRecording(), 20 * 60 * 1000);
+}
+const elapsed = () => Math.max(0, (mic.pausedAt || performance.now()) - mic.start - mic.pausedTotal);
+const fmtClock = ms => { const s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+function tickTimer() { clearInterval(mic.tick); const t = () => { const el = $("#timer"); if (el) el.textContent = fmtClock(elapsed()); }; t(); mic.tick = setInterval(t, 250); }
+function togglePause() {
+  const v = state.visit;
+  if (!v.paused) { v.paused = true; mic.pausedAt = performance.now(); mic.rec?.pause(); }
+  else { v.paused = false; mic.pausedTotal += performance.now() - mic.pausedAt; mic.pausedAt = 0; mic.rec?.resume(); }
+  cancelAnimationFrame(mic.raf); renderVisit();
+}
+function drawLive() {
+  const c = $("#liveWave"); if (!c) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2), w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
+  const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const bars = Math.floor(w / 6), t = performance.now() / 1000, paused = state.visit?.paused;
+  if (mic.analyser) mic.analyser.getByteFrequencyData(mic.data);
+  let level = 0; ctx.fillStyle = "#16171C";
+  for (let b = 0; b < bars; b++) {
+    let v = mic.analyser ? mic.data[Math.floor((b / bars) * mic.data.length * .7)] / 255 : Math.abs(Math.sin(b * .4 + t * 6) * .6 + Math.sin(b * .11 - t * 2.3) * .4) * (.55 + .45 * Math.sin(t * 1.7) ** 2);
+    if (paused) v = .03;
+    level += v; const bh = Math.max(3, v * h * .95);
+    ctx.globalAlpha = .3 + v * .7; ctx.beginPath(); ctx.roundRect(b * 6, (h - bh) / 2, 3, bh, 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const halo = $("#halo"); if (halo && !reduce) halo.style.transform = `scale(${1 + Math.min(level / bars, 1) * .2})`;
+  mic.raf = requestAnimationFrame(drawLive);
+}
+function stopMic() {
+  cancelAnimationFrame(mic.raf); clearInterval(mic.tick); clearTimeout(mic.auto);
+  try { if (mic.rec && mic.rec.state !== "inactive") mic.rec.stop(); } catch (_) {}
+  mic.stream?.getTracks().forEach(t => t.stop()); mic.ctx?.close().catch(() => {});
+  mic.stream = mic.ctx = mic.analyser = null;
+}
+async function stopRecording() {
+  const v = state.visit, ms = elapsed();
+  let blob;
+  if (mic.rec) { const done = new Promise(r => mic.rec.onstop = r); stopMic(); await done; blob = new Blob(mic.chunks, { type: mic.rec.mimeType || "audio/webm" }); }
+  else { stopMic(); blob = new Blob([new Uint8Array(64)], { type: "audio/webm" }); }
+  if (ms < 2000) { toast("That was too short. Record at least 2 seconds."); v.phase = "idle"; renderVisit(); return; }
+  Object.assign(v, { phase: "review-audio", blob, url: mic.fake ? null : URL.createObjectURL(blob), duration: fmtClock(ms) });
+  renderVisit();
+}
+
+/* -------- Submit and process -------- */
+async function ensureEncounter() {
+  const v = state.visit;
+  if (!v.enc) { const e = await api.createEncounter(state.patient.id); v.enc = e.id ?? e.encounter_id; history.replaceState(null, "", `#/encounters/${v.enc}`); state.guard = location.hash; }
+  return v.enc;
+}
+async function submitAudio(blob) {
+  const v = state.visit;
+  if (blob.size > 40 * 1024 * 1024) { toast("That file is over 40 MB. Use a shorter recording."); return; }
+  v.phase = "uploading"; v.run = null; v.upPct = 0; renderVisit();
+  try {
+    const enc = await ensureEncounter();
+    const src = await api.audioSource(enc, blob, v.language || "hinglish", pct => { v.upPct = pct; renderVisit(); });
+    await startProcessing(enc, src);
+  } catch (x) { v.phase = "failed"; v.error = x.message; renderVisit(); }
+}
+async function submitTyped() {
+  const v = state.visit, text = (v.text || "").trim(), e = $("#typeErr");
+  if (text.length < 10) { e.hidden = false; e.textContent = "Write a little more so there's something to report."; return; }
+  v.phase = "uploading"; renderVisit();
+  try { const enc = await ensureEncounter(); await startProcessing(enc, await api.typedSource(enc, text, v.language || "hinglish")); }
+  catch (x) { v.phase = "failed"; v.error = x.message; renderVisit(); }
+}
+async function startProcessing(enc, src) {
+  const v = state.visit;
+  v.run = await api.startRun(enc, src); v.phase = "processing"; renderVisit(); refreshRows(); pollRun(1200);
+}
+function pollRun(delay) {
+  stopPolling();
+  const v = state.visit, pid = state.selected;
+  state.poll = setTimeout(async () => {
+    if (state.selected !== pid || !v.run) return;
+    try {
+      v.run = await api.run(v.run.id ?? v.run.run_id);
+      if (v.run.state === "succeeded") { v.report = adapt.report(await api.report(v.enc)); v.phase = "review"; v.reveal = true; renderVisit(); refreshRows(); toast("Draft report is ready."); return; }
+      if (v.run.state === "failed" || v.run.state === "incomplete") { v.phase = "failed"; v.error = v.run.error?.message || "Processing stopped before the report was ready."; renderVisit(); return; }
+      renderVisit(); pollRun(document.hidden ? 8000 : 2000);
+    } catch (_) { pollRun(Math.min(15000, delay * 2)); }
+  }, delay);
+}
+async function retryRun() { const v = state.visit; try { v.run = await api.retry(v.run.id ?? v.run.run_id); v.phase = "processing"; renderVisit(); pollRun(1200); } catch (x) { toast(x.message); } }
+async function resumeVisit(open) {
+  const v = state.visit;
+  try {
+    if (open.state === "in_review" || open.state === "approved") {
+      v.report = adapt.report(await api.report(open.id)); v.phase = v.report.status === "approved" ? "approved" : "review";
+      if (v.phase === "approved") pollFiles(800);
+    } else if (open.state === "processing" || open.state === "failed") {
+      const e = await api.encounter(open.id), run = e.latest_run || e.run;
+      if (run) { v.run = adapt.run(run); v.phase = open.state === "failed" ? "failed" : "processing"; v.error = run.error?.message; if (v.phase === "processing") pollRun(1200); } else v.phase = "idle";
+    } else { v.phase = "idle"; v.language = "hinglish"; }
+  } catch (_) { v.phase = "idle"; }
+  renderVisit();
+}
+async function refreshRows() { try { state.rows = items(await api.patients(state.tab, state.q, session.admin ? session.doctor?.id : undefined)).map(adapt.patient); renderList(); } catch (_) {} }
+
+/* -------- Review -------- */
+function renderReview(box) {
+  const v = state.visit, r = v.report, fn = esc(first(state.patient.name));
+  const blocks = r.issue_views.filter(i => i.severity === "block"), warns = r.issue_views.filter(i => i.severity !== "block");
+  box.innerHTML = stepper(r.can_approve ? 2 : 1) + `
+    <div class="review-head">
+      <div><h3>Check ${fn}'s draft report</h3><p>Tap any sentence to see what was heard. Fix anything that's off, then approve.</p></div>
+      <div class="row">
+        <span class="saved">${sized(ICON.check, 18)}Saved, version ${esc(r.version)}</span>
+        <button class="btn btn-line btn-small" data-act="ref">${ICON.book}Look up</button>
+        <button class="btn btn-line btn-small" data-act="pdf">${ICON.pdf}Preview PDF</button>
+        <button class="btn btn-line btn-small" data-act="json">${ICON.json}Download JSON</button>
+      </div>
+    </div>
+    ${r.issue_views.length ? `<section class="checks" aria-label="Things to check"><h4>${ICON.alert}${blocks.length ? `${blocks.length} ${blocks.length === 1 ? "thing" : "things"} to answer before you approve` : "Worth a quick look"}</h4>
+      ${[...blocks, ...warns].map(i => `<div class="issue ${i.severity === "block" ? "" : "warn-only"}"><b>${esc(i.title)}</b><p>${esc(i.message || "")}</p>
+        <div class="row">${i.actions.map((a, k) => `<button class="btn ${k === 0 ? "btn-dark" : "btn-line"} btn-small" data-fix="${esc(i.id)}" data-k="${k}">${esc(a.label)}</button>`).join("")}</div></div>`).join("")}
+    </section>` : `<div class="all-clear">${sized(ICON.check, 20)}Nothing needs your answer. Read it through and approve.</div>`}
+    <div class="${v.reveal ? "reveal" : ""}">${reportHTML(r, true)}</div>
+    ${stockNoteHTML(r)}
+    <div class="approve-bar">
+      <button class="btn btn-dark" id="approveBtn" ${r.can_approve ? "" : "disabled"}>Approve report</button>
+      <p>${r.can_approve ? `Approving saves the final report and sends the PDF to ${fn} on WhatsApp, if they agreed.` : `Answer the ${blocks.length === 1 ? "check" : blocks.length + " checks"} above to approve.`}</p>
+    </div>`;
+  v.reveal = false;
+  box.querySelectorAll("[data-fix]").forEach(b => b.onclick = () => {
+    const i = r.issue_views.find(x => x.id === b.dataset.fix), a = i.actions[+b.dataset.k], v = state.visit;
+    if (a.edit) { Object.assign(v, { editing: a.edit, adding: false, newMed: null }); renderVisit(); $("#medEdit")?.scrollIntoView({ block: "center" }); return; }
+    if (a.find) { Object.assign(v, { adding: true, replacing: a.find, editing: null, newMed: null }); renderVisit(); return; }
+    if (a.line) { const t = box.querySelector(`.sent[data-ref="${CSS.escape(a.line)}"]`); t?.click(); t?.closest(".rgroup")?.querySelector("[data-line=edit]")?.click(); return; }
+    applyFix(a.resolutions.map(x => ({ reason: `Answered: ${i.title}`, ...x })), b);
+  });
+  $("#approveBtn").onclick = approve;
+  wireReport(box, r, true);
+  wireAddMedicine(box);
+}
+function stockNoteHTML(r) {
+  if (!r.pharmacy) return "";
+  const missing = r.medication_views.filter(m => m.stock && ["out", "not_stocked"].includes(m.stock.status));
+  return missing.length
+    ? `<p class="stock-note warn" role="status">${ICON.alert}<span>${missing.length === 1 ? "One medicine isn't" : missing.length + " medicines aren't"} available at the hospital pharmacy: ${esc(missing.map(m => m.label).join(", "))}. You can still approve; the patient would buy ${missing.length === 1 ? "it" : "them"} elsewhere.</span></p>`
+    : `<p class="stock-note" role="status">${sized(ICON.check, 18)}<span>Every medicine is available at the hospital pharmacy (stock as of ${fmtWhen(r.pharmacy.as_of)}).</span></p>`;
+}
+function reportHTML(r, editable) {
+  return `<div class="report">
+    <p class="tip">Outpatient visit on ${fmtDate(r.date)}${r.clinician ? ` with ${esc(r.clinician)}` : ""}.</p>
+    ${r.report_groups.map(g => `<section class="rgroup"><h4>${esc(g.heading)}</h4>
+      <p>${g.lines.map(l => `<button class="sent" data-ref="${esc(l.ref)}" aria-expanded="false">${esc(l.text)}</button>`).join(" ")}</p>
+      <div class="evidence" hidden aria-live="polite"></div></section>`).join("")}
+    <section class="rgroup"><div class="ph-row"><h4>Medicines</h4>${editable ? `<button class="btn btn-line btn-small" data-act="add-med">${ICON.plus}Add medicine</button>` : ""}</div>
+      ${editable && state.visit?.replacing ? `<p class="hint">Choose the medicine for "${esc(r.all_meds?.[state.visit.replacing]?.label || "")}".</p>` : ""}
+      ${editable && state.visit?.newMed ? `<div class="medit add"><p class="hint m0"><b>${esc(state.visit.newMed.label)}</b> ${esc(state.visit.newMed.composition)}</p>${editorHTML(state.visit.newMed)}</div>` : editable && state.visit?.adding ? addMedHTML() : ""}${medsHTML(r.medication_views, editable)}</section>
+  </div>`;
+}
+function medsHTML(meds, editable) {
+  if (!meds.length) return `<p class="z">No medicines prescribed.</p>`;
+  const tag = { standard: "from standard instructions", auto: "picked automatically", learned: "from this clinic's past choices", unit: "unit filled in", generic: "matched to the generic" };
+  return `<div class="meds-wrap"><table class="meds">
+    <thead><tr><th scope="col">Medicine</th><th class="s" scope="col">Morning</th><th class="s" scope="col">Afternoon</th><th class="s" scope="col">Evening</th><th class="s" scope="col">Night</th>${editable ? '<th class="s" scope="col"><span class="sr">Edit</span></th>' : ""}</tr></thead>
+    <tbody>${meds.map(m => {
+      const slots = m.schedule?.kind === "slots" ? m.schedule.slots : null, filled = Object.entries(m.filled || {});
+      return `<tr>
+        <td><span class="mname">${esc(m.label)}</span><span class="mcomp">${esc(m.composition)}</span>
+          <span class="mhow">${m.action && m.action !== "start" ? esc(cap(m.action)) + ". " : ""}${esc(medShort(m))}</span>
+          ${filled.length ? `<span class="filled chip iris" title="${esc(filled.map(([k, x]) => k + ": " + (tag[x] || x)).join(". "))}">${esc(filled.map(([k]) => k).join(", "))} filled in, please check</span>` : ""}
+          ${editable && m.standard?.length ? `<span class="std"><span class="chip iris">Usual directions</span> ${esc(m.standard.map(p => p.text).join(" · "))} <button class="btn btn-line btn-small" data-std="${esc(m.id)}">Use these</button></span>` : ""}
+          ${m.stock ? `<span class="stock">${stockChip(m.stock)}${editable && m.stock.alternatives.length ? `<span class="stock-alt"><span class="hint m0">Same composition in stock:</span>${m.stock.alternatives.map(a => `<button class="btn btn-line btn-small" data-swap="${esc(m.id)}" data-product="${esc(a.product_id)}" data-label="${esc(a.label)}" data-status="${esc(m.stock.status)}" title="${esc(a.composition)}">Use ${esc(a.label)} (${esc(a.quantity)})</button>`).join("")}</span>` : ""}</span>` : ""}
+        </td>
+        ${[0, 1, 2, 3].map(i => `<td class="s">${slots ? (slots[i] ? `<span class="n">${esc(slots[i])}</span>` : `<span class="z">–</span>`) : (i === 0 ? `<span class="z">${esc(m.schedule ? scheduleText(m.schedule) : "")}</span>` : "")}</td>`).join("")}
+        ${editable ? `<td class="s"><button class="btn btn-line btn-small" data-edit="${esc(m.id)}" ${m.unresolved ? 'disabled title="Answer the check above first"' : ""}>Edit</button></td>` : ""}
+      </tr>${editable && state.visit?.editing === m.id ? `<tr><td colspan="6">${editorHTML(m)}</td></tr>` : ""}`;
+    }).join("")}</tbody></table></div>`;
+}
+const unitOf = m => m.dose?.unit || { capsule: "capsule", syrup: "mL", suspension: "mL", solution: "mL", drops: "drop" }[m.form] || (/CAP/i.test(m.label) ? "capsule" : /SYRUP/i.test(m.label) ? "mL" : "tablet");
+const DAYS = { day: 1, week: 7, month: 30 };
+const daysOf = d => d ? d.value * (DAYS[d.unit] || 1) : "";
+function editorHTML(m) {
+  const s = m.schedule || {}, slots = s.kind === "slots" ? s.slots : [0, 0, 0, 0], prn = s.kind === "as_needed", unit = unitOf(m);
+  return `<form class="medit" id="medEdit" data-med="${esc(m.id)}">
+    <div class="two">
+      <label class="field m0"><span>How much each time</span><select class="select" name="dose">${[...new Set([...(unit === "mL" ? ["2.5", "5", "10"] : ["0.5", "1", "2", "3", "4"]), ...(m.dose?.amount ? [m.dose.amount] : [])])].map(d => `<option value="${d}"${(m.dose?.amount ?? (unit === "mL" ? "5" : "1")) === d ? " selected" : ""}>${d} ${esc(unit)}</option>`).join("")}</select></label>
+      <label class="field m0"><span>For how many days</span><input class="input" name="days" type="number" min="1" max="365" inputmode="numeric" value="${esc(daysOf(m.duration))}"></label>
+    </div>
+    <fieldset><legend>When to take it</legend><div class="toggles">
+      ${SLOT.map((n, i) => `<label><input type="checkbox" name="slot" value="${i}" ${slots[i] ? "checked" : ""} ${prn ? "disabled" : ""}>${cap(n)}</label>`).join("")}
+      <label><input type="checkbox" name="prn" ${prn ? "checked" : ""}>When needed</label>
+    </div></fieldset>
+    <label class="field m0"><span>Food</span><select class="select" name="food">${m.food ? "" : `<option value="">Not said</option>`}${Object.entries(FOOD).filter(([k]) => k !== "before_breakfast").map(([k, t]) => `<option value="${k}"${m.food === k ? " selected" : ""}>${cap(t)}</option>`).join("")}</select></label>
+    ${s.kind === "taper" || s.kind === "frequency" ? `<p class="hint warn">This medicine says "${esc(scheduleText(s))}". Saving replaces that with the times you tick.</p>` : ""}
+    <p class="hint warn" id="editErr" role="alert" hidden></p>
+    <div class="row"><button class="btn btn-dark" type="submit">${m.id === "__new" ? "Add to prescription" : "Save changes"}</button><button class="btn btn-line" type="button" data-act="cancel-edit">Cancel</button>${m.id === "__new" ? "" : `<button class="btn btn-quiet danger" type="button" data-act="remove-med" data-med="${esc(m.id)}">Remove medicine</button>`}</div>
+  </form>`;
+}
+function addMedHTML() {
+  return `<div class="medit add" id="addMed">
+    <label class="field m0"><span>Find a medicine</span><input class="input" id="medQ" placeholder="Type a brand or generic name" autocomplete="off"></label>
+    <div class="row"><button class="btn btn-soft btn-small" data-act="shortlist">Show common choices</button><button class="btn btn-quiet btn-small" data-act="close-add">Close</button></div>
+    <ul class="picks" id="medResults" aria-live="polite"></ul></div>`;
+}
+function wireAddMedicine(box) {
+  const input = $("#medQ", box); if (!input) return;
+  input.focus(); let t;
+  input.oninput = () => { clearTimeout(t); const s = input.value.trim(); if (s.length < 2) { $("#medResults").innerHTML = ""; return; } t = setTimeout(async () => showPicks(items(await api.catalog(s))), 200); };
+}
+function showPicks(list) {
+  const ul = $("#medResults"); if (!ul) return;
+  ul.innerHTML = list.length ? list.map(p => `<li><button class="pick" data-product="${esc(p.id ?? p.product_id)}" data-label="${esc(p.label || p.name || p.brand)}" data-comp="${esc(p.composition || "")}" data-form="${esc(p.form || "")}" data-food="${esc(p.food || "")}"><b>${esc(p.label || p.name || p.brand)}</b><span>${esc(p.composition || p.generic || "")}${p.group ? " · " + esc(p.group) : ""}</span>${stockChip(p.stock)}</button></li>`).join("") : `<li class="hint">No medicine found. Check the spelling.</li>`;
+}
+function wireReport(box, r, editable) {
+  box.querySelectorAll(".sent").forEach(b => b.onclick = () => {
+    const sec = b.closest(".rgroup"), ev = sec.querySelector(".evidence"), open = b.getAttribute("aria-expanded") === "true";
+    box.querySelectorAll(".sent").forEach(x => x.setAttribute("aria-expanded", "false")); box.querySelectorAll(".evidence").forEach(x => x.hidden = true);
+    if (open) return;
+    b.setAttribute("aria-expanded", "true");
+    const line = r.report_groups.flatMap(g => g.lines).find(l => l.ref === b.dataset.ref);
+    const found = (line?.cites || []).map(id => r.findings[id]).filter(Boolean);
+    ev.innerHTML = `<h5>What was heard</h5><ul>${found.map(f => `<li><q>${esc(f.quote)}</q> <span class="chip ${f.assertion === "absent" ? "muted" : "ok"}">${f.assertion === "absent" ? "Said as absent" : "Said as present"}</span>${f.certainty && f.certainty !== "stated" ? ` <span class="chip warn">${esc(cap(f.certainty))}</span>` : ""}</li>`).join("") || "<li>No direct quote for this sentence.</li>"}</ul>
+      ${editable ? `<div class="row mt"><button class="btn btn-line btn-small" data-line="edit">Edit sentence</button><button class="btn btn-quiet btn-small danger" data-line="remove">Remove sentence</button></div>` : ""}`;
+    ev.hidden = false;
+    if (!editable) return;
+    $("[data-line=remove]", ev).onclick = e => applyFix([{ action: "remove_line", target: line.ref, reason: "Removed by the doctor." }], e.currentTarget);
+    $("[data-line=edit]", ev).onclick = () => {
+      ev.innerHTML = `<label class="field m0"><span>Edit sentence</span><textarea class="textarea short" id="lineText">${esc(line.text)}</textarea></label><div class="row mt"><button class="btn btn-dark btn-small" id="lineSave">Save changes</button></div>`;
+      $("#lineText").focus();
+      $("#lineSave").onclick = e => { const text = $("#lineText").value.trim(); if (text) applyFix([{ action: "edit_line", target: line.ref, value: text, reason: "Edited by the doctor." }], e.currentTarget); };
+    };
+  });
+  if (!editable) return;
+  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => { Object.assign(state.visit, { editing: b.dataset.edit, newMed: null, adding: false }); renderVisit(); $("#medEdit select")?.focus(); });
+  box.querySelectorAll("[data-std]").forEach(b => b.onclick = () => {
+    const m = r.medication_views.find(x => x.id === b.dataset.std);
+    applyFix(m.standard.map(p => ({ action: p.action, target: m.id, value: p.value, reason: p.reason })), b);
+  });
+  box.querySelectorAll("[data-swap]").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    applyFix([{ action: "choose_product", target: b.dataset.swap, value: { product_id: b.dataset.product }, reason: `${STOCK_TEXT[b.dataset.status]} at the hospital pharmacy; changed to ${b.dataset.label}, same composition.` }], b);
+  });
+  const f = $("#medEdit");
+  if (f) {
+    f.prn.onchange = () => f.querySelectorAll("[name=slot]").forEach(x => x.disabled = f.prn.checked);
+    f.onsubmit = e => {
+      e.preventDefault();
+      const m = f.dataset.med === "__new" ? state.visit.newMed : r.medication_views.find(x => x.id === f.dataset.med), days = parseInt(f.days.value, 10), er = $("#editErr");
+      const slots = [0, 1, 2, 3].map(i => f.querySelector(`[name=slot][value="${i}"]`).checked ? 1 : 0);
+      if (!f.prn.checked && !slots.some(Boolean)) { er.hidden = false; er.textContent = "Tick at least one time, or choose When needed."; return; }
+      if (!(days > 0)) { er.hidden = false; er.textContent = "Enter the number of days."; f.days.focus(); return; }
+      const dose = { amount: f.dose.value, unit: unitOf(m) }, food = f.food.value;
+      const schedule = f.prn.checked ? { type: "as_needed" } : { type: "grid", ...Object.fromEntries(["m", "a", "e", "n"].map((k, i) => [k, slots[i] ? f.dose.value : "0"])) };
+      if (m.id === "__new") {
+        if (!food) { er.hidden = false; er.textContent = "Choose when to take it with food."; return; }
+        Object.assign(state.visit, { editing: null, newMed: null, adding: false });
+        return applyFix([{ action: "add_medicine", target: "new", value: { product_id: m.product_id, dose, schedule, food, duration: { value: days, unit: "day" } }, reason: "Added by the doctor." }], f.querySelector("[type=submit]"));
+      }
+      const changes = [];
+      if (m.dose?.amount !== dose.amount || m.dose?.unit !== dose.unit) changes.push({ action: "set_dose", value: dose, reason: "Dose set by the doctor." });
+      if (JSON.stringify(m.raw_schedule) !== JSON.stringify(schedule)) changes.push({ action: "set_timing", value: { schedule }, reason: "Timing set by the doctor." });
+      if (food && food !== m.food) changes.push({ action: "set_food", value: { food }, reason: "Food timing set by the doctor." });
+      if (daysOf(m.duration) !== days) changes.push({ action: "set_duration", value: { value: days, unit: "day" }, reason: "Duration set by the doctor." });
+      state.visit.editing = null;
+      if (!changes.length) { renderVisit(); return toast("Nothing changed."); }
+      applyFix(changes.map(c => ({ ...c, target: m.id })), f.querySelector("[type=submit]"));
+    };
+  }
+}
+async function applyFix(resolutions, btn) {
+  const v = state.visit;
+  if (btn) { btn.disabled = true; btn.textContent = "Saving"; }
+  try { v.report = adapt.report(await api.resolve(v.enc, v.report, resolutions)); renderVisit(); refreshRows(); toast(`Saved. This is now version ${v.report.version}.`); }
+  catch (x) {
+    if (x.code === "version_conflict") { v.report = adapt.report(await api.report(v.enc)); renderVisit(); toast(x.message); }
+    else { toast(x.message); if (btn) { btn.disabled = false; btn.textContent = "Try again"; } }
+  }
+}
+async function approve() {
+  const v = state.visit, b = $("#approveBtn");
+  b.disabled = true; b.textContent = "Approving";
+  try { v.report = adapt.report(await api.approve(v.enc, v.report)); v.phase = "approved"; v.justApproved = true; renderVisit(); refreshRows(); pollFiles(1500); }
+  catch (x) {
+    toast(x.message); b.disabled = false; b.textContent = "Approve report";
+    if (x.code === "version_conflict" || x.code === "approval_blocked") { v.report = adapt.report(await api.report(v.enc)); renderVisit(); }
+  }
+}
+
+/* -------- Approved: files and WhatsApp delivery -------- */
+const DELIVERY = { pending: [0, "Queued"], queued: [0, "Queued"], waiting: [0, "Waiting for the patient to message first"], waiting_window: [0, "Waiting for the patient to message first"], waiting_artifact: [0, "Waiting for the PDF"], waiting_for_window: [0, "Waiting for the patient to message first"], waiting_for_artifact: [0, "Waiting for the PDF"], accepted: [1, "Accepted by WhatsApp"], sent: [1, "Sent"], delivered: [2, "Delivered"], read: [3, "Read"], failed: [-1, "Couldn't be delivered"], cancelled: [-1, "Cancelled"] };
+function deliveryHTML(jobs, fn) {
+  if (!jobs) return "";
+  if (!jobs.length) return `<section class="deliver"><h4><span class="wa-badge small">${ICON.wa}</span>WhatsApp</h4><p class="hint">Nothing is queued for ${fn}. Check their WhatsApp agreement and number.</p></section>`;
+  const names = ["Queued", "Sent", "Delivered", "Read"], failed = jobs.some(j => DELIVERY[j.status]?.[0] === -1);
+  return `<section class="deliver" aria-label="WhatsApp delivery"><h4><span class="wa-badge small">${ICON.wa}</span>Sending to ${fn} on WhatsApp</h4>
+    ${jobs.map(j => { const [n, word] = DELIVERY[j.status] || [0, cap(j.status)]; return `<div class="dline"><div class="dhead"><b>${{ pdf: "Prescription PDF", voice: "Prescription voice note", voice_option: "Voice note button" }[j.kind] || "Message"}</b><span class="${n < 0 ? "bad" : ""}">${esc(word)}</span></div>
+      <ol class="dtrack ${n < 0 ? "failed" : ""}" aria-hidden="true">${names.map((s, i) => `<li class="${i <= n ? "on" : ""}">${s}</li>`).join("")}</ol></div>`; }).join("")}
+    ${failed ? `<button class="btn btn-dark btn-small" data-act="retry-delivery">Try sending again</button>` : ""}</section>`;
+}
+function renderApproved(box) {
+  const v = state.visit, r = v.report, a = r.approval || {}, fn = esc(first(state.patient.name));
+  const arts = r.artifacts || [], label = { pdf: ["Prescription and report", "PDF", ICON.pdf], fhir_bundles: ["Health record (FHIR)", "JSON", ICON.json], fhir_json: ["Health record (FHIR)", "JSON", ICON.json], fhir: ["Health record (FHIR)", "JSON", ICON.json] };
+  box.innerHTML = stepper(3) + `
+    <div class="done-hero">
+      <div class="seal${v.justApproved ? "" : " still"}" aria-hidden="true"><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r="36"/><path d="M22 37l9 9 19-21"/></svg></div>
+      <div><h3>${fn}'s report is approved</h3><p class="hint nomargin">Approved by ${esc(a.approved_by || "")}${a.approved_at ? " at " + fmtTime(a.approved_at) : ""}. Version ${esc(r.version)}.</p></div>
+      <a class="btn btn-sun pushright" href="#/followup/${esc(v.enc)}">${ICON.chat}Open follow-up</a>
+    </div>
+    ${deliveryHTML(v.jobs, fn)}
+    <div class="files">
+      ${arts.map(f => { const [t, kind, ic] = label[f.kind] || [f.kind, "", ICON.json]; return `<div class="file"><span class="ic">${ic}</span><span><b>${t}</b><span>${f.state === "ready" ? kind + ", ready" : f.state === "failed" ? "Couldn't be made" : "Being prepared"}</span></span>
+        ${f.state === "ready" ? `<button class="btn btn-dark btn-small" data-art="${esc(f.id)}" data-kind="${esc(f.kind)}">Download</button>` : f.state === "failed" ? "" : `<span class="spinner ink" aria-label="Preparing"></span>`}</div>`; }).join("")}
+      <div class="file"><span class="ic">${ICON.json}</span><span><b>Report data</b><span>JSON, ready</span></span><button class="btn btn-line btn-small" data-act="json">Download</button></div>
+    </div>
+    <details class="more"><summary class="btn btn-quiet">Show the approved report</summary>${reportHTML(r, false)}</details>`;
+  v.justApproved = false;
+  box.querySelectorAll("[data-art]").forEach(b => b.onclick = () => downloadArtifact(b.dataset.art, b.dataset.kind));
+  wireReport(box, r, false);
+}
+function pollFiles(delay) {
+  stopPolling();
+  const v = state.visit, pid = state.selected;
+  state.poll = setTimeout(async () => {
+    if (state.selected !== pid || v.phase !== "approved") return;
+    try {
+      const [arts, jobs] = await Promise.all([api.artifacts(v.enc), api.deliveries(v.enc).catch(() => null)]);
+      const open = $("details.more")?.open;
+      v.report.artifacts = arts; v.jobs = jobs || v.jobs; renderVisit();
+      if (open) $("details.more").open = true;
+      const busy = v.report.artifacts.some(a => ["pending", "running"].includes(a.state)) || (v.jobs || []).some(j => !["read", "failed", "cancelled"].includes(j.status));
+      if (busy) pollFiles(2500);
+    } catch (_) { pollFiles(5000); }
+  }, delay);
+}
+
+/* =================================================================
+   Follow-ups
+   ================================================================= */
+async function renderTasks() {
+  view().innerHTML = `<div class="page narrow"><div class="skel tall w40"></div><div class="skel"></div></div>`;
+  await loadTasks();
+  const all = items(await api.tasks());
+  const open = all.filter(t => t.status !== "done"), done = all.filter(t => t.status === "done");
+  const row = t => `<li class="task ${t.status === "done" ? "is-done" : ""}"><a class="grow" href="#/followup/${esc(t.encounter_id)}"><b>${esc(t.title)}</b><span>${esc(t.patient_name || "Patient")}${t.detail ? `: ${esc(t.detail)}` : ""}</span></a>
+    ${t.status === "done" ? `<span class="chip ok">Done</span>` : `<button class="btn btn-line btn-small" data-done="${esc(t.id)}" data-enc="${esc(t.encounter_id)}">Mark done</button>`}</li>`;
+  view().innerHTML = `<div class="page narrow"><header class="page-head"><h1>Follow-ups</h1><p>What your patients need from you after their visit.</p></header>
+    ${open.length ? `<ul class="panel tasks">${open.map(row).join("")}</ul>` : `<div class="panel first"><h3>You're all caught up</h3><p>New tasks appear here when a patient's follow-up needs you.</p></div>`}
+    ${done.length ? `<h2 class="sect">Done</h2><ul class="panel tasks">${done.map(row).join("")}</ul>` : ""}</div>`;
+  $$("[data-done]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try { await api.taskDone(b.dataset.enc, b.dataset.done); toast("Task marked done."); await renderTasks(); }
+    catch (x) { toast(x.message); b.disabled = false; }
+  });
+  swap();
+}
+async function renderFollowup(enc) {
+  const encounter = await api.encounter(enc), p = adapt.patient(encounter.patient || {});
+  const [fu, memory, tasks] = await Promise.all([api.followup(enc), api.followMemory(enc).catch(() => ({})), api.tasks().catch(() => [])]);
+  const fn = esc(first(p.name)), msgs = fu.messages || [], last = msgs.at(-1), buttons = last?.buttons || [];
+  const myTasks = items(tasks).filter(t => t.encounter_id === enc);
+  const active = fu.status === "active" || msgs.length;
+  const wasThere = $("#thread");
+  view().innerHTML = `<div class="page wide">
+    <header class="page-head"><a class="link-btn" href="#/patients/${esc(p.id)}">Back to ${fn}</a><h1>Follow-up with ${esc(p.name)}</h1><p>${fu.status_label ? esc(fu.status_label) : "Messages, reports and tasks after the visit."}</p></header>
+    <div class="fgrid">
+      <section class="panel chatwrap" aria-label="WhatsApp conversation">
+        <div class="ph"><div class="wa-head"><span class="wa-badge">${ICON.wa}</span><h3>Conversation</h3></div></div>
+        ${active ? `<ol class="thread" id="thread" aria-live="polite">${msgs.map(m => `<li class="msg ${m.direction === "in" ? "in" : "out"}"><p>${esc(m.text)}</p><small>${m.at ? fmtTime(m.at) : ""}</small></li>`).join("")}</ol>
+        ${fu.simulated ? `<div class="sim">
+          ${buttons.length ? `<div class="row tight">${buttons.map(b => `<button class="btn btn-line btn-small" data-reply="${esc(b.id ?? b)}">${esc(b.title ?? b)}</button>`).join("")}</div>` : ""}
+          <form id="simForm" class="row"><label class="grow"><span class="sr">Reply as ${fn}</span><input class="input" id="simText" placeholder="Reply as ${fn} (demo)" autocomplete="off"></label><button class="btn btn-dark">Send</button></form>
+          <div class="row tight"><button class="btn btn-quiet btn-small" id="simClock">Move demo clock forward</button>
+          <label class="btn btn-quiet btn-small" for="docIn">Send a report as ${fn}</label><input class="sr" type="file" id="docIn" accept="application/pdf,image/*"></div>
+        </div>` : `<p class="hint">Replies arrive from ${fn}'s WhatsApp.</p>`}` : `<div class="first"><p>${esc(fu.reason || "Follow-up hasn't started for this visit.")}</p>${fu.available === false ? "" : `<button class="btn btn-sun mt" id="fuStart">${ICON.chat}Start follow-up</button>`}</div>`}
+      </section>
+      <div class="stack">
+        <section class="panel"><h3>Tasks for you</h3>${myTasks.length ? `<ul class="tasks bare">${myTasks.map(t => `<li class="task ${t.status === "done" ? "is-done" : ""}"><span class="grow"><b>${esc(t.title)}</b>${t.detail ? `<span>${esc(t.detail)}</span>` : ""}</span>${t.status === "done" ? `<span class="chip ok">Done</span>` : `<button class="btn btn-line btn-small" data-done="${esc(t.id)}">Mark done</button>`}</li>`).join("")}</ul>` : `<p class="muted">No tasks for this visit.</p>`}</section>
+        <section class="panel"><h3>What we remember</h3>${(memory.items || []).length ? `<ul class="plain">${memory.items.map(m => `<li>${esc(m.text ?? m)}</li>`).join("")}</ul>` : `<p class="muted">Nothing yet.</p>`}</section>
+        <section class="panel"><h3>Reports from ${fn}</h3>${(memory.documents || []).length ? uploadsHTML(memory.documents) : `<p class="muted">No reports uploaded.</p>`}</section>
+      </div>
+    </div></div>`;
+  const reload = () => renderFollowup(enc);
+  const send = async body => { try { await api.followSend(enc, body); await reload(); } catch (x) { toast(x.message); } };
+  const thread = $("#thread"); if (thread) thread.scrollTop = thread.scrollHeight;
+  $("#fuStart")?.addEventListener("click", async e => { e.currentTarget.disabled = true; try { await api.followStart(enc); await reload(); } catch (x) { toast(x.message); } });
+  $("#simForm")?.addEventListener("submit", e => { e.preventDefault(); const t = $("#simText").value.trim(); if (t) send({ text: t }); });
+  $$("[data-reply]").forEach(b => b.onclick = () => send({ button: b.dataset.reply }));
+  $("#simClock")?.addEventListener("click", async () => { try { await api.followAdvance(enc); toast("Demo clock moved forward."); await reload(); } catch (x) { toast(x.message); } });
+  $("#docIn")?.addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return; if (f.size > 10 * 1024 * 1024) return toast("That file is over 10 MB."); try { await api.followDoc(enc, f); toast("Report sent."); await reload(); } catch (x) { toast(x.message); } });
+  $$("[data-done]").forEach(b => b.onclick = async () => { b.disabled = true; try { await api.taskDone(enc, b.dataset.done); await loadTasks(); await reload(); } catch (x) { toast(x.message); b.disabled = false; } });
+  $$("[data-review]").forEach(b => b.onclick = () => markReviewed(b, reload));
+  if (!wasThere) swap();
+  stopPolling();
+  if (active) state.poll = setTimeout(() => { if (location.hash === `#/followup/${enc}` && document.activeElement?.id !== "simText") reload(); }, 8000);
+}
+/* =================================================================
+   Hospital pharmacy stock (runbook D-126 to D-128)
+   ================================================================= */
+async function renderPharmacy() {
+  view().innerHTML = `<div class="page narrow"><div class="skel tall w40"></div><div class="skel"></div></div>`;
+  const data = await api.pharmacy();
+  const MATCH = { matched: ["ok", "Matched"], added: ["iris", "Added to clinic list"], unmatched: ["risk", "Not matched"] };
+  const table = rows => `<div class="meds-wrap"><table class="meds stock-table"><thead><tr><th scope="col">Pharmacy item</th><th scope="col">Catalogue medicine</th><th scope="col">Match</th><th class="s" scope="col">Qty</th><th scope="col">Stock</th></tr></thead>
+    <tbody>${rows.map(i => `<tr><td><span class="mname">${esc(i.item_name)}</span><span class="mcomp">${esc(i.composition || "")}</span></td><td>${esc(i.product_label || "")}</td>
+      <td><span class="chip ${MATCH[i.match_state][0]}">${MATCH[i.match_state][1]}</span></td><td class="s">${esc(i.quantity)}</td><td><span class="chip ${STOCK_CLS[i.status]}">${STOCK_TEXT[i.status]}</span></td></tr>`).join("")}</tbody></table></div>`;
+  const attention = data.imported ? data.items.filter(i => i.status !== "in_stock" || i.match_state === "unmatched") : [];
+  view().innerHTML = `<div class="page wide"><header class="page-head"><h1>Hospital pharmacy</h1>
+      <p>Upload the pharmacy's stock export. Doctors then see stock on each prescription line and can switch an unavailable medicine to one in stock with the same composition. Stock never changes a prescription by itself.</p></header>
+    <section class="panel addform" aria-label="Upload stock"><h3>Upload stock</h3>
+      <p class="hint">A CSV with the item name and quantity. Item code, composition and reorder level help matching. Each upload replaces the last. Made-up data only.</p>
+      <div class="row"><label class="btn btn-line" for="stockFile">${ICON.upload}Choose CSV</label><input class="sr" type="file" id="stockFile" accept=".csv,text/csv"><span class="hint m0" id="stockName">No file chosen</span><button class="btn btn-dark" id="stockGo" disabled>Upload stock</button></div>
+      <p class="err" id="stockErr" role="alert"></p></section>
+    ${data.imported ? `<section class="panel"><div class="ph"><h3>Stock as of ${esc(fmtWhen(data.as_of))}</h3><p>${esc(data.filename)}</p></div>
+      <p>${esc(data.rows)} items, ${esc(data.matched - (data.added || 0))} matched to the catalogue${data.added ? `, ${esc(data.added)} added to the clinic list for review` : ""}${data.unmatched ? `, ${esc(data.unmatched)} not matched` : ""}.</p>
+      <div class="row tight">${["in_stock", "low", "out"].map(k => `<span class="chip ${STOCK_CLS[k]}">${STOCK_TEXT[k]}: ${esc(data.counts[k])}</span>`).join("")}</div></section>
+    ${attention.length ? `<section class="panel"><div class="ph"><h3>Needs attention</h3><p>${attention.length} ${attention.length === 1 ? "item" : "items"}</p></div>${table(attention)}</section>` : ""}
+    <details class="panel more"><summary class="btn btn-quiet">Show all ${esc(data.items.length)} items</summary>${table(data.items)}</details>`
+    : `<div class="panel first"><h3>No stock uploaded yet</h3><p>Once a file is uploaded, prescriptions show what the pharmacy has.</p></div>`}</div>`;
+  const file = $("#stockFile"), go = $("#stockGo");
+  file.onchange = () => { $("#stockName").textContent = file.files[0]?.name || "No file chosen"; go.disabled = !file.files[0]; };
+  go.onclick = async () => {
+    const f = file.files[0]; if (!f) return;
+    if (f.size > 2000000) { $("#stockErr").textContent = "That file is over 2 MB. Export only medicines."; return; }
+    go.disabled = true; go.textContent = "Uploading";
+    try { await api.uploadStock(f.name, await f.text()); toast("Stock updated."); await renderPharmacy(); }
+    catch (x) { $("#stockErr").textContent = x.message; go.disabled = false; go.textContent = "Upload stock"; }
+  };
+  swap();
+}
+
+async function markReviewed(b, then) { b.disabled = true; try { await api.reviewUpload(b.dataset.review); toast("Marked as reviewed."); await then(); } catch (x) { toast(x.message); b.disabled = false; } }
+
+/* =================================================================
+   Reference drawer
+   ================================================================= */
+const drawer = $("#refDrawer");
+$("#refClose").onclick = () => drawer.close();
+$("#refForm").onsubmit = async e => {
+  e.preventDefault();
+  const qv = $("#refQ").value.trim(), out = $("#refResults"); if (!qv) return;
+  out.innerHTML = `<div class="skel"></div><div class="skel w80"></div>`;
+  try {
+    const list = items(await api.knowledge(qv, state.visit?.enc));
+    out.innerHTML = list.length ? list.map(r => `<article class="passage"><h3>${esc(r.title || r.source)}</h3><p class="muted">${esc([r.source, r.section].filter(Boolean).join(", "))}</p><p>${esc(r.content)}</p>${/^https:/.test(r.url || "") ? `<a class="link-btn" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}</article>`).join("") : `<p class="hint">Nothing found. Try the generic name.</p>`;
+  } catch (x) { out.innerHTML = `<p class="hint warn">${esc(x.message)}</p>`; }
+};
+
+/* =================================================================
+   Downloads
+   ================================================================= */
+function saveBlob(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+function downloadJSON(r) { saveBlob(new Blob([JSON.stringify(r, null, 2)], { type: "application/json" }), `${r.patient_id}_${r.date}_v${r.version}_${r.status}.json`); toast("JSON downloaded."); }
+function downloadArtifact(id, kind) {
+  if (api.downloadUrl) { location.href = api.downloadUrl(id); return; }
+  const r = state.visit.report;
+  if (kind === "pdf") return printReport(r);
+  saveBlob(new Blob([JSON.stringify({ note: "Demo mode. The real FHIR bundle comes from the backend.", report: r }, null, 2)], { type: "application/json" }), `${r.patient_id}_${r.date}_fhir_demo.json`);
+}
+function printReport(r) {
+  const p = state.patient;
+  $("#print").innerHTML = `${r.status !== "approved" ? '<div class="wm">DRAFT</div>' : ""}
+    <div class="ph"><div><h1>${esc(session.hospital?.name)}</h1><div>${esc(r.clinician || "")}</div></div>
+    <div class="ra">Visit ${fmtDate(r.date)}<br>${esc(p.name)}, ${esc(p.age)} y, ${esc(cap(p.sex))}<br>ID ${esc(p.id)}<br>${p.allergies?.status === "known" ? "Allergy: " + esc(p.allergies.items.join(", ")) : p.allergies?.status === "none" ? "No known allergies" : "Allergies not recorded"}</div></div>
+    ${r.report_groups.map(g => `<h4>${esc(g.heading)}</h4><p>${g.lines.map(l => esc(l.text)).join(" ")}</p>`).join("")}
+    <h4>Medicines</h4><table><thead><tr><th>Medicine</th><th>Morning</th><th>Afternoon</th><th>Evening</th><th>Night</th></tr></thead><tbody>
+    ${r.medication_views.map(m => { const s = m.schedule?.kind === "slots" ? m.schedule.slots : null; return `<tr><td><b>${esc(m.label)}</b> (${esc(m.composition)})<br>${esc(medShort(m))}</td>${[0, 1, 2, 3].map(i => `<td>${s ? (s[i] || "–") : i === 0 ? esc(scheduleText(m.schedule)) : ""}</td>`).join("")}</tr>`; }).join("")}
+    </tbody></table><p class="foot">Synthetic demo record. ${r.status === "approved" ? "Approved by " + esc(r.approval?.approved_by || "") + "." : "Draft, not approved."}</p>`;
+  window.print();
+}
+
+function onMainClick(e) {
+  const vt = e.target.closest(".visit > button");
+  if (vt) return togglePast(vt);
+  const past = e.target.closest("[data-past]");
+  if (past) {
+    const r = past.closest(".visit")._report;
+    if (past.dataset.past === "json") return downloadJSON(r);
+    const art = r.artifacts?.find(a => a.kind === "pdf" && a.state === "ready");
+    return art && api.downloadUrl ? void (location.href = api.downloadUrl(art.id)) : printReport(r);
+  }
+  const rv = e.target.closest("[data-review]");
+  if (rv) return markReviewed(rv, () => openPatient(state.selected));
+  const pick = e.target.closest("[data-product]");
+  if (pick && !pick.dataset.swap) {
+    const v = state.visit, pid = pick.dataset.product;
+    if (v.replacing) { const target = v.replacing; Object.assign(v, { adding: false, replacing: null }); return applyFix([{ action: "choose_product", target, value: { product_id: pid }, reason: `Chosen by the doctor: ${pick.dataset.label}.` }], pick); }
+    Object.assign(v, { adding: false, editing: "__new", newMed: { id: "__new", product_id: pid, label: pick.dataset.label, composition: pick.dataset.comp, form: pick.dataset.form, food: pick.dataset.food || null, dose: null, schedule: null, duration: null, filled: {} } });
+    return renderVisit();
+  }
+  const act = e.target.closest("[data-act]"); if (!act) return;
+  const v = state.visit;
+  ({
+    "new-visit"() { state.visit = { phase: "idle", language: "hinglish" }; renderPatient(); $("#visit").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" }); },
+    type() { v.phase = "typing"; renderVisit(); },
+    cancel() { v.phase = "idle"; renderVisit(); },
+    "cancel-edit"() { Object.assign(v, { editing: null, newMed: null }); renderVisit(); },
+    "remove-med"() { v.editing = null; applyFix([{ action: "remove_medicine", target: act.dataset.med, reason: "Removed by the doctor." }], act); },
+    "add-med"() { v.adding = true; v.editing = null; renderVisit(); },
+    "close-add"() { Object.assign(v, { adding: false, replacing: null }); renderVisit(); },
+    async shortlist() { act.disabled = true; act.textContent = "Loading"; try { showPicks(items(await api.shortlist(v.enc))); } catch (x) { toast(x.message); } act.disabled = false; act.textContent = "Show common choices"; },
+    json() { downloadJSON(v.report); },
+    pdf() { api.previewUrl ? window.open(api.previewUrl(v.enc, v.report.version), "_blank", "noopener") : printReport(v.report); },
+    ref() { $("#refResults").innerHTML = ""; drawer.showModal(); $("#refQ").focus(); },
+    async "retry-delivery"() { act.disabled = true; try { await api.retryDelivery(v.enc); toast("Sending again."); pollFiles(800); } catch (x) { toast(x.message); act.disabled = false; } }
+  })[act.dataset.act]?.();
+}
+async function togglePast(vt) {
+  const li = vt.parentElement, open = li.dataset.open !== "true";
+  li.dataset.open = String(open); vt.setAttribute("aria-expanded", String(open));
+  const inner = li.querySelector(".inner");
+  if (!open || inner.dataset.loaded) return;
+  inner.innerHTML = `<div class="skel"></div><div class="skel w70"></div>`;
+  try {
+    const r = adapt.report(await api.report(li.dataset.enc)); inner.dataset.loaded = "1"; li._report = r;
+    inner.innerHTML = reportHTML(r, false) + `<div class="row mt"><button class="btn btn-line btn-small" data-past="pdf">${ICON.pdf}Download PDF</button><button class="btn btn-line btn-small" data-past="json">${ICON.json}Download JSON</button></div>`;
+    wireReport(inner, r, false);
+  } catch (x) { inner.innerHTML = `<p class="hint warn">${esc(x.message)}</p>`; }
+}
+
+/* =================================================================
+   Boot
+   ================================================================= */
+addEventListener("DOMContentLoaded", async () => {
+  api = window.VoiceRxMock || live;
+  try { session = adapt.session(await api.me()); csrf = session.csrf_token; }
+  catch (x) {
+    if (x.status === 401) return toLogin();
+    $("#app").hidden = false; return showError("ARDAI can't reach the server right now.", () => location.reload());
+  }
+  $("#app").hidden = false; $("#demoBadge").hidden = !window.VoiceRxMock;
+  if (!reduce) { $("#app").classList.add("entering"); setTimeout(() => $("#app").classList.remove("entering"), 520); }
+  renderShell();
+  if (session.doctor) await loadTasks();
+  route();
+});

@@ -11,8 +11,9 @@ _pool = None
 def open_pool(database_url):
     global _pool
     if _pool is None:
-        # Each new connection costs a TLS handshake to the pooler; a few warm ones keep pages quick.
-        _pool = ConnectionPool(database_url, min_size=2, max_size=8, open=True, timeout=30,
+        # Each new connection costs a TLS handshake to the pooler; a few warm ones keep pages quick. Five, because
+        # the worker's suggestions and shortlist each hold one while the report is written (runbook D-131).
+        _pool = ConnectionPool(database_url, min_size=1, max_size=5, open=True, timeout=30,
                                kwargs={'row_factory': dict_row, 'prepare_threshold': None})
     return _pool
 

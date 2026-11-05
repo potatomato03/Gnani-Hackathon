@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-motion="on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in to ARDAI</title>
+<meta name="description" content="Record the visit, check the draft, approve the prescription.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/auth-assets/base.css?v=20261105b">
+<link rel="stylesheet" href="/auth-assets/login.css?v=20261105b">
+<script src="/auth-assets/login.js?v=20261105b" defer></script>
+</head>
+<body>
+<div class="sky" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i><i class="rays"></i></div>
+<div class="cursor-aura" id="cursorAura" aria-hidden="true"></div>
+
+<main class="login" id="login">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span>ARDAI</div>
+
+  <div class="pitch">
+    <h1>Speak the visit. The report writes itself.</h1>
+    <p class="lede">Talk to your patient the way you always do. ARDAI drafts the report and prescription for you to check, then stays with the patient on WhatsApp.</p>
+    <div class="story" aria-hidden="true">
+      <ol class="steps" id="steps">
+        <li>You speak<span class="bar"><i></i></span></li>
+        <li>We write the report<span class="bar"><i></i></span></li>
+        <li>Patients stay on track<span class="bar"><i></i></span></li>
+      </ol>
+      <div class="scenes">
+        <div class="scene">
+          <canvas class="wave" id="heroWave"></canvas>
+          <p class="heard"><span class="who">In the clinic, 9:42 AM</span><span id="typed"></span><span class="caret"></span></p>
+        </div>
+        <div class="scene">
+          <div class="rx">
+            <div class="rx-head"><span>Draft prescription</span><span>Ravi Kumar, 46</span></div>
+            <div class="rx-row rv i0"><span>Complaint</span><span>Fever for 3 days</span></div>
+            <div class="rx-row rv i1"><span>Diagnosis</span><span>Viral fever (provisional)</span></div>
+            <div class="rx-row rv i2"><span>Medicine</span>
+              <span><b>DOLO 650 TAB</b> (Paracetamol 650 mg)
+                <span class="slots"><span class="slot lit i0"><small>Morning</small>1</span><span class="slot i1"><small>Afternoon</small>0</span><span class="slot i2"><small>Evening</small>0</span><span class="slot lit i3"><small>Night</small>1</span></span>
+              </span>
+            </div>
+            <div class="rx-row rv i3"><span>How to take</span><span>After food, for 3 days</span></div>
+          </div>
+        </div>
+        <div class="scene">
+          <div class="chat">
+            <div class="chat-top"><span class="wa"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Z"/></svg></span>ARDAI check-in with Ravi</div>
+            <div class="bub them i0">Your prescription from today is attached. Did you take your Dolo after breakfast?<small>8:00 AM</small></div>
+            <div class="bub me i1">Haan, le li. Bukhaar ab kam hai.<small>8:12 AM</small></div>
+            <div class="bub them i2">Great. Your next dose is at 9 PM, after dinner.<small>8:12 AM</small></div>
+            <div class="bub alert i3">Ravi missed last night's dose. His doctor will see this before the next visit.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="halo-frame auth-frame">
+    <div class="auth">
+      <form id="loginForm" novalidate>
+        <h2>Welcome back, doctor</h2>
+        <p class="sub">Sign in to see today's patients.</p>
+        <label class="field"><span>Username</span><input class="input" id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+        <label class="field"><span>Password</span>
+          <span class="pw"><input class="input" id="password" name="password" type="password" autocomplete="current-password" required><button type="button" id="pwToggle" aria-label="Show password">Show</button></span>
+        </label>
+        <p class="err" id="loginErr" role="alert"></p>
+        <button class="btn btn-dark" type="submit" id="signIn"><span class="spinner" aria-hidden="true"></span><span class="btn-label">Sign in</span></button>
+      </form>
+      <div id="devBox" hidden>
+        <div class="or">or continue as a demo doctor</div>
+        <div class="doclist" id="devList"></div>
+      </div>
+      <p class="fine" id="demoNote" hidden><button type="button" class="link-btn" id="useDemo">Fill in the demo account</button></p>
+      <p class="fine">Private demo. All patients here are made up.</p>
+    </div>
+  </div>
+  <button class="btn btn-quiet btn-small motion-toggle" type="button" id="motionToggle" aria-pressed="false">Pause animation</button>
+</main>
+
+<section class="features" aria-label="What ARDAI does">
+  <h2>Built for a busy outpatient day</h2>
+  <ul>
+    <li><h3>Speaks your language</h3><p>Dictate in Hinglish, Hindi, English, Tamil, Telugu or Gujarati. Medicine names are matched to the catalogue.</p></li>
+    <li><h3>Every line has a source</h3><p>Tap any sentence in the report to see exactly what was said.</p></li>
+    <li><h3>You stay in charge</h3><p>Unclear medicines are asked, not guessed. Nothing reaches the patient until you approve.</p></li>
+    <li><h3>Follow-up on WhatsApp</h3><p>Patients get their PDF and voice instructions. Missed doses and new reports come back to you.</p></li>
+  </ul>
+</section>
+</body>
+</html>

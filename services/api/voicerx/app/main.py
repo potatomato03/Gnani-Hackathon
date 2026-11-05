@@ -41,6 +41,9 @@ from .worker import TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
 from .followup import FollowupService, initialize as initialize_followup
 from .followup_routes import install as install_followup_routes
 from .clinic_reports import deliveries as clinic_deliveries
+from .workspace import install as install_workspace
+from .private_access import authenticate
+from .audio_uploads import install as install_audio_uploads
 from ..agent.gate import GateRefused
 
 log = logging.getLogger('voicerx.app')
@@ -77,7 +80,9 @@ async def lifespan(app):
     state['followup'] = FollowupService(settings)
     worker = Worker(settings, followup=state['followup'])
     state['worker'] = worker
-    worker.start()
+    from .config import read_env
+    if read_env().get('APP_RUN_WORKER','1')=='1':
+        worker.start()
     # Load the embedding model and the product name index in the background, so the first search isn't slow.
     threading.Thread(target=warm_up, daemon=True).start()
     yield
@@ -85,7 +90,7 @@ async def lifespan(app):
     close_pool()
 
 
-app = FastAPI(title='ARDAI doctor workspace', lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title='ARDAI doctor workspace', lifespan=lifespan, docs_url=None, redoc_url=None,openapi_url=None)
 
 
 def error_body(code, message, retryable=False, correlation_id=None, **extra):
@@ -119,7 +124,24 @@ async def unexpected(request, error):
 @app.middleware('http')
 async def headers(request: Request, call_next):
     request.state.correlation_id = uuid.uuid4().hex[:16]
-    response = await call_next(request)
+    from .config import read_env
+    protected=read_env().get('APP_PRIVATE_WORKSPACE')=='1'
+    public_api={'/api/v1/auth/login','/api/v1/auth/options','/api/v1/health'}
+    private_path=request.url.path.startswith('/static/') or request.url.path=='/v1' or (
+        request.url.path.startswith('/api/v1/') and request.url.path not in public_api)
+    if protected and request.url.path in ('/api/v1/auth/dev-users','/api/v1/auth/dev-login') and not state['settings'].dev_login:
+        response=JSONResponse({'error':{'code':'not_found','message':'Not found.'}},status_code=404)
+    elif protected and private_path:
+        try:
+            if not request.cookies.get(auth.COOKIE):
+                raise auth.NotSignedIn()
+            request.state.auth_session=await run_in_threadpool(load_request_session,request.cookies.get(auth.COOKIE))
+        except auth.NotSignedIn:
+            response=JSONResponse({'error':{'code':'not_signed_in','message':'Sign in required.'}},status_code=401)
+        else:
+            response=await call_next(request)
+    else:
+        response = await call_next(request)
     response.headers['X-Correlation-ID'] = request.state.correlation_id
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
@@ -129,18 +151,38 @@ async def headers(request: Request, call_next):
         "base-uri 'none'")
     # The microphone is for this page only, never for anything it embeds.
     response.headers['Permissions-Policy'] = 'microphone=(self), camera=(), geolocation=()'
+    response.headers['X-Robots-Tag']='noindex, nofollow, noarchive'
+    if request.url.scheme=='https':
+        response.headers['Strict-Transport-Security']='max-age=31536000; includeSubDomains'
+    if protected:
+        response.headers['Cache-Control']='private, no-store'
     if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
     elif request.url.path.startswith('/static/'):
         # Revalidate each load, so a changed script is never served stale from the browser cache.
         response.headers['Cache-Control'] = 'no-cache'
+    if protected:
+        response.headers['Cache-Control']='private, no-store'
     return response
+
+
+def load_request_session(token):
+    if not token or len(token)>128:
+        raise auth.NotSignedIn()
+    with transaction() as conn:
+        return auth.load_session(conn,token)
 
 
 def session_of(request):
     settings = state['settings']
-    with transaction() as conn:
-        session = auth.load_session(conn, request.cookies.get(auth.COOKIE))
+    token=request.cookies.get(auth.COOKIE)
+    if not token or len(token)>128:
+        raise auth.NotSignedIn()
+    # Shared only within this HTTP request. Every new request checks revocation and membership afresh.
+    session=getattr(request.state,'auth_session',None)
+    if session is None:
+        session=load_request_session(token)
+        request.state.auth_session=session
     auth.check_request(session, request.method, request.headers.get('X-CSRF-Token'), request.headers.get('Origin'),
                        settings.allowed_origins)
     return session
@@ -163,7 +205,8 @@ def health():
 
 @app.get('/api/v1/auth/options')
 def auth_options():
-    return {'dev_login': state['settings'].dev_login, 'password_login': False}
+    from .config import read_env
+    return {'dev_login': state['settings'].dev_login, 'password_login':read_env().get('APP_PRIVATE_WORKSPACE')=='1'}
 
 
 @app.get('/api/v1/auth/dev-users')
@@ -204,9 +247,36 @@ async def dev_login(request: Request):
 
 
 @app.post('/api/v1/auth/login')
-def password_login():
-    raise ApiError(501, 'auth_not_configured',
-                   "Sign-in with Supabase Auth isn't set up yet. Use the development sign-in with synthetic doctors.")
+async def password_login(request:Request):
+    origin=request.headers.get('Origin')
+    if origin and origin not in state['settings'].allowed_origins and origin!=str(request.base_url).rstrip('/'):
+        raise auth.Forbidden('Request origin is not allowed.')
+    if request.headers.get('content-type','').split(';')[0]!='application/json':
+        raise ApiError(415,'invalid_request','Send a JSON sign-in request.')
+    data=bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data)>4096:
+            raise ApiError(413,'invalid_request','Sign-in request too large.')
+    import json
+    try:
+        body=json.loads(data)
+        username=body.get('username','');password=body.get('password','')
+        if not isinstance(username,str) or not isinstance(password,str) or len(username)>120 or len(password)>200:
+            raise ValueError()
+    except (ValueError,AttributeError):
+        raise ApiError(400,'invalid_request','Invalid sign-in request.') from None
+    with transaction() as conn:
+        account,limited=authenticate(conn,username,password,request.client.host if request.client else 'unknown')
+        if account:
+            token=auth.create_session(conn,account['user_id'],account['organisation_id'],operator_id=account['user_id'])
+            current=auth.load_session(conn,token)
+            audit(conn,account['user_id'],account['organisation_id'],'auth.login','account',None,{'shared_demo_account':True})
+    if not account:
+        raise ApiError(429 if limited else 401,'sign_in_failed','Sign-in failed. Try again later.' if limited else 'Invalid username or password.')
+    response=JSONResponse(auth.session_view(current))
+    response.set_cookie(auth.COOKIE,token,httponly=True,samesite='strict',secure=request.url.scheme=='https',max_age=7200,path='/')
+    return response
 
 
 @app.post('/api/v1/auth/logout')
@@ -227,11 +297,11 @@ def me(request: Request):
 # ---------- Patients ----------
 
 @app.get('/api/v1/patients')
-def patients(request: Request, q: str = '', which: str = Query('all', alias='list')):
+def patients(request: Request, q: str = '', which: str = Query('all', alias='list'), doctor_id:str|None=None):
     session = session_of(request)
     today = today_in(session['timezone'])
     with transaction() as conn:
-        rows = list_patients(conn, session['organisation_id'], q[:80], which == 'today', today)
+        rows = list_patients(conn, session['organisation_id'], q[:80], which == 'today', today,doctor_id)
     return {'items': [patient_summary(r) for r in rows], 'as_of': datetime.now(timezone.utc).isoformat(),
             'today': today.isoformat()}
 
@@ -254,7 +324,8 @@ def patient_detail(request: Request, patient_id: str):
                 'diagnoses': [l['text'] for l in report['sections'].get('diagnoses', [])] if report else [],
                 'complaints': [l['text'] for l in report['sections'].get('chief_complaints', [])] if report else [],
                 'blocking': sum(i['severity'] == 'block' for i in report['issues']) if report else None})
-    return {'patient': {**patient_summary(patient), 'phone_on_file': bool(patient['phone']),
+    return {'patient': {**patient_summary(patient), 'phone_on_file': bool(patient['phone'] or patient.get('phone_encrypted')),
+                        'phone_last4':patient.get('phone_last4'),
                         'consents': list(patient['consents'])}, 'encounters': encounters}
 
 
@@ -367,6 +438,10 @@ async def upload_audio(request: Request, encounter_id: str, language: str = 'hin
     if not data or len(data) > MAX_AUDIO_BYTES:
         raise ApiError(413 if data else 422, 'audio_too_large' if data else 'empty_audio',
                        'Recordings are limited to 40 MB.' if data else 'The recording is empty.')
+    return await store_audio(session,encounter_id,media,language,data)
+
+
+async def store_audio(session,encounter_id,media,language,data):
     try:
         samples = await run_in_threadpool(decode_audio, data)
     except Exception:
@@ -397,6 +472,7 @@ async def upload_audio(request: Request, encounter_id: str, language: str = 'hin
                      "duration_s, consent, created_by) values (%s, %s, %s, 'audio', %s, %s, %s, %s, %s, %s, %s)",
                      (source_id, encounter_id, version, language, media, file_name, sha256(data).hexdigest(),
                       round(seconds, 1), Jsonb(consent), session['user_id']))
+        conn.execute('insert into app.source_files(source_id,sha256,data) values(%s,%s,%s)',(source_id,sha256(data).hexdigest(),data))
         audit(conn, session['user_id'], session['organisation_id'], 'source.audio', 'source', source_id,
               {'bytes': len(data), 'seconds': round(seconds, 1), 'media_type': media, 'language': language})
     return {'id': source_id, 'encounter_id': encounter_id, 'version': version, 'kind': 'audio', 'language': language,
@@ -415,6 +491,10 @@ def source_audio(request: Request, encounter_id: str, source_id: str):
         raise not_found('recording')
     path = state['settings'].artifacts_dir / encounter_id / 'sources' / source['file_name']
     if not path.is_file() or sha256(path.read_bytes()).hexdigest() != source['sha256']:
+        with transaction() as conn:
+            stored=one(conn,'select data,sha256 from app.source_files where source_id=%s',(source_id,))
+        if stored and stored['sha256']==source['sha256'] and sha256(bytes(stored['data'])).hexdigest()==source['sha256']:
+            return Response(bytes(stored['data']),media_type=source['media_type'],headers={'Cache-Control':'private, no-store'})
         raise ApiError(410, 'recording_changed', 'This recording is missing or no longer matches its record.')
     return FileResponse(path, media_type=source['media_type'])
 
@@ -621,7 +701,8 @@ async def post_approval(request: Request, encounter_id: str):
         clinic_job = state['followup'].clinic_reports.queue_approval(conn,encounter,approved,patient,approval_id)
         try:
             initialize_followup(conn, encounter, approved, patient,
-                                clinic_copy_contact=clinic_job['recipient'] if clinic_job else None)
+                                clinic_copy_contact=clinic_job['recipient'] if clinic_job else None,
+                                registered_delivery=bool(clinic_job and clinic_job.get('delivery_mode')=='patient'))
         except GateRefused:
             pass  # Approval succeeds even when consent/language/synthetic eligibility prevents follow-up.
         audit(conn, session['user_id'], session['organisation_id'], 'draft.approved', 'encounter', encounter_id,
@@ -677,6 +758,11 @@ def download(request: Request, artifact_id: str):
         raise ApiError(409, 'artifact_not_ready', 'This file is not ready yet.', retryable=True)
     path = state['settings'].artifacts_dir / row['encounter_id'] / f"v{row['version']}" / row['file_name']
     if not path.is_file() or sha256(path.read_bytes()).hexdigest() != row['sha256']:
+        with transaction() as conn:
+            saved=one(conn,'select sha256,data from app.artifact_files where artifact_id=%s',(artifact_id,))
+        if saved and saved['sha256']==row['sha256'] and sha256(bytes(saved['data'])).hexdigest()==row['sha256']:
+            return Response(bytes(saved['data']),media_type='application/pdf' if row['kind']=='report_pdf' else 'application/json',
+                            headers={'Cache-Control':'private, no-store','Content-Disposition':f'attachment; filename="{row["file_name"]}"'})
         if row['kind']=='report_pdf':
             with transaction() as conn:
                 archived=one(conn,'select sha256,data from app.report_files where encounter_id=%s and version=%s',
@@ -851,17 +937,35 @@ async def knowledge_search(request: Request):
 # ---------- Web app ----------
 
 install_followup_routes(app, state, session_of, ApiError)
+install_workspace(app,state,session_of,ApiError)
+install_audio_uploads(app,session_of,ApiError,store_audio,AUDIO_TYPES,LANGUAGE_CODES)
 
 app.mount('/static', StaticFiles(directory=WEB / 'static'), name='static')
 
 
 @app.get('/')
-def index():
-    # The app_v2 design is the interface (runbook D-124); it runs the same script as the original.
-    return FileResponse(WEB / 'static' / 'app_v2' / 'index.html', headers={'Cache-Control': 'no-cache'})
+def index(request:Request):
+    """The sign-in page until there is a session, then the doctor app (Rakshit's 5 Nov design, runbook D-129).
+    The sign-in page holds no product data, so it is the same in private and development modes."""
+    try:
+        session_of(request)
+    except auth.NotSignedIn:
+        return FileResponse(WEB / 'login.html', headers={'Cache-Control': 'no-store'})
+    return FileResponse(WEB / 'index.html', headers={'Cache-Control': 'no-cache'})
 
 
 @app.get('/v1')
 def index_v1():
-    """The original interface, kept beside app_v2."""
-    return FileResponse(WEB / 'index_v1.html', headers={'Cache-Control': 'no-cache'})
+    """The previous interface (app_v2 of 4 Nov), kept as a fallback beside the new design."""
+    return FileResponse(WEB / 'static' / 'app_v2' / 'index.html', headers={'Cache-Control': 'no-cache'})
+
+
+AUTH_ASSETS = ('base.css', 'login.css', 'login.js')
+
+
+@app.get('/auth-assets/{name}')
+def auth_asset(name:str):
+    # Public before sign-in; base.css is also the doctor app's foundation. Versioned URLs bust the cache.
+    if name not in AUTH_ASSETS:
+        raise not_found('file')
+    return FileResponse(WEB / 'auth-assets' / name,headers={'Cache-Control':'no-cache'})

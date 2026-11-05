@@ -1,0 +1,226 @@
+{
+  "run_id": "typed-1",
+  "source": "typed",
+  "approximate": false,
+  "scored": 1,
+  "missing_input": [],
+  "incomplete": [
+    "fam-001-b"
+  ],
+  "cases": {
+    "fam-001-a": {
+      "approximate": false,
+      "facts_found": {
+        "count": 8,
+        "total": 8
+      },
+      "facts_missed": {
+        "count": 0,
+        "total": 8
+      },
+      "false_facts": {
+        "count": 0,
+        "total": 8
+      },
+      "negation_accuracy": {
+        "count": 8,
+        "total": 8
+      },
+      "side_accuracy": {
+        "count": 7,
+        "total": 8
+      },
+      "medicines_exact": {
+        "count": 1,
+        "total": 1
+      },
+      "extra_medicines": {
+        "count": 0,
+        "total": 1
+      },
+      "expected_flags": {
+        "count": 0,
+        "total": 0
+      },
+      "section_accuracy": {
+        "count": 8,
+        "total": 8
+      },
+      "report_omissions": {
+        "count": 0,
+        "total": 8
+      },
+      "report_duplications": {
+        "count": 0,
+        "total": 8
+      },
+      "unsupported_lines": {
+        "count": 0,
+        "total": 8
+      },
+      "unexpected_blocking_flags": [
+        {
+          "code": "laterality_mismatch",
+          "severity": "block",
+          "target": "x5",
+          "message": "laterality mismatch"
+        }
+      ],
+      "missing_expected_flags": [],
+      "fact_matches": [
+        [
+          "f1",
+          "x1"
+        ],
+        [
+          "f2",
+          "x2"
+        ],
+        [
+          "f3",
+          "x3"
+        ],
+        [
+          "f4",
+          "x4"
+        ],
+        [
+          "f5",
+          "x5"
+        ],
+        [
+          "f6",
+          "x6"
+        ],
+        [
+          "f7",
+          "x7"
+        ],
+        [
+          "f8",
+          "x8"
+        ]
+      ],
+      "medicine_matches": [
+        [
+          "m1",
+          "rx1"
+        ]
+      ],
+      "unmatched_expected_facts": [],
+      "unmatched_extracted_facts": [],
+      "attribute_mismatches": [
+        {
+          "expected": "f5",
+          "extracted": "x5",
+          "field": "laterality",
+          "expected_value": null,
+          "actual_value": "bilateral"
+        }
+      ],
+      "model_metadata": {
+        "transcript_sha256": "c771f8c5074106b1b46c2b73869af8213459f1eb0bfb211ad37d0332ee679c67",
+        "stages": {
+          "extract": {
+            "provider": "gemini",
+            "model": "gemini-3.8-flash",
+            "prompt_version": "extract-v1",
+            "cache_key": "300afd135ed4e48ae2e4cc1a8e7dfdc45a3844713aad452a43cf8139c3b0f535",
+            "cached": false,
+            "key_index": 0,
+            "attempts": 1
+          },
+          "write_report": {
+            "provider": "gemini",
+            "model": "gemini-3.8-flash",
+            "prompt_version": "report-v1",
+            "cache_key": "08e7689337aeb51f3252ab4940d12ca1671902cc3744b570b80645a4e7027926",
+            "cached": false,
+            "key_index": 0,
+            "attempts": 4
+          }
+        },
+        "pdf": "ready"
+      }
+    },
+    "fam-001-b": {
+      "status": "incomplete"
+    }
+  },
+  "metrics": {
+    "facts_found": {
+      "count": 8,
+      "total": 8
+    },
+    "facts_missed": {
+      "count": 0,
+      "total": 8
+    },
+    "false_facts": {
+      "count": 0,
+      "total": 8
+    },
+    "negation_accuracy": {
+      "count": 8,
+      "total": 8
+    },
+    "side_accuracy": {
+      "count": 7,
+      "total": 8
+    },
+    "medicines_exact": {
+      "count": 1,
+      "total": 1
+    },
+    "extra_medicines": {
+      "count": 0,
+      "total": 1
+    },
+    "expected_flags": {
+      "count": 0,
+      "total": 0
+    },
+    "section_accuracy": {
+      "count": 8,
+      "total": 8
+    },
+    "report_omissions": {
+      "count": 0,
+      "total": 8
+    },
+    "report_duplications": {
+      "count": 0,
+      "total": 8
+    },
+    "unsupported_lines": {
+      "count": 0,
+      "total": 8
+    }
+  },
+  "unexpected_blocking_flags": 1,
+  "not_run": [
+    "fam-002-a",
+    "fam-002-b",
+    "fam-003-a",
+    "fam-003-b",
+    "fam-004-a",
+    "fam-004-b",
+    "fam-005-a",
+    "fam-005-b",
+    "fam-006-a",
+    "fam-006-b",
+    "fam-007-a",
+    "fam-007-b",
+    "fam-008-a",
+    "fam-008-b",
+    "fam-009-a",
+    "fam-009-b",
+    "fam-010-a",
+    "fam-010-b",
+    "fam-011-v1",
+    "fam-011-v2",
+    "fam-011-v3",
+    "fam-012-a",
+    "fam-012-b"
+  ]
+}

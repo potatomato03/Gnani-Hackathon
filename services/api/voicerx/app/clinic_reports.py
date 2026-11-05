@@ -12,8 +12,10 @@ from ..ingest.gnani import TTS_MODEL, CLINIC_VOICE
 from ..pipeline.assemble import content_hash
 from .config import read_env
 from .db import all_rows, audit, one, transaction
+from .private_access import decrypt_phone
 
 VOICE_PREFIX = 'report_voice:'
+MENU_PREFIX = 'report_menu:'
 RANK = {'accepted':0,'sent':1,'delivered':2,'read':3,'failed':4}
 
 
@@ -33,13 +35,21 @@ class ClinicReports:
 
     def insert(self, conn, **values):
         return one(conn,'insert into app.clinic_report_jobs(id,organisation_id,approval_id,encounter_id,version,source_hash,'
-                   'recipient,kind,source_job,request_ref,language) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) '
+                   'recipient,kind,source_job,request_ref,language,delivery_mode) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) '
                    'on conflict(approval_id,recipient,kind,request_ref) do nothing returning *',
                    ('notice-'+uuid4().hex[:20],*[values[k] for k in ('organisation_id','approval_id','encounter_id','version',
-                     'source_hash','recipient','kind','source_job','request_ref','language')]))
+                     'source_hash','recipient','kind','source_job','request_ref','language')],values.get('delivery_mode','clinic_copy')))
 
     def queue_approval(self, conn, encounter, approved, patient, approval_id):
         target = self.target
+        mode='clinic_copy'
+        if patient.get('phone_encrypted'):
+            if 'followup_whatsapp' not in patient['consents'] or not self.service.channel:
+                return None
+            number=decrypt_phone(patient['phone_encrypted'])
+            if not self.service.channel.allowed(number):
+                return None
+            target=ClinicTarget(encounter['organisation_id'],number);mode='patient'
         if not target or target.organisation_id != encounter['organisation_id']:
             return None
         if not patient['synthetic'] or not approved.record_snapshot['patient'].get('synthetic'):
@@ -50,9 +60,12 @@ class ClinicReports:
         # Reuse only the verified phone's message-window timestamp, not its patient identity or consent.
         link=one(conn,'select last_inbound_at from app.patient_channels where organisation_id=%s and contact=%s',
                  (target.organisation_id,contact))
+        window=one(conn,'select * from app.whatsapp_contact_windows where contact=%s',(contact,))
+        if window:
+            link=window
         conn.execute('insert into app.clinic_report_contacts(organisation_id,contact,last_inbound_at) values(%s,%s,%s) '
                      'on conflict do nothing',(target.organisation_id,contact,link['last_inbound_at'] if link else None))
-        base=dict(organisation_id=target.organisation_id,approval_id=approval_id,encounter_id=encounter['id'],
+        base=dict(organisation_id=target.organisation_id,approval_id=approval_id,encounter_id=encounter['id'],delivery_mode=mode,
                   version=approved.version,source_hash=approved.content_hash,recipient=contact,
                   request_ref='approval',language=approved.language_pref)
         pdf=self.insert(conn,**base,kind='report_pdf',source_job=None)
@@ -62,36 +75,37 @@ class ClinicReports:
 
     def touch(self, conn, item):
         """Called only after a new signed inbound event is inserted; replay cannot extend the window."""
-        target=self.target
-        if not target or item['sender']!=self.service.channel.contact(target.number):
-            return
         contact=item['sender'];now=datetime.now(timezone.utc)
-        conn.execute('insert into app.clinic_report_contacts(organisation_id,contact,last_inbound_at) values(%s,%s,%s) '
-                     'on conflict(organisation_id,contact) do update set last_inbound_at=excluded.last_inbound_at',
-                     (target.organisation_id,contact,now))
+        conn.execute('insert into app.whatsapp_contact_windows(contact,last_inbound_at) values(%s,%s) '
+                     'on conflict(contact) do update set last_inbound_at=excluded.last_inbound_at',(contact,now))
+        conn.execute('update app.clinic_report_contacts set last_inbound_at=%s where contact=%s',(now,contact))
         text=(item.get('text') or '').strip().lower()
         if text in ('stop','unsubscribe','start reports'):
-            conn.execute('update app.clinic_report_contacts set opted_out_at=%s where organisation_id=%s and contact=%s',
-                         (None if text=='start reports' else now,target.organisation_id,contact))
-        conn.execute("update app.clinic_report_jobs set not_before=now() where organisation_id=%s and recipient=%s "
-                     "and state='waiting_for_window'",(target.organisation_id,contact))
+            conn.execute('update app.clinic_report_contacts set opted_out_at=%s where contact=%s',
+                         (None if text=='start reports' else now,contact))
+            conn.execute('update app.whatsapp_contact_windows set opted_out_at=%s where contact=%s',
+                         (None if text=='start reports' else now,contact))
+        conn.execute("update app.clinic_report_jobs set not_before=now() where recipient=%s "
+                     "and state='waiting_for_window'",(contact,))
 
     def receive(self, conn, item):
         button=item.get('button') or ''
-        requested=button.startswith(VOICE_PREFIX)
-        target=self.target
-        if not target or item['sender']!=self.service.channel.contact(target.number):
-            return requested  # A report button from another phone never enters a patient conversation.
+        requested=button.startswith(VOICE_PREFIX) or button.startswith(MENU_PREFIX)
         contact=item['sender']
         if not requested:
             return (item.get('text') or '').strip().lower()=='start reports'
-        source=one(conn,"select * from app.clinic_report_jobs where id=%s and organisation_id=%s and recipient=%s "
+        prefix=VOICE_PREFIX if button.startswith(VOICE_PREFIX) else MENU_PREFIX
+        source=one(conn,"select * from app.clinic_report_jobs where id=%s and recipient=%s "
                    "and kind='report_pdf' and state in ('accepted','sent','delivered','read')",
-                   (button[len(VOICE_PREFIX):],target.organisation_id,contact))
+                   (button[len(prefix):],contact))
         if source:
+            if prefix==MENU_PREFIX:
+                if source['delivery_mode']=='patient':
+                    self.service.activate_report(conn,item,source)
+                return True
             self.insert(conn,**{k:source[k] for k in ('organisation_id','approval_id','encounter_id','version','source_hash',
-                        'recipient','language')},kind='prescription_voice',source_job=source['id'],request_ref=item['message_id'])
-            audit(conn,None,target.organisation_id,'clinic_report.voice_requested','encounter',source['encounter_id'],
+                        'recipient','language','delivery_mode')},kind='prescription_voice',source_job=source['id'],request_ref=item['message_id'])
+            audit(conn,None,source['organisation_id'],'clinic_report.voice_requested','encounter',source['encounter_id'],
                   {'version':source['version']})
         return True
 
@@ -105,13 +119,13 @@ class ClinicReports:
 
     def tick(self):
         target=self.target
-        if not target:
+        if not self.service.channel:
             return False
         with self.service.lock, transaction() as conn:
-            job=one(conn,"select * from app.clinic_report_jobs where organisation_id=%s and state in "
+            job=one(conn,"select * from app.clinic_report_jobs where (organisation_id=%s or delivery_mode='patient') and state in "
                     "('pending','waiting_for_window','waiting_for_artifact') and not_before<=now() "
                     "order by created_at,case kind when 'report_pdf' then 0 when 'voice_option' then 1 else 2 end,id "
-                    'limit 1 for update skip locked',(target.organisation_id,))
+                    'limit 1 for update skip locked',(target.organisation_id if target else '',))
             if not job:
                 return False
             def hold(state):
@@ -119,12 +133,26 @@ class ClinicReports:
                              'where id=%s',(state,job['id']))
                 return False
             try:
+                if job['delivery_mode']=='patient':
+                    patient=one(conn,'select p.* from app.patients p join app.encounters e on e.patient_id=p.id '
+                                'join app.organisations o on o.id=e.organisation_id where e.id=%s and e.organisation_id=%s '
+                                'and o.archived_at is null',(job['encounter_id'],job['organisation_id']))
+                    if not patient or not patient['phone_encrypted'] or 'followup_whatsapp' not in patient['consents']:
+                        raise GateRefused('Patient delivery consent is unavailable.')
+                    target=ClinicTarget(job['organisation_id'],decrypt_phone(patient['phone_encrypted']))
+                    if not self.service.channel.allowed(target.number):
+                        raise GateRefused('This patient number is not enabled for private testing.')
+                if not target:
+                    raise GateRefused('Clinic recipient is not configured.')
                 if self.service.channel.contact(target.number)!=job['recipient']:
                     raise GateRefused('Clinic test recipient changed.')
                 contact=one(conn,'select * from app.clinic_report_contacts where organisation_id=%s and contact=%s',
                             (target.organisation_id,job['recipient']))
                 if contact and contact['opted_out_at']:
                     raise GateRefused('Clinic recipient stopped reports.')
+                window=one(conn,'select * from app.whatsapp_contact_windows where contact=%s',(job['recipient'],))
+                if window and window['opted_out_at']:
+                    raise GateRefused('Recipient stopped reports.')
                 if not contact or not contact['last_inbound_at'] or datetime.now(timezone.utc)-contact['last_inbound_at']>timedelta(hours=24):
                     return hold('waiting_for_window')
                 row=one(conn,"select r.report,p.synthetic from app.report_versions r join app.encounters e on e.id=r.encounter_id "
@@ -146,7 +174,7 @@ class ClinicReports:
                         raise GateRefused('Archived PDF fingerprint changed.')
                     filename=f"approved-report-{job['encounter_id']}-v{job['version']}.pdf"
                     voice=one(conn,"select id from app.clinic_report_jobs where source_job=%s and kind='voice_option'",(job['id'],))
-                    caption=f'Clinic copy: {report.header.patient_name}. Approved visit {report.header.visit_date}.'
+                    caption=f'{"Approved report" if job["delivery_mode"]=="patient" else "Clinic copy"}: {report.header.patient_name}. Approved visit {report.header.visit_date}.'
                     if voice:
                         caption+=' Prescription voice option follows.'
                     result=graph.send_document(target.number,graph.upload_document(data,filename),filename,caption)
@@ -154,10 +182,13 @@ class ClinicReports:
                     source=one(conn,'select state from app.clinic_report_jobs where id=%s',(job['source_job'],))
                     if not source or source['state'] not in ('accepted','sent','delivered','read'):
                         return hold('waiting_for_artifact')
+                    buttons=[(VOICE_PREFIX+job['source_job'],'Prescription voice')]
+                    if job['delivery_mode']=='patient':
+                        buttons.append((MENU_PREFIX+job['source_job'],'Patient menu'))
                     result=graph.send_buttons(target.number,
                         f'{report.header.patient_name} — visit {report.header.visit_date}, version {report.version}. '
                         f'Listen to the approved prescription in {LANGUAGES[job["language"]]}:',
-                        [(VOICE_PREFIX+job['source_job'],'Prescription voice')])
+                        buttons)
                 else:
                     if self.service.speech is None:
                         raise GateRefused('Prescription speech is not configured.')

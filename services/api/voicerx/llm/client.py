@@ -250,10 +250,12 @@ def build_client(env_path: Path, cache_dir: Path, only=None, quick=False, timeou
     from .ollama import OllamaAdapter
     from .openai_compat import OpenAICompatAdapter, mistral
     settings = {}
-    for line in env_path.read_text(encoding='utf-8-sig').splitlines():
+    for line in (env_path.read_text(encoding='utf-8-sig').splitlines() if env_path.exists() else []):
         if line.strip() and not line.lstrip().startswith('#') and '=' in line:
             key, value = line.split('=', 1)
             settings[key.strip()] = value.strip().strip('\"\'')
+    import os
+    settings.update(os.environ)
     options = ({'max_transient': 1, 'timeout': timeout or 10, 'cooldown': 60, 'sleep': lambda seconds: None,
                 'repair': False, 'rotate_on_limit': False} if quick else {})
     clients = []

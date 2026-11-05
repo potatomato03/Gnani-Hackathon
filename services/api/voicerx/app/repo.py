@@ -13,7 +13,7 @@ def patient_record(row):
 
 def doctor_record(row, organisation_id):
     return {'doctor_id': row['id'], 'synthetic': row['synthetic'], 'clinic_id': organisation_id, 'name': row['display_name'],
-            'role': 'doctor', 'specialty': row['specialty'], 'nmc_reg_no': row['registration_no']}
+            'role': 'doctor', 'specialty': row['specialty'], 'nmc_reg_no': row['registration_no'] or ''}
 
 
 def clinic_record(row):
@@ -28,7 +28,7 @@ def patient_summary(row):
             'open_state': row.get('open_state'), 'open_blocking': row.get('open_blocking')}
 
 
-def list_patients(conn, organisation_id, query, today_only, today):
+def list_patients(conn, organisation_id, query, today_only, today,doctor_id=None):
     pattern = '%' + query.strip().lower() + '%' if query else None
     # open_blocking counts the open visit's blocking issues in its latest report, as patient_detail does; null without one.
     return all_rows(conn, '''
@@ -46,11 +46,12 @@ def list_patients(conn, organisation_id, query, today_only, today):
                            where e.patient_id = p.id and e.state <> 'approved'
                            order by e.created_at desc limit 1) open on true
         where p.organisation_id = %(org)s
+          and (%(doctor)s::text is null or p.assigned_doctor_id=%(doctor)s)
           and (%(pattern)s::text is null or lower(p.name) like %(pattern)s or lower(p.mrn) like %(pattern)s
                or lower(p.id) like %(pattern)s)
           and (not %(today_only)s or exists (select 1 from app.encounters e where e.patient_id = p.id and e.visit_date = %(today)s))
         order by last.visit_date desc nulls last, p.name
-        limit 100''', {'org': organisation_id, 'pattern': pattern, 'today_only': today_only, 'today': today})
+        limit 100''', {'org': organisation_id, 'pattern': pattern, 'today_only': today_only, 'today': today,'doctor':doctor_id})
 
 
 def get_patient(conn, organisation_id, patient_id):

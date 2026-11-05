@@ -865,3 +865,14 @@ Free-tier options reviewed at the user's request (github.com/mnfst/awesome-free-
 **Left in the shared database by these checks:** a synthetic patient "Synthetic Live Test" (fake number, no WhatsApp consent) with a draft visit, and a second draft visit for Virat, neither approved. **Also seen:** opening `#/register` directly as the first page shows "Cannot set properties of null"; it works when reached from the menu. This was not investigated. `py-spy` was installed in the local `.venv` to take the stack dump. No commit was made.
 
 **Committed (6 Nov, user: "Commit it"):** D-130 in full (key switching, the Mistral adapter and overflow switch, `--provider mistral`, the credentials mapping, `.env.example` lines and the client tests), and the D-131 parts that stand on the committed code: the checked extraction handed over before writing, suggestions and the shortlist run alongside the writing, `conditions_in`, and their test. **Held back with the private-workspace work (Open, same reason as D-129):** the live recording itself (`live_recordings.py`, migration 011, the run starting with the live transcript, the Prisma `transcribe_segment` refactor, the recorder changes in the new interface, and their tests), because it saves the recording through `store_audio` and `app.source_files`, which exist only in that uncommitted work. The pool size change also stays there, because the committed pool already allows 8 connections. Migration 011 is applied to Supabase regardless, and is harmless without the code.
+
+## 6 November 2026 — committing the private workspace, the new interface and the live recording
+
+**Decision (user: "yes we want the new interface and the live recoding").** The work held back under D-129 and D-131 is committed in two commits: first the private-hospital workspace (shared private sign-in, hospitals and doctors, audio uploads in parts, stored recordings and files in the database, hosted mode, Vercel files) with Rakshit's interface (D-129), then the live recording (D-131) on top.
+
+**Hospital names kept out of the public repository (user chose "Keep names out").** The workspace code and three docs named the two real demo hospitals, and two unpushed commits named one of them in this runbook. Now:
+- `bootstrap_private.py` reads the hospitals from `APP_PRIVATE_HOSPITALS` (`id=Name;id=Name`) in the ignored `.env`, with placeholder defaults. The local `.env` holds the real list, so the existing organisation IDs in Supabase keep working.
+- The docs say "the two demo hospitals", and this runbook says "the first demo hospital".
+- The two unpushed commits were reworded (runbook lines only; contents otherwise identical) and are now `20d4514` and `e82ef1c`. No pushed commit ever named them.
+
+The scan for secrets, phone numbers and e-mail addresses across everything committed here found only the synthetic test password in `test_private_workspace.py`.

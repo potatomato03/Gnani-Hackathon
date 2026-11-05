@@ -99,7 +99,7 @@ class Worker(threading.Thread):
 
     def llm(self):
         if self.client is None:
-            self.client = build_client(REPO_ROOT / '.env', REPO_ROOT / 'runs/cache', only=self.settings.llm_provider)
+            self.client = build_client(REPO_ROOT / '.env', self.settings.artifacts_dir / 'cache', only=self.settings.llm_provider)
         return self.client
 
     def next_run(self):
@@ -233,7 +233,15 @@ class Worker(threading.Thread):
         on_step('transcribing', 'running')
         path = self.settings.artifacts_dir / context['id'] / 'sources' / context['file_name']
         try:
-            text, meta = self.transcriber(decode_audio(path.read_bytes()), context['language'])
+            if path.exists():
+                data=path.read_bytes()
+            else:
+                with transaction() as conn:
+                    stored=one(conn,'select * from app.source_files where source_id=%s',(run['source_id'],))
+                if not stored or sha256(bytes(stored['data'])).hexdigest()!=stored['sha256']:
+                    raise ValueError('Stored recording fingerprint failed.')
+                data=bytes(stored['data'])
+            text, meta = self.transcriber(decode_audio(data), context['language'])
         except PrismaError as error:
             on_step('transcribing', 'failed')
             raise StageFailed('transcribing', str(error)) from error
@@ -289,6 +297,9 @@ class Worker(threading.Thread):
             return True
         digest = sha256(path.read_bytes()).hexdigest()
         with transaction() as conn:
+            conn.execute('insert into app.artifact_files(artifact_id,sha256,data) values(%s,%s,%s) '
+                         'on conflict(artifact_id) do update set sha256=excluded.sha256,data=excluded.data',
+                         (artifact['id'],digest,path.read_bytes()))
             if artifact['kind']=='report_pdf':
                 conn.execute('insert into app.report_files(encounter_id,version,sha256,data) values(%s,%s,%s,%s) '
                              'on conflict(encounter_id,version) do update set sha256=excluded.sha256,data=excluded.data',

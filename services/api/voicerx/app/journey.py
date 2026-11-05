@@ -244,6 +244,11 @@ def history(conn, organisation_id, patient_id):
         upload['download_url']='/api/v1/patient-uploads/'+upload['id']+'/download'
     link=one(conn,'select verified_at,last_inbound_at,opted_out_at from app.patient_channels where organisation_id=%s and patient_id=%s',
              (organisation_id,patient_id))
+    if not link:
+        selected=one(conn,'select a.updated_at as verified_at,w.last_inbound_at,w.opted_out_at from app.whatsapp_active_reports a '
+                     'join app.followups f on f.id=a.followup_id join app.whatsapp_contact_windows w on w.contact=a.contact '
+                     'where f.organisation_id=%s and f.patient_id=%s',(organisation_id,patient_id))
+        link=selected
     return {'patient_id':patient_id,'questions':sorted(questions,key=lambda q:q['at'],reverse=True),'tasks':tasks,'uploads':uploads,
             'whatsapp':{'linked':bool(link),'opted_out':bool(link and link['opted_out_at']),
                         'last_inbound_at':link['last_inbound_at'].isoformat() if link and link['last_inbound_at'] else None}}

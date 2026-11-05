@@ -14,3 +14,4 @@ psycopg-pool==3.3.0
 fastembed==0.9.1
 # Decoding recordings (WebM/Opus from browsers, WAV, MP3, M4A) before Prisma; pinned as for Whisper (D-44)
 av==15.1.0
+cryptography==46.0.3

@@ -44,10 +44,11 @@ def main():
         for path in sorted(MIGRATIONS.glob('*.sql')):
             conn.execute(path.read_text(encoding='utf-8'))
             print('applied', path.name)
-        seed(conn)
+        if '--seed-demo' in sys.argv:
+            seed(conn)
         counts = {t: conn.execute(f'select count(*) from app.{t}').fetchone()[0]
                   for t in ('organisations', 'users', 'memberships', 'patients')}
-        print('seeded', counts)
+        print('rows', counts)
     return 0
 
 

@@ -1,0 +1,20 @@
+FROM python:3.12-slim-bookworm
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/services/api \
+    APP_ENV=production APP_DEV_LOGIN=0 APP_PRIVATE_WORKSPACE=1 APP_ARTIFACTS_DIR=/tmp/voicerx \
+    APP_EMBEDDING_CACHE=/opt/models/fastembed PDF_BROWSER=/usr/bin/chromium
+RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-noto-core ca-certificates libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY services/api/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN useradd --uid 10001 --create-home appuser \
+    && python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-base-en-v1.5',cache_dir='/opt/models/fastembed')" \
+    && chown -R appuser:appuser /opt/models/fastembed
+COPY services/api/voicerx services/api/voicerx
+COPY services/api/web services/api/web
+COPY data/seed data/seed
+COPY data/formulary data/formulary
+COPY data/rules data/rules
+COPY tools/knowledge/names.py tools/knowledge/names.py
+USER appuser
+CMD ["python","-m","voicerx.app.hosted","api"]

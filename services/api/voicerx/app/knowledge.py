@@ -4,6 +4,7 @@ Results are reference passages with their sources, shown beside the record; they
 """
 import sys
 import threading
+import os
 
 from .config import REPO_ROOT
 
@@ -40,7 +41,7 @@ def _embedder():
         if _model is None:
             stand_in_for_mmh3()
             from fastembed import TextEmbedding
-            _model = TextEmbedding(MODEL, cache_dir=str(REPO_ROOT.parent / 'models' / 'fastembed'))
+            _model = TextEmbedding(MODEL, cache_dir=os.environ.get('APP_EMBEDDING_CACHE',str(REPO_ROOT.parent / 'models' / 'fastembed')))
     return _model
 
 

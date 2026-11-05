@@ -110,7 +110,7 @@ class SupabaseMemoryStore:
         return 'SupabaseMemoryStore(<hidden>)'
 
     def _connect(self):
-        return psycopg.connect(self.db_url, connect_timeout=10)
+        return psycopg.connect(self.db_url, connect_timeout=10,prepare_threshold=None)
 
     def add(self, items):
         if not items:

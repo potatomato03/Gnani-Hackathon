@@ -54,3 +54,4 @@ data/eval/results/scores/*prisma*
 
 # Local editor and preview settings
 .claude/
+.vercel/

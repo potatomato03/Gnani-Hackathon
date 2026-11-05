@@ -301,3 +301,20 @@ body > .v2-display .v2-menu { top: auto; bottom: calc(100% + 12px); right: auto;
   .v2-menu { width: min(300px,calc(100vw - 30px)); }
 }
 @media (prefers-reduced-motion: reduce) { .v2-sky i { animation: none !important; } }
+/* Private hospital onboarding */
+button[data-pending]{cursor:wait;opacity:.7}
+button[data-pending]::after{content:'';display:inline-block;width:12px;height:12px;margin-inline-start:8px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:middle;animation:button-wait .7s linear infinite}
+@keyframes button-wait{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){button[data-pending]::after{animation:none}}
+.hospital-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.hospital-card{text-align:left;cursor:pointer;color:inherit;font:inherit}.hospital-card:hover,.doctor-card:hover{border-color:#6963c8}.doctor-card{display:grid;justify-items:start;gap:12px;border:1px solid #dedce7;border-radius:18px;padding:24px;background:white;color:inherit;font:inherit;text-align:left;cursor:pointer}.stack>.field{display:grid;gap:8px}.stack>.field input,.stack>.field select{width:100%;box-sizing:border-box}
+#root.workspace-overview .layout{grid-template-columns:minmax(0,1fr)}
+#root.workspace-overview .side,#root.workspace-overview .search{display:none}
+#root.workspace-overview .main{width:100%;max-width:1250px;margin:auto;box-sizing:border-box}
+#root.workspace-overview .top{grid-template-columns:auto 1fr}
+@media(max-width:700px){
+  #root .top{grid-template-columns:minmax(0,1fr);justify-items:start}
+  #root .top>.brand{grid-column:1;grid-row:1}
+  #root .top .me{grid-column:1;grid-row:2;justify-self:start;max-width:100%;flex-wrap:wrap;justify-content:flex-start}
+  #root .top .search{grid-column:1;grid-row:3;width:100%;box-sizing:border-box}
+  #root .hospital-grid{grid-template-columns:minmax(0,1fr)}
+}
