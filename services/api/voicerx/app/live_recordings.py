@@ -11,6 +11,7 @@ the usual way.
 """
 import logging
 import threading
+import time
 from collections import OrderedDict
 from uuid import uuid4
 
@@ -107,13 +108,45 @@ def live_transcript(conn, source):
                                                     live=True)
 
 
+class Refresher:
+    """Remakes the visit's recommended medicines from the transcript so far, at most once a minute per
+    recording and one at a time, in the background (runbook D-137). Best effort: a failure keeps the last list."""
+    EVERY = 60
+
+    def __init__(self, make, clock=time.monotonic):
+        self.make, self.clock, self.lock, self.last, self.running = make, clock, threading.Lock(), {}, set()
+
+    def offer(self, lid, encounter_id, organisation_id, transcript):
+        with self.lock:
+            if not self.make or lid in self.running or self.clock() - self.last.get(lid, -1e9) < self.EVERY:
+                return False
+            self.running.add(lid)
+            self.last[lid] = self.clock()
+
+        def run():
+            try:
+                self.make(encounter_id, organisation_id, transcript)
+            except Exception:
+                log.exception('live shortlist failed for %s', encounter_id)
+            finally:
+                with self.lock:
+                    self.running.discard(lid)
+        threading.Thread(target=run, name='voicerx-live-shortlist', daemon=True).start()
+        return True
+
+
 def status(row):
     return {'id': row['id'], 'parts': row['next_part'], 'heard_s': round(row['total_samples'] / RATE, 1),
             'transcribed_s': round(row['done_samples'] / RATE, 1), 'segments': row['segments'],
             'finished': row['finished'], 'behind': bool(row['error'])}
 
 
-def install(app, session_of, ApiError, store_audio, audio_types, languages):
+REFRESH = Refresher(None)
+
+
+def install(app, session_of, ApiError, store_audio, audio_types, languages, shortlister=None):
+    REFRESH.make = shortlister
+
     def owned(conn, session, lid):
         row = one(conn, 'select l.* from app.live_recordings l join app.encounters e on e.id = l.encounter_id '
                         'where l.id = %s and l.user_id = %s and e.organisation_id = %s and l.expires_at > now() '
@@ -176,6 +209,8 @@ def install(app, session_of, ApiError, store_audio, audio_types, languages):
                           sent, final, error, lid))
             taken = one(conn, 'select * from app.live_recordings where id = %s', (lid,))
         FILES.put(lid, part + 1, joined)
+        if sent and not final:
+            REFRESH.offer(lid, row['encounter_id'], s['organisation_id'], ' '.join(texts))
         return status(taken)
 
     @app.put('/api/v1/live-recordings/{lid}/parts/{part}')

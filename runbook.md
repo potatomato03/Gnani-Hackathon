@@ -940,3 +940,15 @@ D-135 committed as `eec27aa`, pushed, and deployed to production (`janani-privat
 - **Fixed:** the hosted worker loads the index at start-up (`hosted.py` calls `main.warm_up`). The draft no longer waits for the picker's shortlist: the shortlist thread saves itself when ready, and `/shortlist` computes one if asked first. Expected: about 7 s for a short visit and about 19 s for five minutes (extracting 10 s plus writing 8 s).
 - **Open (user to choose):** how to remove the remaining model time after the doctor stops.
 - **Decided (user):** "Medicines first". During the visit the recommended medicines are updated from each newly transcribed piece; at stop the picker opens at once and the doctor picks medicines while the report is written, then they are added to the draft. Today's fixes were deployed first (user: "Yes, deploy now").
+
+D-136 committed as `f4bb077`, pushed, and deployed to production (`janani-private-clinic-demo-7zzolmxar…`).
+
+## 6 November 2026 — medicines first: pick medicines while the report is written (D-137)
+
+**D-137 (user chose "Medicines first").** The doctor should not wait after the conversation before choosing medicines.
+- **During the visit.** After each newly transcribed segment, at most once a minute per recording and one at a time, the API makes one background call (`shortlist.live_ranking`, prompt `live-shortlist-v1`): the conditions present so far, and the medicines usually prescribed for them. Each choice is resolved to a real catalogue product, as in D-122, and saved as the visit's shortlist (`method.source = live_transcript`). It is skipped once the draft exists, whose own shortlist then replaces it. On two real transcripts the call took 2.7–2.8 s and gave sensible lists. It is not made at the stop, so it never competes with the drafting calls.
+- **At stop.** The report starts at once: the listen-back step and its "Create report" click are gone. The visit screen shows **Pick <patient>'s medicines** with the keyboard picker already open and focused, beside "Preparing the report" with its steps. Polls refresh only the steps, so the picker keeps its place.
+- **Picks before the draft** are listed (removable). When the draft lands they are added to it in one correction; any product the draft already has is skipped, and a message says so. A picker left open carries on into the review.
+- **Measured locally** (90 s of the synthetic consultation): the list was made during the visit (cough, sore throat, fever, two medicines). After stopping, the picker was open and focused within 2.5 s; Brufen was picked with the keyboard while extraction ran; the draft arrived 15 s after the stop with Brufen already added (version 2).
+- **Not yet:** a pick is held in the browser only, so closing the page before the draft lands loses it. The draft's own medicine wording and the picked medicines are not reconciled beyond the product match.
+- 885 passed, 3 skipped. A unit test covers the once-a-minute, one-at-a-time refresh; the live recording database test checks that the refresh is offered with the transcript so far.

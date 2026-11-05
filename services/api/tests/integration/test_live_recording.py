@@ -20,6 +20,9 @@ def test_pieces_become_the_source_and_the_run_starts_transcribed(world, monkeypa
     monkeypatch.setattr(live_recordings, 'poster', lambda: lambda fields, audio: (
         calls.append(fields) or (200, {'transcript': f'part{len(calls)}'})))
     conn.execute("update app.patients set consents = array_append(consents, 'recording') where id = %s", (w['patient'],))
+    offered = []
+    monkeypatch.setattr(live_recordings.REFRESH, 'make', lambda *a: offered.append(a))
+    monkeypatch.setattr(live_recordings.REFRESH, 'last', {})
     eid = 'enc-live-' + uuid4().hex[:10]
     conn.execute("insert into app.encounters(id,organisation_id,patient_id,clinician_id,visit_date,state) "
                  "values(%s,%s,%s,%s,current_date,'open')", (eid, w['org'], w['patient'], w['doc']))
@@ -49,6 +52,13 @@ def test_pieces_become_the_source_and_the_run_starts_transcribed(world, monkeypa
     last = put(2, pieces[2], final=True).json()
     assert last['finished'] and last['transcribed_s'] == last['heard_s'] == 70.0 and last['segments'] == 3
     assert calls[2]['previous_text'] == 'part1 part2'
+    # The recommended medicines were remade from the transcript so far, once (at most once a minute).
+    import time as _time
+    for _ in range(50):
+        if offered:
+            break
+        _time.sleep(0.05)
+    assert len(offered) == 1 and offered[0][0] == eid and offered[0][2] == 'part1'
 
     done = client.post(f'/api/v1/live-recordings/{lid}/complete')
     assert done.status_code == 200, done.text

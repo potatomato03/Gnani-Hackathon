@@ -73,3 +73,27 @@ def test_a_tail_too_short_to_hold_speech_is_not_sent():
 
 def test_a_piece_that_cannot_be_read_yet_is_not_an_error_that_moves_anything():
     assert advance(b'not audio', 'hinglish', 0, [], False, Prisma())[:4] == (0, [], 0, None)
+
+
+def test_the_recommended_medicines_are_remade_at_most_once_a_minute_and_one_at_a_time():
+    import threading
+    from voicerx.app.live_recordings import Refresher
+    now, made, release = [1000.0], [], threading.Event()
+
+    def make(*args):
+        made.append(args)
+        release.wait(2)
+    refresher = Refresher(make, clock=lambda: now[0])
+    assert refresher.offer('live-1', 'enc-1', 'org', 'fever') is True
+    assert refresher.offer('live-1', 'enc-1', 'org', 'fever, cough') is False   # one already running
+    release.set()
+    for _ in range(100):
+        if 'live-1' not in refresher.running:
+            break
+        threading.Event().wait(0.01)
+    now[0] += 30
+    assert refresher.offer('live-1', 'enc-1', 'org', 'fever, cough') is False   # not a minute yet
+    now[0] += 31
+    assert refresher.offer('live-1', 'enc-1', 'org', 'fever, cough, sore throat') is True
+    assert refresher.offer('live-2', 'enc-2', 'org', 'rash') is True            # each recording on its own
+    assert Refresher(None).offer('live-3', 'enc-3', 'org', 'x') is False         # nothing to make it with

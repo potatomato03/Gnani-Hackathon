@@ -38,6 +38,8 @@ from .pharmacy import StockFileError, annotate_view, import_stock, load_stock, s
 from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index
 from .views import CorrectionRefused, build_resolutions, report_view
 from .worker import NEVER, TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
+from .shortlist import build_items, live_ranking
+from ..pipeline.complete import load_generics
 from .followup import FollowupService, initialize as initialize_followup
 from .followup_routes import install as install_followup_routes
 from .clinic_reports import deliveries as clinic_deliveries
@@ -949,7 +951,27 @@ async def knowledge_search(request: Request):
 install_followup_routes(app, state, session_of, ApiError)
 install_workspace(app,state,session_of,ApiError)
 install_audio_uploads(app,session_of,ApiError,store_audio,AUDIO_TYPES,LANGUAGE_CODES)
-install_live_recordings(app, session_of, ApiError, store_audio, AUDIO_TYPES, LANGUAGE_CODES)
+def live_shortlist(encounter_id, organisation_id, transcript):
+    """The visit's recommended medicines from the transcript so far, for the picker that opens when the doctor
+    stops (runbook D-137). Once the draft exists, its own shortlist takes over."""
+    with transaction() as conn:
+        row = one(conn, 'select e.current_version, e.visit_date, p.birth_year from app.encounters e '
+                        'join app.patients p on p.id = e.patient_id where e.id = %s and e.organisation_id = %s',
+                  (encounter_id, organisation_id))
+        if not row or row['current_version']:
+            return
+        pools = [shared_index(conn, REFERENCE.products), clinic_index(conn, organisation_id)]
+    conditions, ranking, method = live_ranking(state['worker'].llm(), transcript)
+    with transaction() as conn:
+        if one(conn, 'select current_version from app.encounters where id = %s', (encounter_id,))['current_version']:
+            return
+        items = build_items(ranking, pools, load_generics(REPO_ROOT), load_rules(REPO_ROOT),
+                            lambda pid: catalog_product(conn, organisation_id, pid, REFERENCE.products),
+                            is_adult(row, row['visit_date']))
+        save_shortlist(conn, encounter_id, conditions, items, method)
+
+
+install_live_recordings(app, session_of, ApiError, store_audio, AUDIO_TYPES, LANGUAGE_CODES, live_shortlist)
 
 app.mount('/static', StaticFiles(directory=WEB / 'static'), name='static')
 

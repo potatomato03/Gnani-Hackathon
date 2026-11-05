@@ -639,15 +639,27 @@ function renderVisit() {
     const up = v.phase === "uploading";
     const steps = v.run?.steps || [{ key: "upload", label: up && v.upPct ? `Saving the recording, ${Math.round(v.upPct * 100)}%` : "Saving", state: "running" }];
     const isDone = s => ["succeeded", "skipped", "done"].includes(s.state), done = steps.filter(isDone).length;
-    box.innerHTML = stepper(1) + `<h3>Preparing ${fn}'s report</h3>
-      <p class="hint">${v.phase === "failed" ? "" : "This usually takes under a minute. You can open another patient meanwhile."}</p>
-      <ol class="proc" aria-live="polite">${steps.map(s => `<li data-s="${isDone(s) ? "done" : s.state === "running" ? "running" : s.state === "failed" ? "failed" : "todo"}"><span class="tick">${ICON.check}</span>${esc(s.label || STEP_TEXT[s.key] || s.key)}</li>`).join("")}</ol>
-      <div class="progress" aria-hidden="true"><i id="procBar"></i></div>
-      ${v.phase === "failed" ? `<div class="error-box" role="alert"><p>${esc(v.error || "The report couldn't be prepared.")}</p>${v.run ? `<button class="btn btn-dark" id="retryRun">Try again</button>` : ""}</div>` : ""}`;
+    const stepsHTML = steps.map(s => `<li data-s="${isDone(s) ? "done" : s.state === "running" ? "running" : s.state === "failed" ? "failed" : "todo"}"><span class="tick">${ICON.check}</span>${esc(s.label || STEP_TEXT[s.key] || s.key)}</li>`).join("");
+    // Medicines first (runbook D-137): the doctor picks medicines while the report is written. Polls then update
+    // only the progress, so the picker keeps its place and focus.
+    if (box.dataset.frame === "proc" && v.phase !== "failed" && $("#procSteps", box)) {
+      $("#procSteps", box).innerHTML = stepsHTML; $("#procBar").style.setProperty("--p", steps.length ? done / steps.length : 0);
+      return;
+    }
+    box.dataset.frame = v.phase === "failed" ? "" : "proc";
+    box.innerHTML = stepper(1) + `<div class="proc-grid">
+      <div class="proc-meds">${v.phase === "failed" ? "" : `<h3>Pick ${fn}'s medicines</h3><p class="hint">The report is being written meanwhile. Press Space for the next medicine, Esc when done.</p>`}
+        <div id="pendingMeds">${pendingHTML(v)}</div>${v.phase === "failed" ? "" : `<div id="pickerHost"></div>`}</div>
+      <div class="proc-side"><h4>Preparing the report</h4>
+        <ol class="proc" id="procSteps" aria-live="polite">${stepsHTML}</ol>
+        <div class="progress" aria-hidden="true"><i id="procBar"></i></div>
+        ${v.phase === "failed" ? `<div class="error-box" role="alert"><p>${esc(v.error || "The report couldn't be prepared.")}</p>${v.run ? `<button class="btn btn-dark" id="retryRun">Try again</button>` : ""}</div>` : ""}</div></div>`;
     $("#procBar").style.setProperty("--p", steps.length ? done / steps.length : 0);
     $("#retryRun")?.addEventListener("click", retryRun);
+    if (v.phase !== "failed") { if (v.picker) drawPicker(); else if (!v.pickedOnce) { v.pickedOnce = true; openPicker(); } }
     return;
   }
+  box.dataset.frame = "";
   if (v.phase === "review") return renderReview(box);
   if (v.phase === "approved") return renderApproved(box);
 }
@@ -746,8 +758,8 @@ async function stopRecording() {
   if (ms < 2000) { toast("That was too short. Record at least 2 seconds."); v.phase = "idle"; renderVisit(); return; }
   // The last piece goes now, while the doctor listens back; the report can start without another upload.
   if (L?.ok) { liveSend(L, true); v.live = L; }
-  Object.assign(v, { phase: "review-audio", blob, url: mic.fake ? null : URL.createObjectURL(blob), duration: fmtClock(ms) });
-  renderVisit();
+  Object.assign(v, { blob, duration: fmtClock(ms), pendingMeds: [], pickedOnce: false, picker: null });
+  submitAudio(blob);
 }
 
 /* -------- Submit and process -------- */
@@ -790,7 +802,10 @@ function pollRun(delay) {
     if (state.selected !== pid || !v.run) return;
     try {
       v.run = await api.run(v.run.id ?? v.run.run_id);
-      if (v.run.state === "succeeded") { v.report = adapt.report(await api.report(v.enc)); v.phase = "review"; v.reveal = true; renderVisit(); refreshRows(); toast("Draft report is ready."); return; }
+      if (v.run.state === "succeeded") {
+        v.report = adapt.report(await api.report(v.enc)); const picked = (v.pendingMeds || []).length;
+        await addPending(v); v.phase = "review"; v.reveal = true; renderVisit(); refreshRows(); if (!picked) toast("Draft report is ready."); return;
+      }
       if (v.run.state === "failed" || v.run.state === "incomplete") { v.phase = "failed"; v.error = v.run.error?.message || "Processing stopped before the report was ready."; renderVisit(); return; }
       renderVisit(); pollRun(document.hidden ? 8000 : 2000);
     } catch (_) { pollRun(Math.min(15000, delay * 2)); }
@@ -933,11 +948,15 @@ const PK_SLOT = { m: "Morning", a: "Afternoon", e: "Evening", n: "Night" };
 const PK_FOOD = [["", "Not said"], ["after_food", "After food"], ["before_food", "Before food"], ["with_food", "With food"], ["empty_stomach", "Empty stomach"]];
 const PK_ONCE = { morning: "m", afternoon: "a", evening: "e", night: "n" };
 const pkWhenText = w => w ? w.split("").map(s => PK_SLOT[s]).join(" + ") : "As needed";
+const PICKING = ["uploading", "processing", "review"];
 function openPicker(med) {
-  const v = state.visit; if (!v || v.phase !== "review" || !$("#pickerHost")) return;
+  const v = state.visit; if (!v || !PICKING.includes(v.phase) || !$("#pickerHost")) return;
   Object.assign(v, { editing: null, adding: false, newMed: null, replacing: null });
+  const meds = v.phase === "review" ? v.report.medication_views : v.pendingMeds || [];
   v.picker = { med: med || null, q: "", options: [], active: 0, chosen: null, rows: [], row: 0,
-    taken: v.report.medication_views.map(m => m.product_id).filter(Boolean), number: v.report.medication_views.length + 1 };
+    taken: meds.map(m => m.product_id).filter(Boolean), number: meds.length + 1 };
+  // Before the draft, the list may still be improving from the visit (runbook D-137), so fetch it afresh.
+  if (v.phase !== "review" && v.shortlists) delete v.shortlists[v.enc];
   if (med) pkStart(v.picker, { product_id: med.product_id, label: med.label, composition: med.composition, form: med.form, food: med.food }, med);
   drawPicker();
   $("#pickerHost")?.scrollIntoView({ block: "nearest" });
@@ -947,6 +966,20 @@ function openPicker(med) {
       .catch(x => { v.shortlists[v.enc] = { conditions: [], items: [] }; toast(x.message); })
       .finally(() => { if (state.visit?.picker && !state.visit.picker.chosen) { if (!$("#pkQ")) drawPicker(); else pkRefresh(); } });
   } else if (!med) pkRefresh();
+}
+function pendingHTML(v) {
+  const list = v.pendingMeds || [];
+  return list.length ? `<ul class="pending">${list.map((m, i) => `<li><span><b>${esc(m.label)}</b><span class="pk-sub">${esc(m.text)}</span></span><button class="btn btn-quiet btn-small" data-unpend="${i}" aria-label="Remove ${esc(m.label)}">Remove</button></li>`).join("")}</ul>` : "";
+}
+async function addPending(v) {
+  const list = v.pendingMeds || []; if (!list.length) return;
+  const have = new Set(v.report.medication_views.map(m => m.product_id)), add = list.filter(m => !have.has(m.product_id)), already = list.filter(m => have.has(m.product_id));
+  v.pendingMeds = [];
+  if (add.length) {
+    try { v.report = adapt.report(await api.resolve(v.enc, v.report, add.map(m => ({ action: "add_medicine", target: "new", value: m.value, reason: "Added by the doctor." })))); }
+    catch (x) { v.pendingMeds = add; toast(`Couldn't add ${add.map(m => m.label).join(", ")}: ${x.message}`); return; }
+  }
+  toast([add.length ? `Added ${add.length === 1 ? add[0].label : add.length + " medicines"} you picked.` : "", already.length ? `${already.map(m => m.label).join(", ")} ${already.length === 1 ? "was" : "were"} already in the draft.` : ""].filter(Boolean).join(" "));
 }
 function closePicker() { const v = state.visit; if (v) v.picker = null; drawPicker(); }
 function pkStart(p, o, current) {
@@ -1024,6 +1057,12 @@ function pkSave() {
   const v = state.visit, p = v.picker, get = k => p.rows.find(r => r.key === k).value, when = get("when"), amount = get("dose");
   const dose = { amount, unit: unitOf(p.chosen) }, food = get("food"), duration = { value: get("days"), unit: "day" };
   const schedule = get("times") === "sos" ? { type: "as_needed" } : { type: "grid", ...Object.fromEntries(["m", "a", "e", "n"].map(k => [k, when.includes(k) ? amount : "0"])) };
+  if (!p.med && v.phase !== "review") {
+    // The draft isn't here yet: keep the medicine, show it, and open the next one (runbook D-137).
+    const text = [`${amount} ${dose.unit}`, get("times") === "sos" ? "when needed" : pkWhenText(when).toLowerCase(), food ? Object.fromEntries(PK_FOOD)[food].toLowerCase() : "", `${duration.value} day${duration.value > 1 ? "s" : ""}`].filter(Boolean).join(", ");
+    v.pendingMeds = [...(v.pendingMeds || []), { product_id: p.chosen.product_id, label: p.chosen.label, text, value: { product_id: p.chosen.product_id, dose, schedule, food, duration } }];
+    v.picker = null; const list = $("#pendingMeds"); if (list) list.innerHTML = pendingHTML(v); openPicker(); return;
+  }
   if (!p.med) {
     // Adding one opens the picker again for the next medicine, until Esc.
     v.picker = null; v.chainPicker = true;
@@ -1043,7 +1082,7 @@ document.addEventListener("keydown", e => {
   if (!p) {
     // Space opens the picker on the review screen, unless the doctor is typing or has a button or link selected.
     const tag = document.activeElement?.tagName;
-    if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && v?.phase === "review" && $("#pickerHost")
+    if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && PICKING.includes(v?.phase) && $("#pickerHost")
         && !["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "SUMMARY"].includes(tag) && !document.querySelector("dialog[open]")) {
       e.preventDefault(); openPicker();
     }
@@ -1352,6 +1391,8 @@ function onMainClick(e) {
     Object.assign(v, { adding: false, editing: "__new", newMed: { id: "__new", product_id: pid, label: pick.dataset.label, composition: pick.dataset.comp, form: pick.dataset.form, food: pick.dataset.food || null, dose: null, schedule: null, duration: null, filled: {} } });
     return renderVisit();
   }
+  const unpend = e.target.closest("[data-unpend]");
+  if (unpend) { const v = state.visit; v.pendingMeds.splice(+unpend.dataset.unpend, 1); $("#pendingMeds").innerHTML = pendingHTML(v); if (v.picker) v.picker.taken = v.pendingMeds.map(m => m.product_id); return; }
   const act = e.target.closest("[data-act]"); if (!act) return;
   const v = state.visit;
   ({
