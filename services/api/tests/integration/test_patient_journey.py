@@ -39,11 +39,11 @@ def store_pdf(w,eid):
     return data
 
 
-def test_approval_queues_only_pdf_and_never_automatic_audio(world):
+def test_approval_queues_visit_notice_and_pdf_and_never_automatic_audio(world):
     w=world
     jobs=w['conn'].execute('select kind from app.patient_deliveries d join app.followups f on f.id=d.followup_id where f.encounter_id=%s',
                            (w['encounter'],)).fetchall()
-    assert [j['kind'] for j in jobs]==['report_pdf']
+    assert sorted(j['kind'] for j in jobs)==['report_pdf','visit_complete']
 
 
 def test_verified_patient_link_carries_into_next_visit_and_automatically_delivers_pdf(world,monkeypatch):
@@ -51,11 +51,16 @@ def test_verified_patient_link_carries_into_next_visit_and_automatically_deliver
     eid=next_visit(w);expected=store_pdf(w,eid)
     uploaded=[]
     monkeypatch.setattr(channel.graph,'upload_document',lambda data,name:uploaded.append((data,name)) or 'media-pdf')
+    before=len(calls)
     for _ in range(4):w['service'].journey.tick()
-    row=w['conn'].execute("select d.* from app.patient_deliveries d join app.followups f on f.id=d.followup_id where f.encounter_id=%s",(eid,)).fetchone()
+    row=w['conn'].execute("select d.* from app.patient_deliveries d join app.followups f on f.id=d.followup_id "
+                          "where f.encounter_id=%s and d.kind='report_pdf'",(eid,)).fetchone()
     assert row['state']=='accepted'
     assert uploaded[0][0]==expected
-    assert any(call.get('type')=='document' for call in calls)
+    sent=[call for call in calls[before:] if call.get('type') in ('text','document')]
+    # The visit-complete notice reaches the phone before the PDF (runbook D-140).
+    assert [call['type'] for call in sent][:2]==['text','document']
+    assert 'is complete' in sent[0]['text']['body'] and 'few minutes' in sent[0]['text']['body']
     assert not any(call.get('type')=='audio' for call in calls)
     r=w['client'].get(f'/api/v1/encounters/{eid}/followup').json()
     assert r['channel']=='whatsapp' and r['conversation']['contact']
@@ -67,6 +72,7 @@ def test_verified_patient_link_carries_into_next_visit_and_automatically_deliver
 def test_closed_whatsapp_window_holds_report_until_patient_replies(world,monkeypatch):
     w=world;channel,calls=connect(w);store_pdf(w,w['encounter'])
     w['conn'].execute("update app.patient_channels set last_inbound_at=now()-interval '25 hours' where patient_id=%s",(w['patient'],))
+    assert not w['service'].journey.tick()  # the visit-complete notice waits first
     assert not w['service'].journey.tick()
     assert w['conn'].execute("select state from app.patient_deliveries where kind='report_pdf' and followup_id="
                              '(select id from app.followups where encounter_id=%s)',(w['encounter'],)).fetchone()['state']=='waiting_for_window'
@@ -186,9 +192,9 @@ def test_revoked_consent_cancels_queued_pdf_without_contacting_provider(world):
     w=world;channel,calls=connect(w);store_pdf(w,w['encounter'])
     before=len(calls)
     assert w['client'].post(w['base']+'/consent',json={'enabled':False}).status_code==200
-    assert w['service'].journey.tick()
-    job=w['conn'].execute("select state from app.patient_deliveries where followup_id=(select id from app.followups where encounter_id=%s)",(w['encounter'],)).fetchone()
-    assert job['state']=='cancelled' and len(calls)==before
+    assert w['service'].journey.tick();assert w['service'].journey.tick()  # visit-complete notice, then the PDF
+    jobs=w['conn'].execute("select state from app.patient_deliveries where followup_id=(select id from app.followups where encounter_id=%s)",(w['encounter'],)).fetchall()
+    assert len(jobs)==2 and all(job['state']=='cancelled' for job in jobs) and len(calls)==before
 
 
 def test_spoken_voice_request_uses_same_explicit_outbox_and_keeps_transcript_source(world,monkeypatch):

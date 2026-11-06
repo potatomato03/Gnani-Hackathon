@@ -82,6 +82,7 @@ def initialize(conn, encounter, approved, patient, clinic_copy_contact=None,regi
                (conv.id, encounter['id'], approved.version, visit.clinic_id, conv.patient_id,
                 Jsonb(conv.model_dump(mode='json'))))
     if not registered_delivery and (not clinic_copy_contact or conv.contact != clinic_copy_contact):
+        queue(conn,conv,'visit_complete','approval')
         queue(conn,conv,'report_pdf','approval')
     return row
 

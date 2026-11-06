@@ -12,6 +12,7 @@ from ..ingest.gnani import TTS_MODEL, CLINIC_VOICE
 from ..pipeline.assemble import content_hash
 from .config import read_env
 from .db import all_rows, audit, one, transaction
+from .journey import visit_complete_text
 from .private_access import decrypt_phone
 
 VOICE_PREFIX = 'report_voice:'
@@ -69,6 +70,9 @@ class ClinicReports:
                   version=approved.version,source_hash=approved.content_hash,recipient=contact,
                   request_ref='approval',language=approved.language_pref)
         pdf=self.insert(conn,**base,kind='report_pdf',source_job=None)
+        if pdf and mode=='patient':
+            # The patient hears at once that the visit is done; the clinic copy needs no such notice.
+            self.insert(conn,**base,kind='visit_complete',source_job=pdf['id'])
         if pdf and approved.language_pref in LANGUAGES and self.service.speech is not None:
             self.insert(conn,**base,kind='voice_option',source_job=pdf['id'])
         return pdf
@@ -124,7 +128,8 @@ class ClinicReports:
         with self.service.lock, transaction() as conn:
             job=one(conn,"select * from app.clinic_report_jobs where (organisation_id=%s or delivery_mode='patient') and state in "
                     "('pending','waiting_for_window','waiting_for_artifact') and not_before<=now() "
-                    "order by created_at,case kind when 'report_pdf' then 0 when 'voice_option' then 1 else 2 end,id "
+                    "order by created_at,case kind when 'visit_complete' then 0 when 'report_pdf' then 1 "
+                    "when 'voice_option' then 2 else 3 end,id "
                     'limit 1 for update skip locked',(target.organisation_id if target else '',))
             if not job:
                 return False
@@ -164,7 +169,9 @@ class ClinicReports:
                 if report.content_hash!=job['source_hash'] or content_hash(report)!=job['source_hash'] or not report.record_snapshot['patient'].get('synthetic'):
                     raise GateRefused('Approved report fingerprint changed.')
                 graph=self.service.channel.graph
-                if job['kind']=='report_pdf':
+                if job['kind']=='visit_complete':
+                    result=graph.send_text(target.number,visit_complete_text(report))
+                elif job['kind']=='report_pdf':
                     file=one(conn,'select sha256,data from app.report_files where encounter_id=%s and version=%s',
                              (job['encounter_id'],job['version']))
                     if not file:

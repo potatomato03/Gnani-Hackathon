@@ -129,11 +129,13 @@ def test_registered_patient_approval_delivers_to_entered_number_and_report_menu_
     w['conn'].execute('insert into app.whatsapp_contact_windows(contact,last_inbound_at) values(%s,now())',(contact,))
     eid=next_visit(w);store_pdf(w,eid)
     jobs=w['conn'].execute('select * from app.clinic_report_jobs where encounter_id=%s',(eid,)).fetchall()
-    assert {job['kind'] for job in jobs}=={'report_pdf','voice_option'}
+    assert {job['kind'] for job in jobs}=={'visit_complete','report_pdf','voice_option'}
     assert all(job['delivery_mode']=='patient' and job['recipient']==contact for job in jobs)
     assert not w['conn'].execute('select d.id from app.patient_deliveries d join app.followups f on f.id=d.followup_id '
                                 'where f.encounter_id=%s',(eid,)).fetchall()
-    assert service.clinic_reports.tick();assert service.clinic_reports.tick()
+    for _ in range(3):assert service.clinic_reports.tick()
+    assert [call['type'] for call in calls]==['text','document','interactive']
+    assert 'is complete' in calls[0]['text']['body']
     assert not service.speech.requests
     pdf=next(job for job in jobs if job['kind']=='report_pdf')
     buttons=calls[-1]['interactive']['action']['buttons']
@@ -209,8 +211,8 @@ def test_each_permitted_phone_receives_only_its_registered_patient_report_and_vo
                       (w['patient'],w['org'],contact))
     w['conn'].execute('insert into app.whatsapp_contact_windows(contact,last_inbound_at) values(%s,now())',(contact,))
     eid=next_visit(w);store_pdf(w,eid)
-    for _ in range(2):assert service.clinic_reports.tick()
-    assert [call['type'] for call in calls]==['document','interactive']
+    for _ in range(3):assert service.clinic_reports.tick()
+    assert [call['type'] for call in calls]==['text','document','interactive']
     assert all(call['to']==number for call in calls) and not service.speech.requests
     pdf=w['conn'].execute("select * from app.clinic_report_jobs where encounter_id=%s and kind='report_pdf'",(eid,)).fetchone()
     other=next(candidate for candidate in channel.config.test_numbers if candidate!=number)

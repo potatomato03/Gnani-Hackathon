@@ -20,6 +20,13 @@ def moment():
     return datetime.now(timezone.utc)
 
 
+def visit_complete_text(report):
+    """Sent the moment the doctor approves, before the PDF is ready (runbook D-140)."""
+    header = report.header
+    return (f'Hello {header.patient_name}, your visit with {header.doctor_name} at {header.clinic_name} is complete. '
+            'Your doctor has approved your report, and it will be sent here in a few minutes.')
+
+
 def queue(conn, conv, kind, request_ref, language=None):
     return one(conn, 'insert into app.patient_deliveries(id,followup_id,kind,request_ref,language) '
                'values(%s,%s,%s,%s,%s) on conflict(followup_id,kind,request_ref) do nothing returning *',
@@ -143,8 +150,8 @@ class Journey:
             return False
         with self.service.lock,transaction() as conn:
             job=one(conn,"select * from app.patient_deliveries where state in ('pending','waiting_for_contact',"
-                    "'waiting_for_window','waiting_for_artifact') and not_before<=now() order by created_at "
-                    'limit 1 for update skip locked')
+                    "'waiting_for_window','waiting_for_artifact') and not_before<=now() order by created_at,"
+                    "case kind when 'visit_complete' then 0 else 1 end,id limit 1 for update skip locked")
             if not job:
                 return False
             row=one(conn,'select * from app.followups where id=%s for update',(job['followup_id'],))
@@ -166,7 +173,9 @@ class Journey:
                 if not inbound or moment()-inbound>timedelta(hours=24):
                     return self.hold(conn,job,'waiting_for_window')
                 graph=self.service.channel.graph
-                if job['kind']=='report_pdf':
+                if job['kind']=='visit_complete':
+                    result=graph.send_text(number,visit_complete_text(conv._visit.approved))
+                elif job['kind']=='report_pdf':
                     file=one(conn,'select * from app.report_files where encounter_id=%s and version=%s',
                              (row['encounter_id'],row['version']))
                     if not file:

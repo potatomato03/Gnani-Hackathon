@@ -169,6 +169,10 @@ def test_signed_inbox_one_use_join_deduplication_receipts_and_restart(world):
     main.state['followup'] = w['service']
     assert w['service'].tick()
     assert sent
+    # The JOIN releases the queued visit-complete notice (runbook D-140); let the outbox settle first.
+    for _ in range(5):
+        if not w['service'].tick():
+            break
     before = len(sent)
     post_event(w, cfg, text_event('join', invitation))
     assert w['service'].tick() is False  # duplicate persisted id survives process recreation
