@@ -10,6 +10,7 @@ import json
 import logging
 import secrets
 import threading
+import time
 from uuid import uuid4
 
 from psycopg.types.json import Jsonb
@@ -35,6 +36,7 @@ from .clinic_reports import ClinicReports
 
 log = logging.getLogger('voicerx.followup')
 AUTO = object()
+SCHEDULE_EVERY = 60  # seconds between looks for due check-ins
 
 
 def now():
@@ -129,6 +131,7 @@ class FollowupService:
                                   LocalMemoryStore(settings.artifacts_dir / 'followup-memory'))
                        if memory is AUTO else memory)
         self.lock = threading.RLock()
+        self.next_schedule_check = 0.0
         self.journey = Journey(self)
         self.clinic_reports = ClinicReports(self)
         client = None
@@ -375,6 +378,13 @@ class FollowupService:
         return self.clinic_reports.tick() or self.journey.tick() or self.scheduled()
 
     def scheduled(self):
+        # Planned check-ins are due to the minute, so look once a minute, not on every idle second of the worker.
+        # Each look reads every active follow-up and its approved report; once a second that used about 8 GB of
+        # Supabase egress in five days (runbook D-141).
+        clock = time.monotonic()
+        if clock < self.next_schedule_check:
+            return False
+        self.next_schedule_check = clock + SCHEDULE_EVERY
         with self.lock, transaction() as conn:
             rows = all_rows(conn, "select * from app.followups where conversation->>'contact' is not null "
                             "and conversation->>'stopped' = 'false' order by updated_at for update skip locked")

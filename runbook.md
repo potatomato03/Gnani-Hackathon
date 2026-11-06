@@ -992,3 +992,27 @@ The user wants the bot running all the time for demos and asked which keys to sh
 - Checks: full suite without database 852 passed, 39 skipped; new unit test for the wording. The database tests for both paths were updated (text before document, three worker passes).
 
 **D-140 live (user: "Yes, go ahead").** Migration 013 was applied to the shared database alone (not a full `migrate` rerun), and both new checks were read back. Rollback-only database tests: 36 passed, 2 skipped. Two older tests first failed because the notice is a second queued item. The consent test read one row of two, and in the JOIN test the notice rightly goes out once the phone joins. Both tests were fixed, not the code. Deployed to production (`janani-private-clinic-demo-6afglj1i1…`, now on the main URL) from a clean copy of `2b35ea3` plus only these files. Other people's uncommitted pharmacy, sign-in and suggestion edits in this folder were left out. The webhook check still passes after the deploy. Not yet seen on a real phone. No commit was made.
+
+D-139 committed as `b8a5c8a` on top of the visit-complete WhatsApp message (`99593a1`, D-140), pushed, and deployed to production with it (`janani-private-clinic-demo-fyfwb7iw5…`). Migration 013 for that feature was already applied.
+
+## 7 November 2026 — Supabase egress over the free allowance (D-141)
+
+Supabase warned that the organisation used 16.75 GB of egress against the free plan's 5.5 GB, and will restrict the projects (HTTP 402) after 9 Nov unless upgraded. Restrictions lift when the next billing cycle starts, or at once on Pro. Deleting data doesn't refund egress already used. The team will move the product to a new Supabase project before 9 Nov, so the leaks had to be fixed first or they would use up the new allowance in about two days.
+
+**Measured** with `pg_stat_statements` (statistics since 2 Nov), read-only:
+
+| Query | Calls | Estimated egress |
+|---|---|---|
+| The full Indian product list for the name index (`suggest.shared_index`), about 21 MB each time | 445 | ~9.5 GB |
+| `select report from app.report_versions ...` inside `followup.restore`, from `FollowupService.scheduled()` | 505,866 | ~4.3 GB |
+| `select * from app.followups where conversation->>... for update skip locked` in `scheduled()` | 235,736 | ~4.1 GB |
+
+The worker loop waits one second when idle, and every idle tick ran `scheduled()`. That read every active follow-up and its approved report each second.
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-141 | `scheduled()` looks for due check-ins at most once a minute (`SCHEDULE_EVERY = 60`). HTTP-only instances (`APP_RUN_WORKER=0`, the hosted API) no longer preload the product name index at start; they load it on the first medicine search. The hosted worker daemon still preloads it once at start (D-136), and local runs, which draft in the same process, keep the preload. | Check-ins are due to the minute, so a minute's delay changes nothing a patient sees. API instances start far more often than the worker, and most never run a medicine search. Expected egress falls from about 3.4 GB a day to well under the 5 GB monthly allowance. Not measured yet. | User (fix before the move); Assistant (how) | Confirmed / Assistant call |
+
+Considered and not used for this product: moving stored files to Cloudflare R2. Files are about 26 MB and not the egress source. That code went to ARDai (a separate product, now in its own folder and repo) for later use.
+
+Checks: two new unit tests (`test_egress_fixes.py`); full suite without the database: 854 passed, 39 skipped. The rollback-only database tests weren't run, to avoid more traffic on the over-quota project. Run them against the new project after the data move. Not deployed.

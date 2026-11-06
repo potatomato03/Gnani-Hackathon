@@ -66,11 +66,17 @@ class ApiError(Exception):
         self.status, self.code, self.message, self.retryable, self.extra = status, code, message, retryable, extra
 
 
-def warm_up():
+def warm_up(products=True):
+    """Load the embedding model, and the product name index when this process drafts visits.
+
+    The index is all 246k Indian products, about 21 MB read from Postgres. Loading it at every HTTP instance's
+    start used most of the Supabase egress allowance (runbook D-141), so HTTP-only instances load it on the
+    first medicine search instead."""
     try:
         knowledge.warm_up()
-        with transaction() as conn:
-            shared_index(conn, REFERENCE.products)
+        if products:
+            with transaction() as conn:
+                shared_index(conn, REFERENCE.products)
     except Exception:
         log.exception('warm-up failed; the first search will load instead')
 
@@ -84,10 +90,12 @@ async def lifespan(app):
     worker = Worker(settings, followup=state['followup'])
     state['worker'] = worker
     from .config import read_env
-    if read_env().get('APP_RUN_WORKER','1')=='1':
+    runs_worker = read_env().get('APP_RUN_WORKER','1')=='1'
+    if runs_worker:
         worker.start()
-    # Load the embedding model and the product name index in the background, so the first search isn't slow.
-    threading.Thread(target=warm_up, daemon=True).start()
+    # Load the embedding model in the background, so the first search isn't slow. The product name index is
+    # preloaded only where the worker drafts visits; the hosted worker daemon preloads its own (hosted.py).
+    threading.Thread(target=warm_up, kwargs={'products': runs_worker}, daemon=True).start()
     yield
     worker.stop()
     close_pool()
