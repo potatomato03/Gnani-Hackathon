@@ -120,8 +120,11 @@ def shared_index(conn, formulary):
 
 
 def clinic_index(conn, organisation_id):
+    # Items added from a pharmacy stock file are left out while stock is switched off (runbook D-139).
+    from .pharmacy import stock_enabled
     rows = conn.execute("select id, name, composition, manufacturer from app.clinic_products "
-                        "where organisation_id = %s and status <> 'withdrawn'", (organisation_id,)).fetchall()
+                        "where organisation_id = %s and status <> 'withdrawn' and (source is distinct from 'import' or %s)",
+                        (organisation_id, stock_enabled())).fetchall()
     return NameIndex([CatalogEntry(r['id'], r['name'], r['composition'], 'clinic', r['manufacturer'] or '') for r in rows])
 
 

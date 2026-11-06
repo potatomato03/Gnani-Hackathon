@@ -116,3 +116,14 @@ def test_annotates_prescribed_lines_and_suggestions_only(approved_report):
     assert view['pharmacy']['as_of'] == AS_OF.isoformat()
     assert med['stock']['status'] == 'in_stock' and med['stock']['quantity'] == 10
     assert med['suggestions'][0]['stock'] == {'status': 'in_stock', 'quantity': 30}
+
+
+def test_stock_is_off_unless_switched_on(monkeypatch):
+    from voicerx.app import pharmacy
+
+    class NoQueries:
+        def execute(self, *args):
+            raise AssertionError('stock read while switched off')
+    monkeypatch.delenv('APP_PHARMACY_STOCK', raising=False)
+    monkeypatch.setattr(pharmacy, 'stock_enabled', lambda: False)
+    assert not pharmacy.load_stock(NoQueries(), 'org-1')

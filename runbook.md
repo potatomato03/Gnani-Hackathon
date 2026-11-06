@@ -976,6 +976,14 @@ The user wants the bot running all the time for demos and asked which keys to sh
 
 **Tested live through Vercel (6 November 2026).** The user sent HELLO from the test phone, and the bot's reply arrived. Vercel's API and worker now run the bot with no laptop involved. Not tested through Vercel yet: delivering an approved PDF, the voice note, and lab uploads. For demos, send HELLO from the phone before approving so Meta's 24-hour window is open. A number links to one patient only, so demo visits should reuse the patient the phone is linked to.
 
+## 6 November 2026 — pharmacy stock switched off for now (D-139)
+
+**D-139 (user: "we don't need that pharma csv as of now for the bot to look into; keep the larger medicine base as a lookup for the recommended medicine as of now").** Pharmacy stock (D-126) now steers nothing unless `APP_PHARMACY_STOCK=1`, which is unset locally and on Vercel.
+- `pharmacy.load_stock` returns an empty stock while switched off. So there is no stock bonus in medicine suggestions or search, no stock fields in search results, and no badges, same-composition swaps or approval note on drafts.
+- `clinic_index` leaves out clinic products added from a stock file (`source = 'import'`), so recommendations and search come from the formulary, the Indian Medicine Dataset and the doctors' own earlier choices.
+- The `pharmacy` capability is false, so the Pharmacy page and its upload are closed. The code, the tables and the imported stock rows stay, so switching it back on restores everything.
+- Checked locally: a draft that had shown "Pharmacy: Out of stock" showed no stock. The shortlist came from the generic and Indian-dataset tiers, and search results carried no stock. A new database test covers the switched-off state; the stock test switches it on.
+
 **D-140 (user: "as soon as we approve the report on the app - the patient get a message spontaneously that your visit has been completed and your report will be sent in a few minutes and rest everything as it is").**
 - On approval, a text goes out first: "Hello <patient>, your visit with <doctor> at <clinic> is complete. Your doctor has approved your report, and it will be sent here in a few minutes." The PDF, voice option and everything after are unchanged.
 - It is a new delivery kind, `visit_complete`, queued in the same approval transaction as the PDF, in both paths: the registered-phone path (`clinic_report_jobs`, `delivery_mode='patient'` only, not the clinic copy) and the JOIN-linked path (`patient_deliveries`). Both workers send it before the PDF. It needs no file, so it goes out on the worker's next pass after approval.

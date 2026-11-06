@@ -89,9 +89,14 @@ def capabilities(session):
     clinical = session['role'] == 'doctor'
     return {'capture': clinical, 'resolve': clinical, 'approve': clinical, 'knowledge': clinical,
             'register':session['role'] in ('doctor','reception','admin'),
-            'pharmacy':session['role'] in ('doctor','admin')}
+            'pharmacy':session['role'] in ('doctor','admin') and _stock_enabled()}
 
 
 def require(session, capability):
     if not capabilities(session).get(capability):
         raise Forbidden(f'this role may not {capability}')
+
+
+def _stock_enabled():
+    from .pharmacy import stock_enabled
+    return stock_enabled()

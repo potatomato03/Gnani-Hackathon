@@ -28,7 +28,9 @@ def draft_encounter(w, draft_report):
     return eid, draft
 
 
-def test_stock_upload_labels_the_draft_and_offers_an_in_stock_swap(world, draft_report):
+def test_stock_upload_labels_the_draft_and_offers_an_in_stock_swap(world, draft_report, monkeypatch):
+    from voicerx.app import pharmacy
+    monkeypatch.setattr(pharmacy, 'stock_enabled', lambda: True)  # off by default (runbook D-139)
     w = world
     client = w['client']
     eid, draft = draft_encounter(w, draft_report)
@@ -75,3 +77,14 @@ def test_stock_upload_labels_the_draft_and_offers_an_in_stock_swap(world, draft_
     audit = w['conn'].execute("select detail from app.audit_events where organisation_id=%s and action='pharmacy.stock_imported'",
                               (w['org'],)).fetchone()
     assert audit['detail']['rows'] == 4
+
+
+def test_with_stock_switched_off_nothing_shows_and_the_page_is_closed(world, draft_report, monkeypatch):
+    from voicerx.app import pharmacy
+    monkeypatch.setattr(pharmacy, 'stock_enabled', lambda: False)
+    w = world
+    client = w['client']
+    eid, _ = draft_encounter(w, draft_report)
+    assert client.get('/api/v1/me').json()['capabilities']['pharmacy'] is False
+    assert client.post('/api/v1/pharmacy/stock', json={'filename': 'stock.csv', 'csv': STOCK}).status_code == 403
+    assert client.get(f'/api/v1/encounters/{eid}/report').json()['pharmacy'] is None

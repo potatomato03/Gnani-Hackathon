@@ -237,7 +237,16 @@ class Stock:
         return {**badge, 'alternatives': self.alternatives(product_id, label, composition, form) if offer else []}
 
 
+def stock_enabled():
+    """Pharmacy stock steers nothing unless APP_PHARMACY_STOCK=1 (runbook D-139): recommendations and search
+    come from the full medicine base, and drafts carry no stock badges."""
+    from .config import read_env
+    return read_env().get('APP_PHARMACY_STOCK') == '1'
+
+
 def load_stock(conn, organisation_id):
+    if not stock_enabled():
+        return Stock([])
     return Stock(conn.execute('select * from app.pharmacy_stock where organisation_id = %s', (organisation_id,)).fetchall())
 
 
