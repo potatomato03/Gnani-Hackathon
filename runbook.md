@@ -1040,3 +1040,14 @@ The old project (`kymzybfrtirzpegpibcj`, organisation "AdityaRaj80's Org") reach
 - The new database is 410 MB of 500.
 
 Vercel's production `SUPABASE_DB_URL` was replaced with the new transaction-pooler URL.
+
+**Deployed (7 Nov 2026, 18:24 IST).**
+- `d5bb3f1` was deployed to production from a clean `git archive` copy: `janani-private-clinic-demo-37q6mjt8j…`, now on the main URL. The container and the worker daemon both run in `hnd1`.
+- Anonymous checks: the sign-in page returns 200, `/api/v1/session` and `/api/v1/patients` return 401, an unsigned webhook gets 403.
+- `runs/connect_production_webhook.py --verify-only` passed. The Meta callback is unchanged and healthy.
+- Worker log: "Private worker startup verified: database and PDF renderer ready", then "Medicine index loaded."
+- The new project's `pg_stat_statements` shows production working against it at the new rates. Over two minutes: 2 follow-up schedule checks (once a minute; before the fix, every second) and 8 report reads. The estimate is about 75 MB of egress a day, about 2 GB a month, with today's 4 active follow-ups. It grows with each active follow-up.
+- `vercel daemons instances list` shows one worker instance (`hnd1`).
+- Not verified by the assistant: signing in with the shared password (the user's step), a recording-to-approval run, and a WhatsApp message through the bot on the new database.
+
+**Open.** Something outside this laptop and outside the current deployment still runs the old code's worker loop against the old project: about 60 queries a minute through its pooler. Most likely a teammate's local copy with the old `.env`. It can't affect the new project. Teammates should update their `.env` from `../credentials`, and the old project can be paused in the Supabase dashboard once the new one is confirmed. The old connection string is kept outside the repo in `../credentials/old-supabase/` for a rollback.
