@@ -1016,3 +1016,27 @@ The worker loop waits one second when idle, and every idle tick ran `scheduled()
 Considered and not used for this product: moving stored files to Cloudflare R2. Files are about 26 MB and not the egress source. That code went to ARDai (a separate product, now in its own folder and repo) for later use.
 
 Checks: two new unit tests (`test_egress_fixes.py`); full suite without the database: 854 passed, 39 skipped. The rollback-only database tests weren't run, to avoid more traffic on the over-quota project. Run them against the new project after the data move. Not deployed.
+
+## 7 November 2026 — moved to a new Supabase project (D-142, D-143)
+
+The old project (`kymzybfrtirzpegpibcj`, organisation "AdityaRaj80's Org") reached 27.7 GB of egress against the free 5 GB, and 513 MB of database against 500 MB. The user created a new free project under a different account and put its connection string, publishable key and secret key in `../credentials`. `sync_env.py` moved the local `.env` to it. The old connection string was kept outside the repo, only for the copy.
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-142 | Run the product on the new Supabase project `izdzqrqfouorrgqhnvrv`. Production uses its transaction pooler (port 6543; the app's pool already sets `prepare_threshold=None`), as before. The old project is left untouched as a fallback. | The old project is over both free limits and will be restricted. | User | Confirmed |
+| D-143 | The new project is in Tokyo (`ap-northeast-1`), so the Vercel API and worker move from `bom1` to `hnd1` (`vercel.json`). | Every page makes several database round trips. Across regions each one costs about 100 ms or more, which is the slowness D-108 fixed by moving to Mumbai. With the app beside the database, India to Tokyo is paid once per page. Data is synthetic, so storing it outside India is acceptable for the hackathon. | Assistant | Assistant call |
+
+**Migration:**
+- `create extension vector with schema extensions`.
+- `tools/knowledge/upload_supabase.py` rebuilt the knowledge from the local files: 46,540 chunks and 246,068 products, with popularity loaded in the same pass. That gives 308 MB and 60 MB, against the old project's 129 MB for products after its in-place popularity update. Nothing was downloaded from the old project for this.
+- `python -m voicerx.app.migrate` applied 001–013 without seed data.
+- The app schema was then copied from the old project with binary COPY, in foreign-key order: 40 tables, 1,540 rows, sequences advanced.
+
+**Checked:**
+- Row counts match on every table.
+- Recordings, artifacts and approved PDFs are byte-identical (sha256 and md5).
+- All 66 foreign keys have no orphans.
+- No queued job was copied: every WhatsApp event, delivery, run and artifact was already finished, so nothing will be sent twice.
+- The new database is 410 MB of 500.
+
+Vercel's production `SUPABASE_DB_URL` was replaced with the new transaction-pooler URL.

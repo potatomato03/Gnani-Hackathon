@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["bom1"],
+  "regions": ["hnd1"],
   "services": {
     "api": {
       "root": ".",
@@ -14,7 +14,7 @@
       "root": ".",
       "entrypoint": "Dockerfile.vercel",
       "command": ["python", "-m", "voicerx.app.hosted", "worker"],
-      "instances": {"bom1": 1},
+      "instances": {"hnd1": 1},
       "resources": {"requests": {"memory": "2Gi"}},
       "terminationGracePeriodSeconds": 300
     }
