@@ -1051,3 +1051,12 @@ Vercel's production `SUPABASE_DB_URL` was replaced with the new transaction-pool
 - Not verified by the assistant: signing in with the shared password (the user's step), a recording-to-approval run, and a WhatsApp message through the bot on the new database.
 
 **Open.** Something outside this laptop and outside the current deployment still runs the old code's worker loop against the old project: about 60 queries a minute through its pooler. Most likely a teammate's local copy with the old `.env`. It can't affect the new project. Teammates should update their `.env` from `../credentials`, and the old project can be paused in the Supabase dashboard once the new one is confirmed. The old connection string is kept outside the repo in `../credentials/old-supabase/` for a rollback.
+
+**Local check against the new project (9 Nov 2026).** The app ran on this laptop on port 8002 with `APP_DEV_LOGIN=1` and `APP_RUN_WORKER=0`, so no worker claimed jobs and nothing was sent on WhatsApp.
+- The development sign-in listed the copied doctors.
+- Signed in as Aditya Raj, the hospital's three patients appeared with their follow-up tasks (3) and review counts.
+- With the local artifact copies (`runs/app`) moved aside, so files had to come from the database as on Vercel, Virat's two approved report PDFs (78,712 and 81,783 bytes) and FHIR bundles downloaded intact (200). A stored recording returned all 1,177,264 bytes as `audio/webm`.
+- Medicine search ("dolo 650") returned DOLO 650 first. The first search took 15 s, because this process loaded the product index on first use (D-141) from India to the Tokyo database. The next search took 1.2 s. On Vercel, beside the database, the first-search load is shorter but still costs a few seconds once per new API instance.
+- No server errors. The only browser error was the expected 401 from the session check before sign-in.
+
+Still for the user: sign in on the live site once, and send HELLO from the test phone.
