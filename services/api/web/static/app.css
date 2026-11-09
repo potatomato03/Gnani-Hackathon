@@ -78,7 +78,7 @@
 .facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 8px 0 0; padding: 0; list-style: none; color: var(--ink-2); }
 .phead .actions { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
 
-.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-l); padding: 26px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-l); padding: 26px; min-width: 0; overflow-wrap: anywhere; }
 .stack { display: grid; gap: 22px; }
 .panel h3, .visit-card h3 { font: 400 1.75rem/1.15 var(--serif); margin: 0; letter-spacing: -.01em; }
 .ph { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -208,9 +208,11 @@ audio { width: 100%; margin: 6px 0 16px; }
 .file span span { display: block; font-size: .875rem; color: var(--ink-3); }
 .file .btn { margin-left: auto; }
 
-.sum { display: grid; grid-template-columns: 160px 1fr; gap: 4px 20px; margin: 0; }
+.sum { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 4px 20px; margin: 0; }
 .sum dt { color: var(--ink-3); font-size: .9375rem; padding-top: 2px; }
-.sum dd { margin: 0 0 14px; }
+/* Long medicine names such as "(PARACETAMOL/ACETAMINOPHEN+TRAMADOL)" have no natural break; let them wrap
+   inside the card instead of widening the column past it. */
+.sum dd { margin: 0 0 14px; min-width: 0; overflow-wrap: anywhere; }
 .sum dd ul { margin: 0; padding-left: 20px; }
 .wa-head { display: flex; align-items: center; gap: 12px; }
 .wa-badge { width: 36px; height: 36px; border-radius: 50%; background: #25D366; display: grid; place-items: center; flex: none; }

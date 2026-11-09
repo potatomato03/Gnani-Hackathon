@@ -4,6 +4,8 @@ Candidates come from sound and spelling; the visit's context and the knowledge b
 Groq writes the order and a short reason but may only use the candidates it is given. The doctor confirms
 with a click: nothing here ever changes the draft.
 """
+import gzip
+import json
 import logging
 import re
 import threading
@@ -111,12 +113,40 @@ def shared_index(conn, formulary):
         if _index is None:
             entries = [CatalogEntry(p.id, f'{name} {p.form}', composition_text(p), 'formulary', p.manufacturer)
                        for p in formulary.values() for name in [p.brand, *p.aliases]]
-            rows = conn.execute('select id, name, composition, manufacturer, coalesce(popularity, 0) as popularity '
-                                'from public.indian_products').fetchall()
+            rows = indian_rows(conn)
             entries += [CatalogEntry(f"in-{r['id']}", r['name'], r['composition'], 'indian', r['manufacturer'] or '',
                                      float(r['popularity'])) for r in rows]
             _index = NameIndex(entries)
     return _index
+
+
+PRODUCTS_SNAPSHOT = REPO_ROOT / 'data/snapshots/indian_products.json.gz'
+PRODUCT_FIELDS = ('id', 'name', 'composition', 'manufacturer', 'popularity')
+
+
+def snapshot_available():
+    return PRODUCTS_SNAPSHOT.is_file()
+
+
+def indian_rows(conn):
+    """The Indian Medicine Dataset products for the name index (runbook D-144).
+
+    Read from the snapshot shipped with the deploy (tools/knowledge/build_products_snapshot.py) when it holds as
+    many products as the table. That takes about a second and no Supabase egress; reading all 246k rows from
+    Postgres takes several seconds and about 21 MB of egress. Without the file, or when it is stale or unreadable,
+    the rows come from Postgres as before."""
+    count = conn.execute('select count(*) as n from public.indian_products').fetchone()['n']
+    if snapshot_available():
+        try:
+            snapshot = json.loads(gzip.decompress(PRODUCTS_SNAPSHOT.read_bytes()))
+            if snapshot.get('count') == count == len(snapshot.get('rows', ())):
+                return [dict(zip(PRODUCT_FIELDS, row)) for row in snapshot['rows']]
+            log.warning('product snapshot holds %s products but the table has %s; reading Postgres',
+                        snapshot.get('count'), count)
+        except Exception as error:
+            log.warning('product snapshot unreadable (%s); reading Postgres', type(error).__name__)
+    return conn.execute('select id, name, composition, manufacturer, coalesce(popularity, 0) as popularity '
+                        'from public.indian_products').fetchall()
 
 
 def clinic_index(conn, organisation_id):

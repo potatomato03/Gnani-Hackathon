@@ -35,7 +35,7 @@ from ..pipeline.assemble import product_label
 from .catalog import FORMS, parse_composition
 from .catalog import standing
 from .pharmacy import StockFileError, annotate_view, import_stock, load_stock, summary as pharmacy_summary
-from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index
+from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index, snapshot_available
 from .views import CorrectionRefused, build_resolutions, report_view
 from .worker import NEVER, TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
 from .shortlist import build_items, live_ranking
@@ -67,16 +67,16 @@ class ApiError(Exception):
 
 
 def warm_up(products=True):
-    """Load the embedding model, and the product name index when this process drafts visits.
+    """Load the product name index (first: medicine search needs it), then the embedding model.
 
-    The index is all 246k Indian products, about 21 MB read from Postgres. Loading it at every HTTP instance's
-    start used most of the Supabase egress allowance (runbook D-141), so HTTP-only instances load it on the
-    first medicine search instead."""
+    The index is all 246k Indian products. Read from Postgres it is about 21 MB of Supabase egress, which at every
+    HTTP instance's start used most of the allowance (D-141). The deploy now ships them as a file (D-144), so
+    every process preloads from that; without the file, HTTP-only instances load on the first search instead."""
     try:
-        knowledge.warm_up()
         if products:
             with transaction() as conn:
                 shared_index(conn, REFERENCE.products)
+        knowledge.warm_up()
     except Exception:
         log.exception('warm-up failed; the first search will load instead')
 
@@ -93,9 +93,9 @@ async def lifespan(app):
     runs_worker = read_env().get('APP_RUN_WORKER','1')=='1'
     if runs_worker:
         worker.start()
-    # Load the embedding model in the background, so the first search isn't slow. The product name index is
-    # preloaded only where the worker drafts visits; the hosted worker daemon preloads its own (hosted.py).
-    threading.Thread(target=warm_up, kwargs={'products': runs_worker}, daemon=True).start()
+    # Preload in the background, so the first search isn't slow. The product name index comes from the shipped
+    # snapshot when there is one (no egress); otherwise only processes that draft visits preload it from Postgres.
+    threading.Thread(target=warm_up, kwargs={'products': runs_worker or snapshot_available()}, daemon=True).start()
     yield
     worker.stop()
     close_pool()

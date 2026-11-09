@@ -55,3 +55,6 @@ data/eval/results/scores/*prisma*
 # Local editor and preview settings
 .claude/
 .vercel/
+
+# Product snapshot for the name index: built locally, added to the deploy copy, never published (D-144)
+data/snapshots/*.json.gz

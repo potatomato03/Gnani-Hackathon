@@ -1060,3 +1060,19 @@ Vercel's production `SUPABASE_DB_URL` was replaced with the new transaction-pool
 - No server errors. The only browser error was the expected 401 from the session check before sign-in.
 
 Still for the user: sign in on the live site once, and send HELLO from the test phone.
+
+## 9 November 2026 — WhatsApp checked, medicine search sped up, long medicine names wrap (D-144, D-145)
+
+**WhatsApp.** The approval at 21:01 queued the visit-complete text, the PDF and the voice button as `waiting_for_window`. The new database had no inbound WhatsApp event since 6 Nov, and production logs showed no webhook call in the last hour. A read-only Meta check found everything in order: the callback is production with `messages` subscribed, the send token is valid and permanent, and the test number (ends 3389) is connected with quality GREEN. So the bot was correctly waiting for the patient's 24-hour window (D-140). After the user sent HELLO from the registered phone, the report and the other messages arrived. No code change.
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-144 | The Indian product list for the name index ships with the deploy as `data/snapshots/indian_products.json.gz`, built from the local dataset by `tools/knowledge/build_products_snapshot.py` with the same row rules as `upload_supabase.py`. The app uses it when its count matches the table; a stale, missing or unreadable file falls back to Postgres. Every process now preloads the index at start (index first, then the embedding model), so the first medicine search is fast. The file is git-ignored and added to the deploy copy, because the dataset's licence doesn't clearly allow republishing it in this public repo. `data/snapshots/README.md` keeps the folder for the Dockerfile's `COPY`. | After D-141 the API loaded the list from Postgres on the first search: about 15 s from India and several seconds beside the database, which the user hit. From the file it loads in about a second, with no Supabase egress. | User (fix the speed); Assistant (how) | Confirmed / Assistant call |
+| D-145 | The last-visit summary's value column is `minmax(0, 1fr)`, and panels allow long words to wrap (`overflow-wrap: anywhere`). The CSS and JS cache version moves to `20261109a`. | A medicine label such as "(PARACETAMOL/ACETAMINOPHEN+TRAMADOL)" has no natural break, so the `1fr` column grew past the card into the WhatsApp panel. | User (bug); Assistant (fix) | Confirmed / Assistant call |
+
+**Checks:**
+- The snapshot matches the table: 246,068 products, the same id, name, composition, manufacturer and popularity.
+- Four unit tests cover preload order, snapshot use, and falling back for a stale, missing or broken file.
+- Locally, against the new project, the first search right after a fresh start took 1.1 s instead of 15 s. "dolo 650", "ultracet" and "pan 40" each found the expected product first. Most of the 1.1 s is the India-to-Tokyo database round trip.
+- On Akshay's page no text extends past the summary card; the ULTRACET label wraps onto three lines.
+- Observed, not changed: "augmentin 625" ranks "Megamentin 625 Tablet" first. Ranking is the same as before this change.
