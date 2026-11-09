@@ -33,7 +33,7 @@ from voicerx.exports.patient_box import build_patient_box  # noqa: E402
 from voicerx.exports.pdf.render import html_to_pdf, render_html  # noqa: E402
 from voicerx.pipeline.assemble import content_hash  # noqa: E402
 
-GUEST_CLINIC = 'ARDAI Guest Clinic'
+GUEST_CLINIC = 'VoiceRX Guest Clinic'
 GUEST_DOCTOR = 'Dr Guest'
 # Copied in this order; removed in the reverse order.
 TABLES = ('patients', 'encounters', 'sources', 'runs', 'report_versions', 'approvals', 'artifacts',

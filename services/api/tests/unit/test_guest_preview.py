@@ -10,7 +10,7 @@ from voicerx.app import auth, main
 def session(user=auth.GUEST_USER, org=auth.GUEST_ORG):
     return {'user_id': user, 'organisation_id': org, 'csrf_token': 'csrf', 'display_name': 'Dr Guest',
             'registration_no': None, 'specialty': 'general_medicine', 'synthetic': True, 'role': 'doctor',
-            'organisation_name': 'ARDAI Guest Clinic', 'timezone': 'Asia/Kolkata',
+            'organisation_name': 'VoiceRX Guest Clinic', 'timezone': 'Asia/Kolkata',
             'expires_at': datetime(2026, 11, 10, tzinfo=timezone.utc)}
 
 

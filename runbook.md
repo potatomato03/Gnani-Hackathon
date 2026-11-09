@@ -1105,3 +1105,13 @@ The user asked for a guest login to put on a CV. Recruiters click it and land on
 - An approved PDF downloaded (84,884 bytes).
 - The public sign-in page shows **Explore as a guest doctor**.
 - The link for a CV is `https://janani-private-clinic-demo.vercel.app/guest`.
+
+## 9 November 2026 — the hackathon product is called VoiceRX (D-147)
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-147 | Every user-facing "ARDAI" in this repo becomes "VoiceRX". That covers the page titles, the logo text, the sign-in page, the dashboard and guest notes, the PDF title, the WhatsApp bot's help text, the API titles and the older v1/v2 pages. The guest clinic is now "VoiceRX Guest Clinic"; `seed_guest.py` was rerun, so its records, chats and 13 PDFs carry the new name. The cache version moves to `20261109c`. Code names (`voicerx` package, ids) are unchanged. | The user: "for the hackathon it's VoiceRX". ARDAI is the name of the product being built on top of this one (the separate ARDai repo). | User | Confirmed |
+
+**Checks.** No "ARDAI" is left in the app's code, templates or pages, and none in the guest clinic's reports, chats or PDFs (a reprinted PDF reads "VoiceRX Guest Clinic" and "Dr Guest"). Unit tests: 675 passed, 1 skipped. Earlier entries in this runbook keep the name they were written with.
+
+**D-147 deployed (9 Nov 2026).** The user said "Yes, deploy it". Deployed from a clean `git archive` copy of `db82ab7` plus the rename and the product snapshot, as `janani-private-clinic-demo-mkte0ro9o…`, aliased to the main URL. On the live site, `/guest` opens "VoiceRX for Doctors" with the VoiceRX logo, Dr Guest and "VoiceRX Guest Clinic". The sign-in page title is "Sign in to VoiceRX". "ARDAI" appears on neither page.

@@ -466,7 +466,7 @@ html[data-motion="off"] .mic.idle .halo { animation: none; }
   .me .btn-quiet { padding: 0 10px; }
 }
 
-/* ARDAI additions (runbook D-126, D-129): usual directions and hospital pharmacy stock */
+/* VoiceRX additions (runbook D-126, D-129): usual directions and hospital pharmacy stock */
 .std { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; color: var(--ink-2); font-size: .9375rem; }
 .stock { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 8px; }
 .stock-alt { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

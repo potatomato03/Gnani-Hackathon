@@ -209,7 +209,7 @@ def create_app(state_dir: Path | None = None, runs_root: Path | None = None, spe
                               if m.product_id in products],
                 'conversation_id': running[-1].id if running else None}
 
-    app = FastAPI(title='ARDAI follow-up (synthetic data)')
+    app = FastAPI(title='VoiceRX follow-up (synthetic data)')
 
     @app.middleware('http')
     async def tunnel_guard(request: Request, call_next):

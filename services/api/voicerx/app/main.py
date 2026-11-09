@@ -101,7 +101,7 @@ async def lifespan(app):
     close_pool()
 
 
-app = FastAPI(title='ARDAI doctor workspace', lifespan=lifespan, docs_url=None, redoc_url=None,openapi_url=None)
+app = FastAPI(title='VoiceRX doctor workspace', lifespan=lifespan, docs_url=None, redoc_url=None,openapi_url=None)
 
 
 def error_body(code, message, retryable=False, correlation_id=None, **extra):

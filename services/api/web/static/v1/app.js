@@ -113,11 +113,11 @@ async function renderLogin() {
   root.replaceChildren();
   const card = h('div', { class: 'auth' }, h('p', { class: 'muted', text: 'Loading…' }));
   root.append(h('section', { class: 'login', 'aria-label': 'Sign in' },
-    h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'ARDAI'),
+    h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'VoiceRX'),
     h('div', { class: 'login-body' },
       h('div', { class: 'pitch' },
         h('h1', { text: 'Speak the visit. Check the report. Approve.' }),
-        h('p', { class: 'lede', text: 'ARDAI drafts the visit note and prescription from what was said, shows you every source quote, and flags anything it is unsure of. Nothing reaches a patient until you approve it.' }),
+        h('p', { class: 'lede', text: 'VoiceRX drafts the visit note and prescription from what was said, shows you every source quote, and flags anything it is unsure of. Nothing reaches a patient until you approve it.' }),
         h('dl', {}, [['Languages offered', 'Hinglish, Hindi, English, Tamil, Telugu, Gujarati'],['Every line', 'Has a source'], ['Sent to patient', 'Only after approval']]
           .map(([term, value]) => h('div', {}, h('dt', { text: term }), h('dd', { text: value }))))),
       card),
@@ -159,7 +159,7 @@ function startApp() {
     } }, label)));
   root.append(h('div', { class: 'app' },
     h('header', { class: 'top' },
-      h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'ARDAI'),
+      h('div', { class: 'brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'VoiceRX'),
       h('label', { class: 'search' }, svg(ICON.search), search),
       h('div', { class: 'me' },
         session.workspace_admin ? h('button',{class:'btn btn-quiet',type:'button',onclick:()=>{location.hash='#/workspace';}},'Hospitals') : '',

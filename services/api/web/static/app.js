@@ -1,5 +1,5 @@
 "use strict";
-/* ARDAI doctor app (design by Rakshit, 5 Nov; wired to the real API in runbook D-129). Plain JavaScript, no build step.
+/* VoiceRX doctor app (design by Rakshit, 5 Nov; wired to the real API in runbook D-129). Plain JavaScript, no build step.
    All network calls are in `live`. All field-name guessing is in `adapt`.
    If static/mock.js is loaded it replaces `live` with in-memory demo data. */
 const API = "/api/v1";
@@ -372,7 +372,7 @@ async function renderRegister() {
   const docs = session.admin && session.hospital ? items(await api.doctors(session.hospital.id)).map(adapt.doctor) : session.doctor ? [adapt.doctor(session.doctor)] : [];
   view().innerHTML = `<div class="page narrow">
     <header class="page-head"><h1>Register a patient</h1><p>Added to ${esc(session.hospital?.name || "this hospital")}. Use made-up details only: this is a synthetic demo.</p></header>
-    ${note("Registration.", "The front desk adds a patient once, with their language and their agreement to AI drafting, recording and WhatsApp follow-up. ARDAI checks these agreements before it records a visit or sends a message. Saving is switched off in the guest preview.")}
+    ${note("Registration.", "The front desk adds a patient once, with their language and their agreement to AI drafting, recording and WhatsApp follow-up. VoiceRX checks these agreements before it records a visit or sends a message. Saving is switched off in the guest preview.")}
     <form class="panel" id="reg" novalidate>
       <div class="form-grid">
         <label class="field span-all"><span>Full name</span><input class="input" name="name" required autocomplete="off"></label>
@@ -389,7 +389,7 @@ async function renderRegister() {
         <label class="field span-all" id="allergyBox" hidden><span>Known allergies, separated by commas</span><input class="input" name="allergies" autocomplete="off"></label>
       </div>
       <fieldset class="consents"><legend>Patient's agreement</legend>
-        <label class="consent"><input type="checkbox" name="ai_consent"> <span><b>AI processing.</b> ARDAI can draft reports from this patient's visits. Required.</span></label>
+        <label class="consent"><input type="checkbox" name="ai_consent"> <span><b>AI processing.</b> VoiceRX can draft reports from this patient's visits. Required.</span></label>
         <label class="consent"><input type="checkbox" name="recording_consent"> <span><b>Recording.</b> Visits can be recorded.</span></label>
         <label class="consent"><input type="checkbox" name="whatsapp_consent"> <span><b>WhatsApp.</b> Approved reports and check-ins go to this number. Demo test numbers only.</span></label>
       </fieldset>
@@ -603,11 +603,11 @@ function renderVisit() {
 
   if (v.phase === "idle") {
     const refused = p.consents?.recording === false || p.recording_consent === false;
-    box.innerHTML = stepper(0) + note("Recording a visit.", "The doctor presses the microphone and talks to the patient as usual, in Hinglish, Hindi, English, Tamil, Telugu or Gujarati. Speech is turned into text while they talk, and when they stop ARDAI drafts the report and prescription. Recording is switched off in the guest preview: open a patient's past visit to see the result.") + `<div class="rec-grid">
+    box.innerHTML = stepper(0) + note("Recording a visit.", "The doctor presses the microphone and talks to the patient as usual, in Hinglish, Hindi, English, Tamil, Telugu or Gujarati. Speech is turned into text while they talk, and when they stop VoiceRX drafts the report and prescription. Recording is switched off in the guest preview: open a patient's past visit to see the result.") + `<div class="rec-grid">
       <div><button class="mic idle" id="micBtn" aria-describedby="consentErr">${ICON.mic}<span class="halo"></span><span class="sr">Start recording</span></button><span class="mic-label" aria-hidden="true">Start recording</span></div>
       <div class="rec-copy">
         <h3>Record today's visit with ${fn}</h3>
-        <p>Talk to ${fn} the way you normally do. When you stop, ARDAI drafts the report and prescription for you to check.</p>
+        <p>Talk to ${fn} the way you normally do. When you stop, VoiceRX drafts the report and prescription for you to check.</p>
         <div class="lang-row"><label for="lang">Language spoken</label><select class="select" id="lang">${SPOKEN.map(([c, n]) => `<option value="${c}"${c === v.language ? " selected" : ""}>${n}</option>`).join("")}</select></div>
         ${refused ? `<p class="hint warn">${fn} didn't agree to recording at registration. Type your notes instead.</p>` : `<label class="consent" id="consentRow"><input type="checkbox" id="consent" ${v.consent ? "checked" : ""}> <span>${fn} has agreed to this visit being recorded</span></label>`}
         <p class="hint warn" id="consentErr" role="alert" hidden></p>
@@ -857,7 +857,7 @@ async function refreshRows() { try { state.rows = items(await api.patients(state
 function renderReview(box) {
   const v = state.visit, r = v.report, fn = esc(first(state.patient.name));
   const blocks = r.issue_views.filter(i => i.severity === "block"), warns = r.issue_views.filter(i => i.severity !== "block");
-  box.innerHTML = stepper(r.can_approve ? 2 : 1) + note("The draft, waiting for the doctor.", "ARDAI wrote this from the recorded conversation. Click any sentence to see the words it came from. Medicines are matched to a catalogue of about 2.5 lakh Indian brands; anything unclear is asked, not guessed, in the box of checks. Try <i>Add medicine</i> to search the catalogue, or <i>Look up</i> for drug-label passages. Saving changes and approving are switched off here.") + `
+  box.innerHTML = stepper(r.can_approve ? 2 : 1) + note("The draft, waiting for the doctor.", "VoiceRX wrote this from the recorded conversation. Click any sentence to see the words it came from. Medicines are matched to a catalogue of about 2.5 lakh Indian brands; anything unclear is asked, not guessed, in the box of checks. Try <i>Add medicine</i> to search the catalogue, or <i>Look up</i> for drug-label passages. Saving changes and approving are switched off here.") + `
     <div class="review-head">
       <div><h3>Check ${fn}'s draft report</h3><p>Tap any sentence to see what was heard. Fix anything that's off, then approve.</p></div>
       <div class="row">
@@ -1248,7 +1248,7 @@ function renderApproved(box) {
       <div><h3>${fn}'s report is approved</h3><p class="hint nomargin">Approved by ${esc(a.approved_by || "")}${a.approved_at ? " at " + fmtTime(a.approved_at) : ""}. Version ${esc(r.version)}.</p></div>
       <div class="row pushright"><button class="btn btn-line" data-act="new-visit">${ICON.mic}Start another visit</button><a class="btn btn-sun" href="#/followup/${esc(v.enc)}">${ICON.chat}Open follow-up</a></div>
     </div>
-    ${note("Approved.", "Once the doctor approves, ARDAI prints the prescription PDF and a FHIR health record (the format India's ABDM uses), and sends the PDF and a voice note to the patient on WhatsApp in their language. The tracker shows each message going from queued to read. Download the PDF to see what the patient got, or open the follow-up for the WhatsApp conversation.")}
+    ${note("Approved.", "Once the doctor approves, VoiceRX prints the prescription PDF and a FHIR health record (the format India's ABDM uses), and sends the PDF and a voice note to the patient on WhatsApp in their language. The tracker shows each message going from queued to read. Download the PDF to see what the patient got, or open the follow-up for the WhatsApp conversation.")}
     ${deliveryHTML(v.jobs, fn)}
     <div class="files">
       ${arts.map(f => { const [t, kind, ic] = label[f.kind] || [f.kind, "", ICON.json]; return `<div class="file"><span class="ic">${ic}</span><span><b>${t}</b><span>${f.state === "ready" ? kind + ", ready" : f.state === "failed" ? "Couldn't be made" : "Being prepared"}</span></span>
@@ -1473,7 +1473,7 @@ addEventListener("DOMContentLoaded", async () => {
   try { session = adapt.session(await api.me()); csrf = session.csrf_token; }
   catch (x) {
     if (x.status === 401) return toLogin();
-    $("#app").hidden = false; return showError("ARDAI can't reach the server right now.", () => location.reload());
+    $("#app").hidden = false; return showError("VoiceRX can't reach the server right now.", () => location.reload());
   }
   $("#app").hidden = false; $("#demoBadge").hidden = !window.VoiceRxMock;
   if (!reduce) { $("#app").classList.add("entering"); setTimeout(() => $("#app").classList.remove("entering"), 520); }
