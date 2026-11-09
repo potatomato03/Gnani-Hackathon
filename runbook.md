@@ -1076,3 +1076,10 @@ Still for the user: sign in on the live site once, and send HELLO from the test 
 - Locally, against the new project, the first search right after a fresh start took 1.1 s instead of 15 s. "dolo 650", "ultracet" and "pan 40" each found the expected product first. Most of the 1.1 s is the India-to-Tokyo database round trip.
 - On Akshay's page no text extends past the summary card; the ULTRACET label wraps onto three lines.
 - Observed, not changed: "augmentin 625" ranks "Megamentin 625 Tablet" first. Ranking is the same as before this change.
+
+**Deployed (9 Nov 2026, 21:15 IST).**
+- `5161e38` was deployed to production from a clean `git archive` copy plus `data/snapshots/indian_products.json.gz`: `janani-private-clinic-demo-k2ml3zf6v…`. The sign-in page returns 200 and `/api/v1/session` 401.
+- The API instances restarted under the new build at 15:45 UTC. They restart often (shutdowns at 15:37), which is why loading from the file matters.
+- Proof that production uses the snapshot: before restarting the worker instance, `pg_stat_statements` counted 8 full product-list reads and 7 row-count checks. After the restart the counts were 8 and 8. The new process checked the count and took the list from the file, with no full read.
+- The worker came back ready.
+- Not checked live by the assistant: a signed-in medicine search, and the summary card on the live site. Both need the shared password.
