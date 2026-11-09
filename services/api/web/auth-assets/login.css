@@ -64,7 +64,7 @@
 .err { color: var(--risk); font-size: .9375rem; margin: -6px 0 12px; }
 .err:empty { display: none; }
 .auth .btn-dark { width: 100%; min-height: 54px; font-size: 1.0625rem; }
-.busy .busy .or { display: flex; align-items: center; gap: 12px; margin: 24px 0 14px; color: var(--ink-3); font-size: .875rem; }
+.or { display: flex; align-items: center; gap: 12px; margin: 24px 0 14px; color: var(--ink-3); font-size: .875rem; }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .doclist { display: grid; gap: 8px; }
 .docpick { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px; border-radius: var(--r-m); border: 1px solid var(--line); background: var(--solid); text-align: left; transition: border-color 160ms ease, transform 140ms var(--ease-out); }
@@ -128,3 +128,9 @@ html[data-motion="off"] .cursor-aura { display: none; }
   .slot { width: auto; flex: 1; }
 }
 @media (max-width: 980px) { .motion-toggle { position: absolute; top: 24px; right: 16px; left: auto; bottom: auto; } }
+
+/* Guest preview for visitors (runbook D-146) */
+.guest-box h2 { margin: 0 0 6px; }
+.guest-box .sub { margin: 0 0 16px; }
+.guest-btn { width: 100%; justify-content: center; }
+.guest-box .err:empty { display: none; }

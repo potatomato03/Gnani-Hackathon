@@ -12,6 +12,14 @@ COOKIE = 'vrx_session'
 LIFETIME = timedelta(hours=12)
 UNSAFE = {'POST', 'PUT', 'PATCH', 'DELETE'}
 
+# The read-only guest preview for visitors (runbook D-146): one made-up doctor in a made-up clinic, seeded by
+# tools/demo/seed_guest.py. A guest session can read everything in that clinic and change nothing.
+GUEST_USER = 'doctor-guest'
+GUEST_ORG = 'clinic-guest'
+GUEST_LIFETIME = timedelta(hours=2)
+GUEST_READ_ONLY = ('This is a read-only guest preview, so this action is switched off. '
+                   'Nothing here runs the AI or sends messages.')
+
 
 class NotSignedIn(Exception):
     pass
@@ -25,13 +33,17 @@ def _hash(token):
     return sha256(token.encode('utf-8')).hexdigest()
 
 
-def create_session(conn, user_id, organisation_id, operator_id=None):
+def create_session(conn, user_id, organisation_id, operator_id=None, lifetime=None):
     token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(24)
     conn.execute('insert into app.sessions (token_hash, user_id, organisation_id, csrf_token, expires_at, operator_id) '
                  'values (%s, %s, %s, %s, %s, %s)',
                  (_hash(token), user_id, organisation_id, csrf, datetime.now(timezone.utc) +
-                  (timedelta(hours=2) if operator_id else LIFETIME),operator_id))
+                  (lifetime or (timedelta(hours=2) if operator_id else LIFETIME)),operator_id))
     return token
+
+
+def is_guest(session):
+    return session['user_id'] == GUEST_USER and session['organisation_id'] == GUEST_ORG
 
 
 def end_session(conn, token):
@@ -81,6 +93,7 @@ def session_view(session):
         'csrf_token': session['csrf_token'],
         'expires_at': session['expires_at'].isoformat(),
         'workspace_admin': bool(session.get('operator_admin')),
+        'guest': is_guest(session),
         'operator': {'id':session.get('operator_id'), 'name':session.get('operator_name')},
     }
 

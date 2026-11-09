@@ -509,3 +509,18 @@ html[data-motion="off"] .mic.idle .halo { animation: none; }
 .proc-meds .ph-row { align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .finishing { display: flex; align-items: center; gap: 16px; padding: 18px 0; }
 .finishing h3 { margin: 0; }
+
+/* =========================================================
+   Guest preview for visitors (runbook D-146)
+   ========================================================= */
+.guest-bar { display: flex; align-items: center; gap: 16px; padding: 12px clamp(16px, 3vw, 32px); background: var(--iris-soft); border-bottom: 1px solid var(--line); }
+.guest-bar p { margin: 0; flex: 1; min-width: 0; font-size: .9375rem; color: var(--ink-2); }
+.guest-bar p b { color: var(--ink); font-weight: 600; }
+.guest-bar .btn { flex: none; }
+.gnote { display: block; margin: 0 0 18px; padding: 14px 16px; border-radius: var(--r-m); background: var(--iris-soft); border: 1px dashed rgba(74, 79, 203, .35); color: var(--ink-2); font-size: .9375rem; line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
+.gnote b { color: var(--ink); font-weight: 600; }
+.gnote-tag { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; background: var(--iris); color: #fff; font-size: .75rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; vertical-align: 1px; }
+.stack > .gnote, .side > .gnote { margin: 0; }
+.side > .gnote { margin: 0 0 14px; }
+@media (max-width: 700px) { .guest-bar { flex-direction: column; align-items: flex-start; } }
+@media print { .guest-bar, .gnote { display: none; } }

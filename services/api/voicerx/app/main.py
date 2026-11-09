@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 from fastapi import FastAPI, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Jsonb
 
@@ -137,7 +137,7 @@ async def headers(request: Request, call_next):
     request.state.correlation_id = uuid.uuid4().hex[:16]
     from .config import read_env
     protected=read_env().get('APP_PRIVATE_WORKSPACE')=='1'
-    public_api={'/api/v1/auth/login','/api/v1/auth/options','/api/v1/health'}
+    public_api={'/api/v1/auth/login','/api/v1/auth/guest','/api/v1/auth/options','/api/v1/health'}
     private_path=request.url.path.startswith('/static/') or request.url.path=='/v1' or (
         request.url.path.startswith('/api/v1/') and request.url.path not in public_api)
     if protected and request.url.path in ('/api/v1/auth/dev-users','/api/v1/auth/dev-login') and not state['settings'].dev_login:
@@ -196,7 +196,14 @@ def session_of(request):
         request.state.auth_session=session
     auth.check_request(session, request.method, request.headers.get('X-CSRF-Token'), request.headers.get('Origin'),
                        settings.allowed_origins)
+    # Every route that writes, runs the AI or sends a message is an unsafe method behind this check (runbook D-146).
+    if request.method in auth.UNSAFE and auth.is_guest(session) and request.url.path not in GUEST_MAY_POST:
+        raise auth.Forbidden(auth.GUEST_READ_ONLY)
     return session
+
+
+# Signing out, and the reference look-up (a local search of drug labels: no model writes anything).
+GUEST_MAY_POST = {'/api/v1/auth/logout', '/api/v1/knowledge/search'}
 
 
 def actor(session):
@@ -290,6 +297,55 @@ async def password_login(request:Request):
     # session still expires on its own.
     response.set_cookie(auth.COOKIE,token,httponly=True,samesite='strict',secure=request.url.scheme=='https',path='/')
     return response
+
+
+def start_guest_session(request):
+    """A session as the read-only guest doctor, or None when the guest clinic hasn't been seeded."""
+    with transaction() as conn:
+        member = one(conn, '''select m.user_id from app.memberships m join app.users u on u.id = m.user_id
+                              join app.organisations o on o.id = m.organisation_id
+                              where m.user_id = %s and m.organisation_id = %s and m.role = 'doctor' and u.synthetic
+                                and o.synthetic and o.archived_at is null and u.disabled_at is null''',
+                     (auth.GUEST_USER, auth.GUEST_ORG))
+        if member is None:
+            return None, None
+        token = auth.create_session(conn, auth.GUEST_USER, auth.GUEST_ORG, lifetime=auth.GUEST_LIFETIME)
+        current = auth.load_session(conn, token)
+    return token, current
+
+
+def set_guest_cookie(response, request, token):
+    response.set_cookie(auth.COOKIE, token, httponly=True, samesite='lax', secure=request.url.scheme == 'https',
+                        max_age=int(auth.GUEST_LIFETIME.total_seconds()), path='/')
+
+
+@app.post('/api/v1/auth/guest')
+def guest_login(request: Request):
+    """The read-only guest preview for visitors and recruiters (runbook D-146)."""
+    origin = request.headers.get('Origin')
+    if origin and origin not in state['settings'].allowed_origins and origin != str(request.base_url).rstrip('/'):
+        raise auth.Forbidden('Request origin is not allowed.')
+    token, current = start_guest_session(request)
+    if token is None:
+        raise ApiError(404, 'guest_unavailable', 'The guest preview is not available right now.')
+    response = JSONResponse(auth.session_view(current))
+    set_guest_cookie(response, request, token)
+    return response
+
+
+@app.get('/guest')
+def guest_link(request: Request):
+    """A link that opens the guest preview in one click, for a CV or a message. An existing session is kept."""
+    try:
+        session_of(request)
+    except auth.NotSignedIn:
+        token, _ = start_guest_session(request)
+        if token is None:
+            return RedirectResponse('/', status_code=303)
+        response = RedirectResponse('/#/patients', status_code=303)
+        set_guest_cookie(response, request, token)
+        return response
+    return RedirectResponse('/#/patients', status_code=303)
 
 
 @app.post('/api/v1/auth/logout')
@@ -825,7 +881,7 @@ def encounter_shortlist(request: Request, encounter_id: str):
         if encounter is None:
             raise not_found('visit')
         row = one(conn, 'select conditions, items from app.medicine_shortlists where encounter_id = %s', (encounter_id,))
-        if row is None and encounter['current_version']:
+        if row is None and encounter['current_version'] and not auth.is_guest(session):
             draft = parse_report(report_row(conn, encounter_id, encounter['current_version'], None))
             patient = one(conn, 'select birth_year from app.patients where id = %s', (encounter['patient_id'],))
             shortlist = shortlist_for(conn, state['worker'].llm(), draft.checked, session['organisation_id'], REFERENCE.products,

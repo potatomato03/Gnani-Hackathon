@@ -117,6 +117,12 @@ $("#loginForm").addEventListener("submit", async e => {
   } finally { btn.classList.remove("busy"); btn.disabled = false; }
 });
 
+$("#guestGo").addEventListener("click", async e => {
+  const btn = e.currentTarget; btn.classList.add("busy"); btn.disabled = true; $("#guestErr").textContent = "";
+  try { await post("/auth/guest", {}); await leave(); }
+  catch (x) { $("#guestErr").textContent = x.message; btn.classList.remove("busy"); btn.disabled = false; }
+});
+
 $("#devList").addEventListener("click", async e => {
   const b = e.target.closest("[data-user]"); if (!b) return;
   b.disabled = true;
@@ -142,6 +148,5 @@ async function boot() {
     } catch (_) { /* the form still works */ }
   }
   startStory();
-  $("#username").focus({ preventScroll: true });
 }
 boot();

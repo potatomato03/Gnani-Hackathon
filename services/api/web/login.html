@@ -8,9 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/auth-assets/base.css?v=20261105b">
-<link rel="stylesheet" href="/auth-assets/login.css?v=20261105b">
-<script src="/auth-assets/login.js?v=20261105b" defer></script>
+<link rel="stylesheet" href="/auth-assets/base.css?v=20261109b">
+<link rel="stylesheet" href="/auth-assets/login.css?v=20261109b">
+<script src="/auth-assets/login.js?v=20261109b" defer></script>
 </head>
 <body>
 <div class="sky" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i><i class="rays"></i></div>
@@ -61,9 +61,16 @@
 
   <div class="halo-frame auth-frame">
     <div class="auth">
+      <section class="guest-box" aria-labelledby="guestTitle">
+        <h2 id="guestTitle">Just looking around?</h2>
+        <p class="sub">Open a read-only doctor's dashboard with sample patients, reports and WhatsApp follow-ups. Notes on each screen explain what you're seeing.</p>
+        <button class="btn btn-sun guest-btn" type="button" id="guestGo"><span class="spinner" aria-hidden="true"></span><span class="btn-label">Explore as a guest doctor</span></button>
+        <p class="err" id="guestErr" role="alert"></p>
+      </section>
+      <div class="or">or sign in</div>
       <form id="loginForm" novalidate>
-        <h2>Welcome back, doctor</h2>
-        <p class="sub">Sign in to see today's patients.</p>
+        <h2 class="sr">Sign in</h2>
+        <p class="sub">Doctors on the team sign in here.</p>
         <label class="field"><span>Username</span><input class="input" id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
         <label class="field"><span>Password</span>
           <span class="pw"><input class="input" id="password" name="password" type="password" autocomplete="current-password" required><button type="button" id="pwToggle" aria-label="Show password">Show</button></span>

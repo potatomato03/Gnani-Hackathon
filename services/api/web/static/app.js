@@ -44,7 +44,13 @@ class ApiError extends Error { constructor(code, message, status) { super(messag
    ================================================================= */
 let api = null, csrf = null, session = null;
 const toLogin = expired => location.replace(window.VoiceRxMock ? "login.html" : "/" + (expired ? "?expired=1" : ""));
+/* Guest preview (runbook D-146): read-only. The server refuses every change too; this only saves the round trip. */
+const isGuest = () => !!session?.guest;
+const GUEST_MSG = "This is a read-only guest preview, so this action is switched off. Nothing here runs the AI or sends messages.";
+const GUEST_POST = ["/auth/logout", "/knowledge/search"];
+const guestStop = () => { if (!isGuest()) return false; toast(GUEST_MSG); return true; };
 async function http(method, path, body, extra = {}) {
+  if (method !== "GET" && isGuest() && !GUEST_POST.includes(path)) throw new ApiError("guest_read_only", GUEST_MSG, 403);
   const headers = { Accept: "application/json", ...(extra.headers || {}) };
   if (method !== "GET" && csrf) headers["X-CSRF-Token"] = csrf;
   let payload = body;
@@ -276,6 +282,8 @@ function renderShell() {
   const caps = session.capabilities || {};
   $("#navPharmacy").hidden = !caps.pharmacy;
   $('[data-nav="register"]').hidden = caps.register === false;
+  if (isGuest()) { $("#where").removeAttribute("href"); $("#where").removeAttribute("title"); }
+  renderGuestBar();
 }
 $("#signOut").addEventListener("click", async () => { try { await api.logout(); } catch (_) {} toLogin(); });
 $("#search").addEventListener("input", e => {
@@ -287,6 +295,18 @@ async function loadTasks() {
     state.tasks = items(await api.tasks()).filter(t => t.status !== "done");
     const c = $("#taskCount"); c.textContent = state.tasks.length; c.hidden = !state.tasks.length;
   } catch (_) { state.tasks = []; }
+}
+
+/* -------- Guest notes: what each part of the screen is, for visitors -------- */
+const notesOn = () => isGuest() && store.get("vrx-guest-notes") !== "off";
+const note = (title, text) => notesOn() ? `<aside class="gnote" role="note"><span class="gnote-tag">Guest note</span><b>${title}</b> ${text}</aside>` : "";
+function renderGuestBar() {
+  let bar = $("#guestBar");
+  if (!isGuest()) { bar?.remove(); return; }
+  if (!bar) { bar = document.createElement("div"); bar.id = "guestBar"; bar.className = "guest-bar"; $(".top").after(bar); }
+  bar.innerHTML = `<p><b>Guest preview, read-only.</b> You're <b>Dr Guest</b> at a made-up clinic, and every patient is made up. Look at anything: open a patient, expand a past visit, download a PDF, search medicines. Recording, approving and messaging are switched off, so nothing here calls an AI model or sends a WhatsApp message.</p>
+    <button class="btn btn-line btn-small" id="notesToggle" aria-pressed="${notesOn()}">${notesOn() ? "Hide notes" : "Show notes"}</button>`;
+  $("#notesToggle").onclick = () => { store.set("vrx-guest-notes", notesOn() ? "off" : "on"); $("#main")?.remove(); renderGuestBar(); route(); };
 }
 
 /* =================================================================
@@ -352,6 +372,7 @@ async function renderRegister() {
   const docs = session.admin && session.hospital ? items(await api.doctors(session.hospital.id)).map(adapt.doctor) : session.doctor ? [adapt.doctor(session.doctor)] : [];
   view().innerHTML = `<div class="page narrow">
     <header class="page-head"><h1>Register a patient</h1><p>Added to ${esc(session.hospital?.name || "this hospital")}. Use made-up details only: this is a synthetic demo.</p></header>
+    ${note("Registration.", "The front desk adds a patient once, with their language and their agreement to AI drafting, recording and WhatsApp follow-up. ARDAI checks these agreements before it records a visit or sends a message. Saving is switched off in the guest preview.")}
     <form class="panel" id="reg" novalidate>
       <div class="form-grid">
         <label class="field span-all"><span>Full name</span><input class="input" name="name" required autocomplete="off"></label>
@@ -412,6 +433,7 @@ function ensureLayout() {
       <section class="attention" id="attention" aria-label="Needs your attention" hidden></section>
       <div class="tabs" role="tablist" aria-label="Patient list"><button role="tab" data-tab="today">Today</button><button role="tab" data-tab="all">All patients</button></div>
       ${session.capabilities?.register === false ? "" : `<a class="btn btn-line add-patient" href="#/register">${ICON.plus}Add patient</a>`}
+      ${note("Your patients.", "Pick anyone on the list. The coloured dot is their WhatsApp follow-up: green on track, amber slightly off, red missed doses. Akshay and Virat have the fullest records.")}
       <ul class="plist" id="plist" aria-live="polite"></ul>
     </aside>
     <main class="main" id="main" tabindex="-1"></main></div>`;
@@ -466,7 +488,7 @@ async function openPatient(id, encId) {
   const encounters = [...(det.encounters || det.visits || [])].map(adapt.encounter).sort((a, b) => String(b.date).localeCompare(String(a.date)));
   // Today's unfinished visit comes first; once every visit today is approved, the latest one shows (runbook D-136).
   const today = encounters.filter(e => e.date === TODAY_ISO());
-  const open = encId ? encounters.find(e => e.id === encId) : today.find(e => e.state !== "approved") || today[0];
+  const open = encId ? encounters.find(e => e.id === encId) : isGuest() ? encounters[0] : today.find(e => e.state !== "approved") || today[0];
   const lastApproved = encounters.find(e => e.state === "approved" && e !== open);
   const lastReport = lastApproved ? adapt.report(await api.report(lastApproved.id, lastApproved.approved_version)) : null;
   const p = adapt.patient(det.patient || det);
@@ -495,6 +517,7 @@ function renderPatient(animate) {
       ${!v ? `<div class="actions"><button class="btn btn-sun" data-act="new-visit">${ICON.mic}Start a new visit</button></div>` : ""}
     </div>
     <div class="stack">
+      ${note("A patient's page.", "The card below is one visit, from recording to approved prescription. Under it, <i>Since the last visit</i> sums up the last approved report, so the doctor walks in prepared, and <i>WhatsApp check-ins</i> shows what the patient has done since. Older visits are at the bottom: click one to read it.")}
       ${v ? `<section class="visit-card" id="visit" aria-label="Today's visit"></section>` : ""}
       ${briefHTML(p)}
       ${past.length ? `<section class="panel" aria-label="Past visits"><div class="ph"><h3>Past visits</h3><p>${past.length} approved ${past.length === 1 ? "visit" : "visits"}</p></div>
@@ -580,7 +603,7 @@ function renderVisit() {
 
   if (v.phase === "idle") {
     const refused = p.consents?.recording === false || p.recording_consent === false;
-    box.innerHTML = stepper(0) + `<div class="rec-grid">
+    box.innerHTML = stepper(0) + note("Recording a visit.", "The doctor presses the microphone and talks to the patient as usual, in Hinglish, Hindi, English, Tamil, Telugu or Gujarati. Speech is turned into text while they talk, and when they stop ARDAI drafts the report and prescription. Recording is switched off in the guest preview: open a patient's past visit to see the result.") + `<div class="rec-grid">
       <div><button class="mic idle" id="micBtn" aria-describedby="consentErr">${ICON.mic}<span class="halo"></span><span class="sr">Start recording</span></button><span class="mic-label" aria-hidden="true">Start recording</span></div>
       <div class="rec-copy">
         <h3>Record today's visit with ${fn}</h3>
@@ -598,8 +621,8 @@ function renderVisit() {
     const c = $("#consent");
     if (c) c.onchange = e => { v.consent = e.target.checked; if (v.consent) { $("#consentErr").hidden = true; $("#consentRow").classList.remove("need"); } };
     const need = () => { const er = $("#consentErr"); er.hidden = false; er.textContent = refused ? "Recording isn't allowed for this patient." : `Ask ${first(p.name)} first, then tick the box.`; $("#consentRow")?.classList.add("need"); c?.focus(); };
-    $("#micBtn").onclick = () => v.consent ? startRecording() : need();
-    $("#fileIn").onclick = e => { if (!v.consent) { e.preventDefault(); need(); } };
+    $("#micBtn").onclick = () => guestStop() || (v.consent ? startRecording() : need());
+    $("#fileIn").onclick = e => { if (guestStop()) return e.preventDefault(); if (!v.consent) { e.preventDefault(); need(); } };
     $("#fileIn").onchange = e => { const f = e.target.files[0]; if (f) submitAudio(f); };
     return;
   }
@@ -786,6 +809,7 @@ async function submitAudio(blob) {
   } catch (x) { v.phase = "failed"; v.error = x.message; renderVisit(); }
 }
 async function submitTyped() {
+  if (guestStop()) return;
   const v = state.visit, text = (v.text || "").trim(), e = $("#typeErr");
   if (text.length < 10) { e.hidden = false; e.textContent = "Write a little more so there's something to report."; return; }
   v.phase = "uploading"; renderVisit();
@@ -833,7 +857,7 @@ async function refreshRows() { try { state.rows = items(await api.patients(state
 function renderReview(box) {
   const v = state.visit, r = v.report, fn = esc(first(state.patient.name));
   const blocks = r.issue_views.filter(i => i.severity === "block"), warns = r.issue_views.filter(i => i.severity !== "block");
-  box.innerHTML = stepper(r.can_approve ? 2 : 1) + `
+  box.innerHTML = stepper(r.can_approve ? 2 : 1) + note("The draft, waiting for the doctor.", "ARDAI wrote this from the recorded conversation. Click any sentence to see the words it came from. Medicines are matched to a catalogue of about 2.5 lakh Indian brands; anything unclear is asked, not guessed, in the box of checks. Try <i>Add medicine</i> to search the catalogue, or <i>Look up</i> for drug-label passages. Saving changes and approving are switched off here.") + `
     <div class="review-head">
       <div><h3>Check ${fn}'s draft report</h3><p>Tap any sentence to see what was heard. Fix anything that's off, then approve.</p></div>
       <div class="row">
@@ -1184,6 +1208,7 @@ function wireReport(box, r, editable) {
   }
 }
 async function applyFix(resolutions, btn) {
+  if (guestStop()) return;
   const v = state.visit;
   if (btn) { btn.disabled = true; btn.textContent = "Saving"; }
   try { v.report = adapt.report(await api.resolve(v.enc, v.report, resolutions)); renderVisit(); refreshRows(); toast(`Saved. This is now version ${v.report.version}.`); }
@@ -1193,6 +1218,7 @@ async function applyFix(resolutions, btn) {
   }
 }
 async function approve() {
+  if (guestStop()) return;
   const v = state.visit, b = $("#approveBtn");
   b.disabled = true; b.textContent = "Approving";
   try { v.report = adapt.report(await api.approve(v.enc, v.report)); v.phase = "approved"; v.justApproved = true; renderVisit(); refreshRows(); pollFiles(1500); }
@@ -1222,6 +1248,7 @@ function renderApproved(box) {
       <div><h3>${fn}'s report is approved</h3><p class="hint nomargin">Approved by ${esc(a.approved_by || "")}${a.approved_at ? " at " + fmtTime(a.approved_at) : ""}. Version ${esc(r.version)}.</p></div>
       <div class="row pushright"><button class="btn btn-line" data-act="new-visit">${ICON.mic}Start another visit</button><a class="btn btn-sun" href="#/followup/${esc(v.enc)}">${ICON.chat}Open follow-up</a></div>
     </div>
+    ${note("Approved.", "Once the doctor approves, ARDAI prints the prescription PDF and a FHIR health record (the format India's ABDM uses), and sends the PDF and a voice note to the patient on WhatsApp in their language. The tracker shows each message going from queued to read. Download the PDF to see what the patient got, or open the follow-up for the WhatsApp conversation.")}
     ${deliveryHTML(v.jobs, fn)}
     <div class="files">
       ${arts.map(f => { const [t, kind, ic] = label[f.kind] || [f.kind, "", ICON.json]; return `<div class="file"><span class="ic">${ic}</span><span><b>${t}</b><span>${f.state === "ready" ? kind + ", ready" : f.state === "failed" ? "Couldn't be made" : "Being prepared"}</span></span>
@@ -1244,7 +1271,7 @@ function pollFiles(delay) {
       v.report.artifacts = arts; v.jobs = jobs || v.jobs; renderVisit();
       if (open) $("details.more").open = true;
       const busy = v.report.artifacts.some(a => ["pending", "running"].includes(a.state)) || (v.jobs || []).some(j => !["read", "failed", "cancelled"].includes(j.status));
-      if (busy) pollFiles(2500);
+      if (busy && !isGuest()) pollFiles(2500);
     } catch (_) { pollFiles(5000); }
   }, delay);
 }
@@ -1260,6 +1287,7 @@ async function renderTasks() {
   const row = t => `<li class="task ${t.status === "done" ? "is-done" : ""}"><a class="grow" href="#/followup/${esc(t.encounter_id)}"><b>${esc(t.title)}</b><span>${esc(t.patient_name || "Patient")}${t.detail ? `: ${esc(t.detail)}` : ""}</span></a>
     ${t.status === "done" ? `<span class="chip ok">Done</span>` : `<button class="btn btn-line btn-small" data-done="${esc(t.id)}" data-enc="${esc(t.encounter_id)}">Mark done</button>`}</li>`;
   view().innerHTML = `<div class="page narrow"><header class="page-head"><h1>Follow-ups</h1><p>What your patients need from you after their visit.</p></header>
+    ${note("Follow-up tasks.", "The WhatsApp assistant checks in on patients after the visit. When a patient asks for a call, reports a problem, asks something only the doctor should answer or sends a lab report, it lands here as a task.")}
     ${open.length ? `<ul class="panel tasks">${open.map(row).join("")}</ul>` : `<div class="panel first"><h3>You're all caught up</h3><p>New tasks appear here when a patient's follow-up needs you.</p></div>`}
     ${done.length ? `<h2 class="sect">Done</h2><ul class="panel tasks">${done.map(row).join("")}</ul>` : ""}</div>`;
   $$("[data-done]").forEach(b => b.onclick = async () => {
@@ -1278,6 +1306,7 @@ async function renderFollowup(enc) {
   const wasThere = $("#thread");
   view().innerHTML = `<div class="page wide">
     <header class="page-head"><a class="link-btn" href="#/patients/${esc(p.id)}">Back to ${fn}</a><h1>Follow-up with ${esc(p.name)}</h1><p>${fu.status_label ? esc(fu.status_label) : "Messages, reports and tasks after the visit."}</p></header>
+    ${note("The WhatsApp conversation.", "This is what the patient saw on WhatsApp: the prescription summary in their language, dose check-ins, and their replies. The assistant only repeats what the approved report says; anything else goes to the doctor as a task. Sending is switched off in the guest preview.")}
     <div class="fgrid">
       <section class="panel chatwrap" aria-label="WhatsApp conversation">
         <div class="ph"><div class="wa-head"><span class="wa-badge">${ICON.wa}</span><h3>Conversation</h3></div></div>
@@ -1307,7 +1336,7 @@ async function renderFollowup(enc) {
   $$("[data-review]").forEach(b => b.onclick = () => markReviewed(b, reload));
   if (!wasThere) swap();
   stopPolling();
-  if (active) state.poll = setTimeout(() => { if (location.hash === `#/followup/${enc}` && document.activeElement?.id !== "simText") reload(); }, 8000);
+  if (active && !isGuest()) state.poll = setTimeout(() => { if (location.hash === `#/followup/${enc}` && document.activeElement?.id !== "simText") reload(); }, 8000);
 }
 /* =================================================================
    Hospital pharmacy stock (runbook D-126 to D-128)
@@ -1448,6 +1477,7 @@ addEventListener("DOMContentLoaded", async () => {
   }
   $("#app").hidden = false; $("#demoBadge").hidden = !window.VoiceRxMock;
   if (!reduce) { $("#app").classList.add("entering"); setTimeout(() => $("#app").classList.remove("entering"), 520); }
+  if (isGuest()) state.tab = "all";
   renderShell();
   // The shared workspace opens on its hospitals, then doctors, then that doctor's patients (runbook D-134).
   // A reload deeper in (a patient, a visit, a follow-up) stays where it was.

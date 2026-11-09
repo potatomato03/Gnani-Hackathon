@@ -1083,3 +1083,25 @@ Still for the user: sign in on the live site once, and send HELLO from the test 
 - Proof that production uses the snapshot: before restarting the worker instance, `pg_stat_statements` counted 8 full product-list reads and 7 row-count checks. After the restart the counts were 8 and 8. The new process checked the count and took the list from the file, with no full read.
 - The worker came back ready.
 - Not checked live by the assistant: a signed-in medicine search, and the summary card on the live site. Both need the shared password.
+
+## 9 November 2026 — a read-only guest preview for recruiters (D-146)
+
+The user asked for a guest login to put on a CV. Recruiters click it and land on a doctor's dashboard as "Guest". They see every part of the product: consultations, medicines, reports, WhatsApp follow-ups. Nothing they do may use the paid APIs. Notes on each screen explain what is what.
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-146 | **Who the guest is.** A made-up clinic, `clinic-guest` ("ARDAI Guest Clinic"), with one made-up doctor, `doctor-guest` ("Dr Guest"). Visitors enter with **Explore as a guest doctor** on the sign-in page (`POST /api/v1/auth/guest`) or through the one-click link `/guest`. A guest session lasts 2 hours.<br>**Read-only.** `session_of` refuses every unsafe method (POST, PUT, PATCH, DELETE) for a guest session with 403 and a plain message. Only sign-out and the drug-label look-up are allowed; the look-up is a local embedding search with no model call. A visit's medicine shortlist is never generated for a guest. The page also stops these clicks before any request, shows the same message, and does no background polling for guests.<br>**What a guest sees.** A banner, plus a "Guest note" on the patient list, patient page, recording card, draft review, approved visit, follow-ups, WhatsApp conversation and registration. The notes can be hidden. Guests open on All patients, and each patient opens on their latest visit.<br>**Where the data comes from.** `tools/demo/seed_guest.py` copies the finished synthetic visits of the demo hospitals into the guest clinic: 5 patients, 18 visits, 68 report versions, 13 approvals and 13 follow-ups. Each copy gets a new, stable id. Every clinic and doctor name is replaced, report fingerprints are recomputed, and the 13 approved PDFs and FHIR bundles are printed again under the guest names. Phones, WhatsApp contacts, join codes, provider message ids, recordings and unfinished deliveries are not copied. Rerunning the script replaces the guest copy and leaves the source records untouched. | The user wants recruiters to see the whole UI without using the APIs. A separate clinic keeps visitors out of the team's records, and the server-side refusal holds even when the page is bypassed. With no contact or pending job on any guest record, the worker has nothing to send or draft for them, and an inbound WhatsApp message can't match a guest patient. | User (guest login, read-only, notes); Assistant (how) | Confirmed / Assistant call |
+
+**Checks (local, against the shared database; worker off).**
+- Unit tests: 675 passed, 1 skipped. Four new tests cover the guest rules: reads allowed, every write refused, sign-out and look-up allowed, other doctors unaffected, and the guest flag sent to the page.
+- In the browser: **Explore as a guest doctor** opened Dr Guest's dashboard with the banner and notes. Akshay's approved visit showed "Approved by Dr Guest". Virat's draft showed its checks. Answering a check showed the read-only message, and the server answered a direct approval with 403.
+- Also in the browser: medicine search ("dolo 650") and the drug-label look-up worked. The follow-up page showed the WhatsApp conversation as "Dr Guest at ARDAI Guest Clinic". `/guest` from a signed-out browser landed on the patient list as Dr Guest. At phone width the page had no sideways scroll.
+- A guest PDF reads "ARDAI Guest Clinic" and "Dr Guest". No other clinic or doctor name appears in any guest report, PDF or conversation.
+
+**Deployed (9 Nov 2026, about 23:40 IST).** The user said "Yes, deploy it". It went out from a clean `git archive` copy of `5b59d9c`, plus these changes and the product snapshot, as `janani-private-clinic-demo-ksqqbr3xl…`, aliased to the main URL. Checked on the live site:
+- `/guest` opened the dashboard as Dr Guest at ARDAI Guest Clinic, with the banner and notes.
+- The first medicine search ("dolo 650") answered in 388 ms with DOLO 650 first.
+- Approving a draft and starting a run both returned 403. A malformed registration was rejected with 422 before reaching the guest check, so nothing was written.
+- An approved PDF downloaded (84,884 bytes).
+- The public sign-in page shows **Explore as a guest doctor**.
+- The link for a CV is `https://janani-private-clinic-demo.vercel.app/guest`.
