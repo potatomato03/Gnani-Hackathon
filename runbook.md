@@ -1115,3 +1115,18 @@ The user asked for a guest login to put on a CV. Recruiters click it and land on
 **Checks.** No "ARDAI" is left in the app's code, templates or pages, and none in the guest clinic's reports, chats or PDFs (a reprinted PDF reads "VoiceRX Guest Clinic" and "Dr Guest"). Unit tests: 675 passed, 1 skipped. Earlier entries in this runbook keep the name they were written with.
 
 **D-147 deployed (9 Nov 2026).** The user said "Yes, deploy it". Deployed from a clean `git archive` copy of `db82ab7` plus the rename and the product snapshot, as `janani-private-clinic-demo-mkte0ro9o…`, aliased to the main URL. On the live site, `/guest` opens "VoiceRX for Doctors" with the VoiceRX logo, Dr Guest and "VoiceRX Guest Clinic". The sign-in page title is "Sign in to VoiceRX". "ARDAI" appears on neither page.
+
+## 10 November 2026 — a second address: gnani-private-clinic-demo.vercel.app (D-148)
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-148 | `gnani-private-clinic-demo.vercel.app` is added as a second production domain of the same Vercel project (`vercel domains add … janani-private-clinic-demo`). The old address stays, so the hackathon submission, shared links and the Meta WhatsApp webhook (registered on the old address) keep working. Production `APP_ALLOWED_ORIGINS` becomes both addresses. Before the change, a probe with a guest session showed only `https://janani-private-clinic-demo.vercel.app` allowed among the candidates tried. The full settings file was not pulled, so no other secrets were read. No code change. | The user wants the CV link to read gnani-…: "can the name be changes to Gnani-private-clinic-demo.vercel.app ?". Without the new origin, the server refuses every change on the new address ("request from an origin that is not allowed"); a probe showed exactly that. | User (new address); Assistant (keep both, how) | Confirmed |
+
+**Before the redeploy.** The new address already served the VoiceRX sign-in page (200) and `/guest`, but the guest's drug-label look-up returned 403 there until a redeploy picks up the new setting.
+
+**Redeployed (10 Nov 2026).** The user said "Yes, redeploy". Deployed from a clean `git archive` copy of `701fac5` plus the product snapshot, as `janani-private-clinic-demo-9t4jrusut…`. Its aliases are both `gnani-private-clinic-demo.vercel.app` and `janani-private-clinic-demo.vercel.app`. With a guest session on each address:
+- The drug-label look-up returned 200 on both.
+- An approval returned 403 on both: the guest is still read-only.
+- `/guest` redirected to the patient list on both.
+
+The webhook on the old address answers an unsigned request with 403, as before. The CV link is now `https://gnani-private-clinic-demo.vercel.app/guest`.
