@@ -1,6 +1,14 @@
-# VoiceRx
+# VoiceRX
 
-Working name. A doctor records or dictates a consultation in Hinglish or another Indian language. VoiceRx drafts a structured outpatient note and prescription for the doctor to review and approve. After approval, the report PDF is delivered to the registered WhatsApp number; a prescription voice note is available on request in the patient's saved language. The agent answers from the approved visit and passes unresolved questions to the doctor.
+## DEMO
+
+| | |
+|---|---|
+| **Try it now** | **[gnani-private-clinic-demo.vercel.app/guest](https://gnani-private-clinic-demo.vercel.app/guest)**: one click opens a read-only doctor's dashboard ("Dr Guest") with sample patients, reports, PDFs and WhatsApp follow-ups. Notes on each screen explain what you're seeing. |
+| **Solution pitch (1 page)** | [Read on GitHub](docs/SOLUTION_PITCH.md) · [PDF](output/pdf/SOLUTION_PITCH.pdf) |
+| **Team sign-in** | [gnani-private-clinic-demo.vercel.app](https://gnani-private-clinic-demo.vercel.app) (private login, for recording and approving) |
+
+A doctor records or dictates a consultation in Hinglish or another Indian language. VoiceRX drafts a structured outpatient note and prescription for the doctor to review and approve. After approval, the report PDF is delivered to the registered WhatsApp number; a prescription voice note is available on request in the patient's saved language. The agent answers from the approved visit and passes unresolved questions to the doctor.
 
 Built for the Gnani AI Great Indian AI Internship Challenge. Speech runs on Gnani Prisma and Timbre.
 
