@@ -8,15 +8,5 @@
       "entrypoint": "Dockerfile.vercel"
     }
   },
-  "rewrites": [{"source": "/(.*)", "destination": {"service": "api"}}],
-  "daemons": {
-    "worker": {
-      "root": ".",
-      "entrypoint": "Dockerfile.vercel",
-      "command": ["python", "-m", "voicerx.app.hosted", "worker"],
-      "instances": {"hnd1": 1},
-      "resources": {"requests": {"memory": "2Gi"}},
-      "terminationGracePeriodSeconds": 300
-    }
-  }
+  "rewrites": [{"source": "/(.*)", "destination": {"service": "api"}}]
 }

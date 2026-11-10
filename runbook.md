@@ -1130,3 +1130,19 @@ The user asked for a guest login to put on a CV. Recruiters click it and land on
 - `/guest` redirected to the patient list on both.
 
 The webhook on the old address answers an unsigned request with 403, as before. The CV link is now `https://gnani-private-clinic-demo.vercel.app/guest`.
+
+## 10 November 2026 — Vercel's free CPU nearly used up; worker off, lazy loading (D-149)
+
+Vercel emailed at 16:24: the free team `aditya2704raj-8181` had used 90% of its **Fluid Active CPU (4 hours a month)**. At 100% the project is paused, which would take down the hackathon link and the guest preview. Nobody was using the site. The free plan's CLI shows no breakdown (`vercel billing usage` has no data for a Hobby team), so the two causes below are reasoned from the setup, not measured.
+- The always-on worker daemon polls the database about once a second, around the clock.
+- Since D-144, every hosted API instance loads the product index and the embedding model at start, and Vercel starts instances often.
+
+The user said: "decide for me what can we do considering all the situations".
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-149 | **The worker daemon is removed from `vercel.json`**, so nothing runs while the site is idle. Without it, recordings are not drafted, PDFs for new approvals are not printed, and WhatsApp neither sends nor replies. Browsing, the guest preview, existing PDFs, medicine search and the look-up all work.<br>**Hosted API instances (`APP_RUN_WORKER=0`) no longer preload anything at start.** The product index loads from the shipped snapshot on the first medicine search (about a second), and the embedding model on the first look-up. Local runs and worker processes still preload.<br>**To switch the worker back on** (for example, for a live judging session), add this to `vercel.json` and redeploy: `"daemons": {"worker": {"root": ".", "entrypoint": "Dockerfile.vercel", "command": ["python", "-m", "voicerx.app.hosted", "worker"], "instances": {"hnd1": 1}, "resources": {"requests": {"memory": "2Gi"}}, "terminationGracePeriodSeconds": 300}}`. | The hackathon is submitted, and what judges and recruiters open is the browsing and guest side, which needs no worker. Keeping the project from being paused matters more than live drafting. The CPU allowance resets with the monthly cycle; the worker can return for a demo when there is headroom. | User (asked the assistant to decide); Assistant | Assistant call |
+
+Unit tests: 675 passed, 1 skipped.
+
+**D-149 deployed (10 Nov 2026).** The user said "Yes, deploy it". The deploy (`janani-private-clinic-demo-88vttqg27…`) answers on both addresses, and `vercel daemons list` is empty. A guest saw all 5 patients on both. The first medicine search on a fresh instance took **10.6 s**, not the "about a second" estimated above: loading the snapshot and building the index in the container is slower than on a laptop. Later searches took 0.6–0.9 s. That one slow search per new instance is the price of not preloading.

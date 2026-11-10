@@ -35,7 +35,7 @@ from ..pipeline.assemble import product_label
 from .catalog import FORMS, parse_composition
 from .catalog import standing
 from .pharmacy import StockFileError, annotate_view, import_stock, load_stock, summary as pharmacy_summary
-from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index, snapshot_available
+from .suggest import catalog_product, clinic_index, composition_text, entry_form, heard_key, shared_index
 from .views import CorrectionRefused, build_resolutions, report_view
 from .worker import NEVER, TEMPLATES, Worker, is_adult, save_shortlist, shortlist_for
 from .shortlist import build_items, live_ranking
@@ -93,9 +93,12 @@ async def lifespan(app):
     runs_worker = read_env().get('APP_RUN_WORKER','1')=='1'
     if runs_worker:
         worker.start()
-    # Preload in the background, so the first search isn't slow. The product name index comes from the shipped
-    # snapshot when there is one (no egress); otherwise only processes that draft visits preload it from Postgres.
-    threading.Thread(target=warm_up, kwargs={'products': runs_worker or snapshot_available()}, daemon=True).start()
+    # Only processes that draft visits preload the product index and embedding model. Hosted API instances start
+    # often and most serve no search, so they load on the first search instead: preloading at every start used
+    # most of Vercel's free 4 hours of active CPU a month (runbook D-149). The index still comes from the shipped
+    # snapshot, so that first search costs about a second, not Supabase egress.
+    if runs_worker:
+        threading.Thread(target=warm_up, daemon=True).start()
     yield
     worker.stop()
     close_pool()
