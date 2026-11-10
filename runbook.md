@@ -1146,3 +1146,19 @@ The user said: "decide for me what can we do considering all the situations".
 Unit tests: 675 passed, 1 skipped.
 
 **D-149 deployed (10 Nov 2026).** The user said "Yes, deploy it". The deploy (`janani-private-clinic-demo-88vttqg27…`) answers on both addresses, and `vercel daemons list` is empty. A guest saw all 5 patients on both. The first medicine search on a fresh instance took **10.6 s**, not the "about a second" estimated above: loading the snapshot and building the index in the container is slower than on a laptop. Later searches took 0.6–0.9 s. That one slow search per new instance is the price of not preloading.
+
+## 10 November 2026 — worker back on to record the demo (D-150)
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-150 | The worker daemon is back in `vercel.json` (same settings as before D-149), so recording, drafting, PDFs and WhatsApp work again. It is to be switched off again (D-149) once the demo video is recorded, because the free 4 hours of active CPU a month were already 90% used. | The user: "up the server, whatsapp, recording everything — we have to record a demo of the entire workflow". | User | Confirmed |
+
+**Deployed (10 Nov 2026, 23:07 IST)** as `janani-private-clinic-demo-otq5sb0wz…`. The build took 17 minutes because it builds the worker image too. The worker instance is alive in `hnd1`, and its log shows "Private worker startup verified: database and PDF renderer ready", then "Medicine index loaded." The site returns 200, and an unsigned webhook request gets 403 as before.
+
+## 10 November 2026 — submitted; worker off for good (D-151)
+
+| ID | Decision | Why | Decided by | Status |
+|---|---|---|---|---|
+| D-151 | The demo is recorded and the hackathon submitted. The worker daemon is removed again (as in D-149), leaving only the HTTP app. The guest preview, browsing, past reports and PDFs, medicine search and the look-up stay live. Recording, drafting, new PDFs and WhatsApp are off. To turn the worker back on, follow the note in D-149. | The user: "submitted, remove the worker and everything so that the compute time is saved; we just want the demo version to be alive". | User | Confirmed |
+
+**Deployed (10 Nov 2026)** from a clean copy of `57ab2ab` plus the product snapshot, as `janani-private-clinic-demo-j15wgun6p…`. `vercel daemons list` is empty. `/guest` signs in as Dr Guest @ VoiceRX Guest Clinic.
